@@ -326,7 +326,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
   });
 
   it("attaches a URL-bearing tab hidden and shows only after attach plus compact drawer readiness", async () => {
-    const { api, calls, attachments, bounds, visibility } =
+    const { api, calls, attachments, bounds, emitState, visibility } =
       createRecordingBrowserApi();
     installDesktopBrowser(api);
 
@@ -355,6 +355,50 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         onUpdate={() => {}}
       />,
     );
+
+    act(() => {
+      emitState({
+        tabId: "tab-url",
+        url: "",
+        title: null,
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        errorText: null,
+      });
+    });
+
+    expect(visibility.some((request) => request.visible)).toBe(false);
+    expect(
+      screen.queryByRole("heading", { name: "Browse the web" }),
+    ).toBeNull();
+
+
+    act(() => {
+      emitState({
+        tabId: "tab-url",
+        url: "https://example.com",
+        title: null,
+        isLoading: true,
+        canGoBack: false,
+        canGoForward: false,
+        errorText: null,
+      });
+    });
+
+    expect(visibility.some((request) => request.visible)).toBe(false);
+
+    act(() => {
+      emitState({
+        tabId: "tab-url",
+        url: "https://example.com",
+        title: "Example",
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        errorText: null,
+      });
+    });
 
     await waitFor(() => {
       expect(visibility.some((request) => request.visible)).toBe(true);
@@ -459,7 +503,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
   });
 
   it("shows an unfocused split view without moving native focus", async () => {
-    const { api, attachments, visibility, visibilityWithoutFocus } =
+    const { api, attachments, emitState, visibility, visibilityWithoutFocus } =
       createRecordingBrowserApi();
     installDesktopBrowser(api);
 
@@ -477,6 +521,18 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
     );
 
     await waitFor(() => expect(attachments).toHaveLength(1));
+
+    act(() => {
+      emitState({
+        tabId: "tab-url",
+        url: "https://example.com",
+        title: "Example",
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        errorText: null,
+      });
+    });
     await waitFor(() =>
       expect(visibilityWithoutFocus).toContainEqual({
         tabId: "tab-url",
@@ -511,6 +567,29 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
     expect(focusSpy).toHaveBeenCalled();
   });
 
+  it("loads the homepage instead of a recent-page screen for an empty browser tab", async () => {
+    const { api, attachments } = createRecordingBrowserApi();
+    installDesktopBrowser(api);
+    const tab = makeBrowserTab("tab-url", "");
+
+    render(
+      <BrowserTabDeck
+        browserTabs={[tab]}
+        activeBrowserTabId={tab.id}
+        environmentId="env-1"
+        canShowNativeBrowserView={true}
+        threadId="thread-1"
+        onUpdate={() => {}}
+      />,
+      { wrapper: TooltipProvider },
+    );
+
+    await waitFor(() => {
+      expect(attachments).toHaveLength(1);
+    });
+    expect(attachments[0]?.url).toBe("https://www.google.com/");
+  });
+
   it("shows a neutral page state and hides the native view after a main-frame load error", async () => {
     const { api, emitState, visibility } = createRecordingBrowserApi();
     installDesktopBrowser(api);
@@ -518,6 +597,18 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
     renderBrowserDeck({
       canShowNativeBrowserView: true,
       url: "http://localhost:12843/",
+    });
+
+    act(() => {
+      emitState({
+        tabId: "tab-url",
+        url: "http://localhost:12843/",
+        title: null,
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        errorText: null,
+      });
     });
 
     await waitFor(() => {

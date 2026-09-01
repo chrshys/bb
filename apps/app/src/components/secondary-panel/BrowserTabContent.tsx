@@ -873,8 +873,10 @@ export function BrowserTabContent({
     () => browserControlActivitySnapshot(tabId),
     () => 0,
   );
-  const [currentUrl, setCurrentUrl] = useState(initialUrl);
-  const [addressDraft, setAddressDraft] = useState(initialUrl);
+  const resolvedInitialUrl =
+    initialUrl.length === 0 ? "https://www.google.com/" : initialUrl;
+  const [currentUrl, setCurrentUrl] = useState(resolvedInitialUrl);
+  const [addressDraft, setAddressDraft] = useState(resolvedInitialUrl);
   const [isEditing, setIsEditing] = useState(false);
   const [isFindOpen, setIsFindOpen] = useState(false);
   const isFindOpenRef = useRef(false);
@@ -976,7 +978,7 @@ export function BrowserTabContent({
   const recordVisitRef = useRef(recordVisit);
   onUpdateRef.current = onUpdate;
   recordVisitRef.current = recordVisit;
-  const initialUrlRef = useRef(initialUrl);
+  const initialUrlRef = useRef(resolvedInitialUrl);
   const [attachedBrowserViewIdentity, setAttachedBrowserViewIdentity] =
     useState<BrowserViewAttachIdentity | null>(null);
   const isBrowserViewAttached =
@@ -985,6 +987,12 @@ export function BrowserTabContent({
     attachedBrowserViewIdentity.tabId === tabId &&
     attachedBrowserViewIdentity.threadId === threadId;
   const hasPage = currentUrl.length > 0;
+  const isInitialNavigationPending =
+    initialUrlRef.current.length > 0 &&
+    (state === null ||
+      state.isLoading ||
+      state.url.length === 0 ||
+      state.url === "about:blank");
   const supportsNativePaneFocus =
     desktopBrowser?.focus !== undefined &&
     desktopBrowser.onFocus !== undefined &&
@@ -1384,13 +1392,21 @@ export function BrowserTabContent({
       }
       lastSeenState = nextState;
       setState(nextState);
-      setCurrentUrl(nextState.url);
-      onUpdateRef.current({
-        tabId,
-        url: nextState.url,
-        title: nextState.title,
-      });
-      if (!nextState.isLoading && nextState.url.length > 0) {
+      const isInitialBlankState =
+        initialUrlRef.current.length > 0 && nextState.url.length === 0;
+      if (!isInitialBlankState) {
+        setCurrentUrl(nextState.url);
+        onUpdateRef.current({
+          tabId,
+          url: nextState.url,
+          title: nextState.title,
+        });
+      }
+      if (
+        !isInitialBlankState &&
+        !nextState.isLoading &&
+        nextState.url.length > 0
+      ) {
         recordVisitRef.current({
           url: nextState.url,
           title: nextState.title,
@@ -1476,6 +1492,7 @@ export function BrowserTabContent({
     canShowNativeBrowserView &&
     (canHandleBrowserCommands || supportsNativePaneFocus) &&
     hasPage &&
+    !isInitialNavigationPending &&
     !hasPageLoadError &&
     isBrowserViewAttached &&
     !isBrowserDimmingModalOpen &&
