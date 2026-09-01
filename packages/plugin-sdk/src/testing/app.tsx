@@ -44,6 +44,7 @@ import {
   type PluginSettingsSectionRegistration,
   type PluginSettingsState,
   type PluginSidebarFooterActionRegistration,
+  type ExperimentalSidebarNavigationRegistration,
   type PluginSidebarPullRequest,
   type PluginSidebarThreadActions,
   type PluginSidebarThreadPullRequestState,
@@ -901,6 +902,7 @@ export interface CapturedPluginApp {
   composerCustomizations: ComposerCustomization[];
   pendingInteractions: PluginPendingInteractionRegistration[];
   sidebarFooterActions: PluginSidebarFooterActionRegistration[];
+  experimentalSidebarNavigations: ExperimentalSidebarNavigationRegistration[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
   browserActions: PluginBrowserActionRegistration[];
