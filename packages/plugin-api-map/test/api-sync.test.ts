@@ -29,13 +29,20 @@ const CONTRACT_SOURCES = [
   read("testing", "host.ts"),
 ].join("\n");
 
-const EXPORTED = new Set(
-  [
+const EXPORTED = new Set([
+  ...[
     ...CONTRACT_SOURCES.matchAll(
       /^export (?:declare )?(?:abstract )?(?:interface|type|class|function|const|enum) ([A-Za-z_][A-Za-z0-9_]*)/gm,
     ),
   ].map((match) => match[1]),
-);
+  ...[
+    ...CONTRACT_SOURCES.matchAll(/^export type \{([\s\S]*?)\};/gm),
+  ].flatMap((match) =>
+    [...match[1].matchAll(/\b([A-Z][A-Za-z0-9_]*)\b/g)].map(
+      (symbol) => symbol[1],
+    ),
+  ),
+]);
 
 const SURFACES = SURFACE_GROUPS.flatMap((group) => group.surfaces);
 

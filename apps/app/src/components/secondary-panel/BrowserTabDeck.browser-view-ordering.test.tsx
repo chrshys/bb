@@ -15,6 +15,7 @@ import {
   createNoopDesktopBrowserApi,
 } from "@/test/bb-desktop-test-utils";
 import { POINTER_COARSE_QUERY } from "@bb/shared-ui/hooks/use-pointer-coarse";
+import { TooltipProvider } from "@bb/shared-ui/tooltip";
 import { BrowserTabDeck, BrowserTabLifecycleObserver } from "./BrowserTabDeck";
 import { resetBrowserViewPersistence } from "./browserViewVisibilityCoordinator";
 
@@ -153,6 +154,7 @@ function renderBrowserDeck({
       threadId="thread-1"
       onUpdate={() => {}}
     />,
+    { wrapper: TooltipProvider },
   );
 }
 
@@ -361,6 +363,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         threadId="thread-1"
         onUpdate={() => {}}
       />,
+      { wrapper: TooltipProvider },
     );
 
     await waitFor(() => expect(attachments).toHaveLength(1));
@@ -382,6 +385,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         threadId="thread-1"
         onUpdate={() => {}}
       />,
+      { wrapper: TooltipProvider },
     );
 
     await waitFor(() => expect(attachments).toHaveLength(1));
@@ -412,6 +416,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         threadId="thread-1"
         onUpdate={() => {}}
       />,
+      { wrapper: TooltipProvider },
     );
 
     expect(screen.getByLabelText("Address and search bar")).toBeTruthy();

@@ -20,6 +20,7 @@ import {
   type PluginAppDefinition,
   type PluginAppSetup,
   type PluginCodeThemeState,
+  type PluginBrowserActionRegistration,
   type PluginContentScriptDisposer,
   type PluginContentScriptRegistration,
   type PluginComposerApi,
@@ -896,6 +897,7 @@ export interface CapturedPluginApp {
   sidebarFooterActions: PluginSidebarFooterActionRegistration[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  browserActions: PluginBrowserActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];
   sourceCodeRenderers: PluginSourceCodeRendererRegistration[];
   diffRenderers: PluginDiffRendererRegistration[];

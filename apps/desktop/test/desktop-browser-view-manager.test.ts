@@ -1,6 +1,9 @@
 import type { RenderProcessGoneDetails, WebContentsView } from "electron";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { BbDesktopBrowserViewBounds } from "@bb/desktop-contract";
+import type {
+  BbDesktopBrowserImportCookiesRequest,
+  BbDesktopBrowserViewBounds,
+} from "@bb/desktop-contract";
 import {
   createDesktopBrowserViewManager as createProductionDesktopBrowserViewManager,
   isAllowedBrowserPermission,
@@ -38,6 +41,13 @@ interface FakeNavigationEvent extends FakePreventableEvent {
 }
 
 type FakeVoidWebContentsListener = () => void;
+type FakeConsoleMessageListener = (
+  event: FakeWebContentsEvent,
+  level: number,
+  message: string,
+  line: number,
+  sourceId: string,
+) => void;
 
 type FakeWillFrameNavigateListener = (event: FakeNavigationEvent) => void;
 
@@ -134,10 +144,12 @@ interface FakeFindInPageCall {
 
 interface FakeWebContentsEventMap {
   focus: FakeVoidWebContentsListener;
+  "console-message": FakeConsoleMessageListener;
   "before-input-event": FakeBeforeInputListener;
   "will-frame-navigate": FakeWillFrameNavigateListener;
   "will-navigate": FakeWillNavigateListener;
   "will-redirect": FakeWillRedirectListener;
+  "dom-ready": FakeVoidWebContentsListener;
   "did-start-loading": FakeVoidWebContentsListener;
   "did-stop-loading": FakeVoidWebContentsListener;
   "did-finish-load": FakeVoidWebContentsListener;
@@ -186,8 +198,10 @@ type FakeWindowOpenHandler = (
 
 const electronMock = vi.hoisted(() => {
   interface FakeNativeImage {
+    getSize(): { height: number; width: number };
     isEmpty(): boolean;
     toJPEG(quality: number): Buffer;
+    toPNG(): Buffer;
   }
 
   interface FakeDidFailLoadArgs {
@@ -239,15 +253,84 @@ const electronMock = vi.hoisted(() => {
   const fakeWebContentsEvent: FakeWebContentsEvent = {};
 
   const fakeCapturedImage: FakeNativeImage = {
+    getSize: () => ({ width: 1_200, height: 800 }),
     isEmpty: () => false,
     toJPEG: () => Buffer.from("jpeg-bytes"),
+    toPNG: () => Buffer.from("png-bytes"),
   };
+
+  interface FakeDebuggerCommand {
+    method: string;
+    params:
+      | ({ cookies?: readonly object[] } & Record<string, unknown>)
+      | undefined;
+  }
+
+  class FakeDebugger {
+    public attached = false;
+    public readonly attachCalls: string[] = [];
+    public detachCalls = 0;
+    public readonly sendCommandCalls: FakeDebuggerCommand[] = [];
+    private readonly messageListeners: Array<
+      (
+        event: FakeWebContentsEvent,
+        method: string,
+        params: Record<string, unknown>,
+      ) => void
+    > = [];
+
+    on(
+      _eventName: "message",
+      listener: (
+        event: FakeWebContentsEvent,
+        method: string,
+        params: Record<string, unknown>,
+      ) => void,
+    ): void {
+      this.messageListeners.push(listener);
+    }
+
+    emitMessage(method: string, params: Record<string, unknown>): void {
+      for (const listener of this.messageListeners) {
+        listener(fakeWebContentsEvent, method, params);
+      }
+    }
+
+    attach(protocolVersion: string): void {
+      this.attached = true;
+      this.attachCalls.push(protocolVersion);
+    }
+
+    detach(): void {
+      this.attached = false;
+      this.detachCalls += 1;
+    }
+
+    isAttached(): boolean {
+      return this.attached;
+    }
+
+    async sendCommand(
+      method: string,
+      params?: Record<string, unknown>,
+    ): Promise<object> {
+      this.sendCommandCalls.push({ method, params });
+      if (method === "Page.getLayoutMetrics") {
+        return { cssContentSize: { width: 1_200, height: 2_400 } };
+      }
+      if (method === "Page.captureScreenshot") {
+        return { data: Buffer.from("full-page").toString("base64") };
+      }
+      return {};
+    }
+  }
 
   class FakeWebContents {
     public activeHistoryIndex = 0;
     public canGoBackResult = false;
     public canGoForwardResult = false;
     public destroyed = false;
+    public readonly debugger = new FakeDebugger();
     public focusCalls = 0;
     public readonly goBackCalls: string[] = [];
     public readonly goForwardCalls: string[] = [];
@@ -261,6 +344,8 @@ const electronMock = vi.hoisted(() => {
       (image: FakeNativeImage) => void
     > = [];
     private readonly listeners: FakeWebContentsListeners = {
+      "console-message": [],
+      "dom-ready": [],
       focus: [],
       "before-input-event": [],
       "will-frame-navigate": [],
@@ -427,6 +512,17 @@ const electronMock = vi.hoisted(() => {
       }
     }
 
+    emitDidStartNavigation(isMainFrame = true): void {
+      for (const listener of this.listeners["did-start-navigation"]) {
+        (listener as (...args: unknown[]) => void)(
+          fakeWebContentsEvent,
+          this.url,
+          false,
+          isMainFrame,
+        );
+      }
+    }
+
     emitWillFrameNavigate(
       url: string,
       isMainFrame: boolean,
@@ -501,6 +597,36 @@ const electronMock = vi.hoisted(() => {
   }
 
   class FakeSession {
+    public flushStoreCalls = 0;
+    public readonly cookies = {
+      flushStore: async (): Promise<void> => {
+        this.flushStoreCalls += 1;
+      },
+    };
+    public readonly webRequest = {
+      onBeforeRequest: (
+        _listener: (
+          details: { url: string; method: string; webContentsId?: number },
+          callback: (response: Record<string, never>) => void,
+        ) => void,
+      ): void => {},
+      onCompleted: (
+        _listener: (details: {
+          method: string;
+          statusCode: number;
+          url: string;
+          webContentsId?: number;
+        }) => void,
+      ): void => {},
+      onErrorOccurred: (
+        _listener: (details: {
+          error: string;
+          method: string;
+          url: string;
+          webContentsId?: number;
+        }) => void,
+      ): void => {},
+    };
     public readonly willDownloadListeners: FakeSessionListener[] = [];
     public permissionCheckHandler: FakePermissionCheckHandler | null = null;
     public permissionRequestHandler: FakePermissionRequestHandler | null = null;
@@ -572,10 +698,15 @@ class FakeHostWebContents implements DesktopBrowserHostWebContents {
 
 class FakeContentView implements DesktopBrowserHostContentView {
   public readonly addedViews: WebContentsView[] = [];
+  public readonly addCalls: Array<{
+    index: number | undefined;
+    view: WebContentsView;
+  }> = [];
   public readonly removedViews: WebContentsView[] = [];
 
-  addChildView(view: WebContentsView): void {
+  addChildView(view: WebContentsView, index?: number): void {
     this.addedViews.push(view);
+    this.addCalls.push({ index, view });
   }
 
   removeChildView(view: WebContentsView): void {
@@ -672,6 +803,17 @@ function requireFakeView(
   return view;
 }
 
+function requireFakeSession(
+  index: number,
+): (typeof electronMock.fakeSessions)[number] {
+  const fakeSession = electronMock.fakeSessions[index];
+  expect(fakeSession).toBeDefined();
+  if (fakeSession === undefined) {
+    throw new Error("Expected the browser session to be created.");
+  }
+  return fakeSession;
+}
+
 function createRendererRecoveryFixture(webContentsId: number) {
   const manager = createDesktopBrowserViewManager({
     partition: "persist:test",
@@ -712,6 +854,417 @@ function scopedOpenTabPushesOf(
 }
 
 describe("DesktopBrowserViewManager", () => {
+  it("places browser content below the host renderer", () => {
+    const manager = createDesktopBrowserViewManager();
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 48,
+    });
+
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+
+    expect(hostWindow.contentView.addCalls).toEqual([
+      { index: 0, view: requireFakeView(0) },
+    ]);
+  });
+
+  it("preserves valid cookie prefixes and skips malformed prefixed cookies", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 49,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+    const request = {
+      tabId: "browser:a",
+      cookies: [
+        {
+          domain: "example.com",
+          expirationDate: null,
+          httpOnly: true,
+          name: "__Host-session",
+          path: "/",
+          sameSite: "lax",
+          secure: true,
+          value: "host-value",
+        },
+        {
+          domain: ".example.com",
+          expirationDate: null,
+          httpOnly: true,
+          name: "__Host-invalid",
+          path: "/",
+          sameSite: "lax",
+          secure: true,
+          value: "invalid-value",
+        },
+        {
+          domain: ".example.com",
+          expirationDate: null,
+          httpOnly: true,
+          name: "__Secure-session",
+          path: "/",
+          sameSite: "strict",
+          secure: true,
+          value: "secure-value",
+        },
+        {
+          domain: ".example.com",
+          expirationDate: null,
+          httpOnly: true,
+          name: "overlap",
+          path: "/",
+          sameSite: "lax",
+          secure: true,
+          value: "secure-overlap",
+        },
+        {
+          domain: "sub.example.com",
+          expirationDate: null,
+          httpOnly: false,
+          name: "overlap",
+          path: "/account",
+          sameSite: "lax",
+          secure: false,
+          value: "insecure-overlap",
+        },
+      ],
+    } satisfies BbDesktopBrowserImportCookiesRequest;
+
+    await expect(
+      manager.importCookies({ hostWindow, request }),
+    ).resolves.toEqual({ importedCookies: 4 });
+    const view = requireFakeView(0);
+    expect(view.webContents.debugger.attachCalls).toEqual(["1.3"]);
+    expect(view.webContents.debugger.detachCalls).toBe(0);
+    const storageCalls = view.webContents.debugger.sendCommandCalls.filter(
+      (call) => call.method.startsWith("Storage."),
+    );
+    expect(storageCalls).toEqual([
+      {
+        method: "Storage.clearCookies",
+        params: undefined,
+      },
+      {
+        method: "Storage.setCookies",
+        params: {
+          cookies: [
+            {
+              httpOnly: true,
+              name: "__Host-session",
+              path: "/",
+              sameSite: "Lax",
+              secure: true,
+              url: "https://example.com/",
+              value: "host-value",
+            },
+            {
+              domain: ".example.com",
+              httpOnly: true,
+              name: "__Secure-session",
+              path: "/",
+              sameSite: "Strict",
+              secure: true,
+              value: "secure-value",
+            },
+            {
+              domain: ".example.com",
+              httpOnly: true,
+              name: "overlap",
+              path: "/",
+              sameSite: "Lax",
+              secure: true,
+              value: "secure-overlap",
+            },
+            {
+              httpOnly: false,
+              name: "overlap",
+              path: "/account",
+              sameSite: "Lax",
+              secure: false,
+              url: "https://sub.example.com/account",
+              value: "insecure-overlap",
+            },
+          ],
+        },
+      },
+    ]);
+    expect(requireFakeSession(0).flushStoreCalls).toBe(1);
+
+    view.webContents.debugger.attached = true;
+    await expect(
+      manager.importCookies({ hostWindow, request }),
+    ).resolves.toEqual({ importedCookies: 4 });
+    expect(view.webContents.debugger.attachCalls).toEqual(["1.3"]);
+    expect(view.webContents.debugger.detachCalls).toBe(0);
+    expect(view.webContents.debugger.isAttached()).toBe(true);
+    expect(
+      view.webContents.debugger.sendCommandCalls.filter((call) =>
+        call.method.startsWith("Storage."),
+      ),
+    ).toHaveLength(4);
+    expect(requireFakeSession(0).flushStoreCalls).toBe(2);
+    await manager.clearImportedCookies({ hostWindow, tabId: "browser:a" });
+    expect(view.webContents.debugger.sendCommandCalls.at(-1)?.method).toBe(
+      "Storage.clearCookies",
+    );
+    expect(requireFakeSession(0).flushStoreCalls).toBe(3);
+  });
+
+  it("batches large cookie imports through the privileged debugger", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 50,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+    const request = {
+      tabId: "browser:a",
+      cookies: Array.from({ length: 251 }, (_, index) => ({
+        domain: ".example.com",
+        expirationDate: null,
+        httpOnly: true,
+        name: `session-${index}`,
+        path: "/",
+        sameSite: "lax" as const,
+        secure: true,
+        value: `value-${index}`,
+      })),
+    } satisfies BbDesktopBrowserImportCookiesRequest;
+
+    await expect(
+      manager.importCookies({ hostWindow, request }),
+    ).resolves.toEqual({ importedCookies: 251 });
+    const calls = requireFakeView(
+      0,
+    ).webContents.debugger.sendCommandCalls.filter((call) =>
+      call.method.startsWith("Storage."),
+    );
+    expect(calls).toHaveLength(3);
+    expect(calls[0]?.method).toBe("Storage.clearCookies");
+    expect(calls[1]?.method).toBe("Storage.setCookies");
+    expect(calls[1]?.params?.cookies).toHaveLength(250);
+    expect(calls[2]?.params?.cookies).toHaveLength(1);
+  });
+
+  it("binds page captures to the exact navigation epoch", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 49,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+    const view = requireFakeView(0);
+
+    const capture = manager.capturePage({
+      hostWindow,
+      request: {
+        tabId: "browser:a",
+        format: "png",
+        quality: 85,
+        expectedNavigationEpoch: 0,
+      },
+    });
+    view.webContents.pendingCaptureResolvers.shift()?.(
+      electronMock.fakeCapturedImage,
+    );
+    await expect(capture).resolves.toEqual({
+      navigationEpoch: 0,
+      dataUrl: `data:image/png;base64,${Buffer.from("png-bytes").toString("base64")}`,
+      pixelSize: { width: 1_200, height: 800 },
+    });
+
+    const invalidatedCapture = manager.capturePage({
+      hostWindow,
+      request: {
+        tabId: "browser:a",
+        format: "jpeg",
+        quality: 75,
+        expectedNavigationEpoch: 0,
+      },
+    });
+    view.webContents.emitDidStartNavigation();
+    view.webContents.pendingCaptureResolvers.shift()?.(
+      electronMock.fakeCapturedImage,
+    );
+    await expect(invalidatedCapture).rejects.toThrow(
+      "Browser page changed during capture",
+    );
+    await expect(
+      manager.capturePage({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          format: "png",
+          quality: 85,
+          expectedNavigationEpoch: 0,
+        },
+      }),
+    ).rejects.toThrow("Browser page changed before capture");
+  });
+  it("captures full pages and scopes dialogs, permissions, and diagnostics to one tab", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 50,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+    const view = requireFakeView(0);
+    const fakeSession = electronMock.fakeSessions.at(-1);
+    if (
+      fakeSession?.permissionCheckHandler === null ||
+      fakeSession?.permissionCheckHandler === undefined ||
+      fakeSession.permissionRequestHandler === null
+    ) {
+      throw new Error("Expected Browser permission handlers");
+    }
+
+    await expect(
+      manager.runAutomation({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          expectedNavigationEpoch: 0,
+          action: {
+            kind: "set-permissions",
+            decision: "allow",
+            permissions: ["media"],
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      navigationEpoch: 0,
+      value: { decision: "allow", permissions: ["media"] },
+    });
+    expect(fakeSession.permissionCheckHandler(view.webContents, "media")).toBe(
+      true,
+    );
+    const permissionDecisions: boolean[] = [];
+    fakeSession.permissionRequestHandler(view.webContents, "media", (allowed) =>
+      permissionDecisions.push(allowed),
+    );
+    expect(permissionDecisions).toEqual([true]);
+    await manager.runAutomation({
+      hostWindow,
+      request: {
+        tabId: "browser:a",
+        expectedNavigationEpoch: 0,
+        action: {
+          kind: "set-permissions",
+          decision: "deny",
+          permissions: ["clipboard-sanitized-write"],
+        },
+      },
+    });
+    expect(
+      fakeSession.permissionCheckHandler(
+        view.webContents,
+        "clipboard-sanitized-write",
+      ),
+    ).toBe(false);
+
+    await manager.runAutomation({
+      hostWindow,
+      request: {
+        tabId: "browser:a",
+        expectedNavigationEpoch: 0,
+        action: {
+          kind: "set-dialog-handler",
+          behavior: "accept",
+          promptText: "approved",
+        },
+      },
+    });
+    view.webContents.debugger.emitMessage("Page.javascriptDialogOpening", {
+      message: "Continue?",
+      type: "prompt",
+    });
+    expect(view.webContents.debugger.sendCommandCalls).toContainEqual({
+      method: "Page.handleJavaScriptDialog",
+      params: { accept: true, promptText: "approved" },
+    });
+
+    await expect(
+      manager.runAutomation({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          expectedNavigationEpoch: 0,
+          action: {
+            kind: "capture-full-page",
+            format: "png",
+            quality: 100,
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      navigationEpoch: 0,
+      value: {
+        dataUrl: `data:image/png;base64,${Buffer.from("full-page").toString("base64")}`,
+        pixelSize: { width: 1_200, height: 2_400 },
+      },
+    });
+
+    await expect(
+      manager.runAutomation({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          expectedNavigationEpoch: 0,
+          action: { kind: "diagnostics" },
+        },
+      }),
+    ).resolves.toMatchObject({
+      value: {
+        dialogs: [
+          expect.objectContaining({
+            behavior: "accept",
+            message: "Continue?",
+          }),
+        ],
+        permissions: [
+          expect.objectContaining({
+            decision: "allow",
+            permission: "media",
+          }),
+        ],
+      },
+    });
+  });
+
   it("forwards resolved browser shortcuts and suppresses the untrusted page", () => {
     const dispatchAppCommand = vi.fn();
     const focusHostWebContents = vi.fn();

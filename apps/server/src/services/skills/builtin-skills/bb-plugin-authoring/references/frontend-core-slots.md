@@ -212,6 +212,45 @@ target? })`. Inside the fixed-tab component,
   (sync or async) are contained and logged,
   never breaking the sidebar. `title` is the tooltip + accessible label;
   `icon` is a BB icon-name hint (unknown names fall back to a generic bolt).
+- `experimental_browserAction` → a compact plugin-owned control in the
+  visible Browser tab's navigation chrome. Registration is
+  `PluginBrowserActionRegistration`:
+  `{ id, title, component }`. `id` is plugin-local and may contain only
+  letters, digits, `-`, and `_`; `title` supplies the accessible label and
+  overflow-row label; `component` renders exactly one accessible 28px control.
+  Portal menus and dialogs instead of expanding the chrome control.
+
+  `component` receives `PluginBrowserActionProps`:
+  `{ tabId, navigationEpoch, threadId, projectId, url,
+  experimental_pageContentScriptsAvailable, experimental_runPageContentScript,
+  experimental_capturePage, experimental_overlayRoot,
+  experimental_setOverlayOpen }`. The tab, thread, project, URL, and page
+  revision identify only the Browser tab currently on screen; component state
+  must tolerate each nullable owner and unmount as the user changes panes. When
+  `experimental_pageContentScriptsAvailable` is false, keep the control visible
+  but disabled and explain that the desktop app must be upgraded.
+
+  `experimental_runPageContentScript(request, { signal })` takes an
+  `ExperimentalBrowserPageContentScriptRequest` with the exact current
+  `expectedNavigationEpoch`, a function-expression `source`, JSON-only
+  `input?`, `timeoutMs?`, and `world?: "isolated" | "main"`. It returns
+  `ExperimentalBrowserPageContentScriptResult` with that exact
+  `navigationEpoch` and JSON-only `value`. The default isolated world can reach
+  the page DOM but never Electron, Node, or the BB app shell; use `main` only
+  to inspect page-owned JavaScript state. Abort on unmount and treat
+  cancellation, navigation, timeout, and lifecycle failures as terminal for
+  that request.
+
+  `experimental_capturePage({ format?, quality?, expectedNavigationEpoch? })`
+  returns `ExperimentalBrowserPageCapture` with `navigationEpoch`, `dataUrl`,
+  and `pixelSize`. Bind related script and capture results with
+  `expectedNavigationEpoch`; do not present a capture from a newer page as if
+  it described the earlier one. `experimental_overlayRoot` is a tab-local
+  portal host. While a portalled menu or dialog is open, call
+  `experimental_setOverlayOpen(true)` and always release it with `false`; BB
+  also releases the lease when the slot lifecycle ends. Experimental: see
+  `docs/api_to_audit.md`.
+
 - `fileOpener` → `{ path: string, source, Original }` — register as a viewer/editor
   for file extensions: `{ id, title, extensions: ["md"], component }`.
   Matching files use the first applicable opener in deterministic slot order

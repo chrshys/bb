@@ -33,6 +33,7 @@ describe("product-map surfaces", () => {
       "thread-row-status",
       "sidebar-footer",
       "thread-header",
+      "browser-actions",
       "message-directives",
       "message-actions",
       "pending-interaction",

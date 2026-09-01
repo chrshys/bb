@@ -7,6 +7,7 @@ import {
   type BbPluginApi,
   type PluginAppBuilder,
   type PluginAppSlots,
+  type PluginBrowserActionProps,
   type PluginContentScriptContext,
   type PluginContentScriptRegistration,
   type PluginDiffRendererProps,
@@ -158,6 +159,7 @@ const BB_PLUGIN_API_KEYS = [
   "events",
   "status",
   "server",
+  "experimental_browser",
   "hosts",
   "experimental_aiServices",
   "sdk",
@@ -234,6 +236,7 @@ type SlotPropsByName = {
   sidebarFooterAction: PluginSidebarFooterActionProps;
   experimental_threadList: PluginThreadListProps;
   experimental_threadHeaderAction: PluginThreadHeaderActionProps;
+  experimental_browserAction: PluginBrowserActionProps;
   fileOpener: PluginFileOpenerProps;
   experimental_sourceCodeRenderer: PluginSourceCodeRendererProps;
   experimental_diffRenderer: PluginDiffRendererProps;
@@ -314,6 +317,18 @@ const FRONTEND_SLOT_PROP_FIELDS = {
     "threadId",
     "projectId",
     "isCompactViewport",
+  ],
+  experimental_browserAction: [
+    "tabId",
+    "navigationEpoch",
+    "threadId",
+    "projectId",
+    "url",
+    "experimental_pageContentScriptsAvailable",
+    "experimental_runPageContentScript",
+    "experimental_capturePage",
+    "experimental_overlayRoot",
+    "experimental_setOverlayOpen",
   ],
   fileOpener: ["path", "source", "Original", "experimental_Original"],
   experimental_sourceCodeRenderer: [

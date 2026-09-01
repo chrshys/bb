@@ -23,6 +23,10 @@ import {
   BB_DESKTOP_BROWSER_FOCUS_CHANNEL,
   BB_DESKTOP_BROWSER_FOCUSED_CHANNEL,
   BB_DESKTOP_BROWSER_FIND_IN_PAGE_CHANNEL,
+  BB_DESKTOP_BROWSER_EXPERIMENTAL_IMPORT_COOKIES_CHANNEL,
+  BB_DESKTOP_BROWSER_EXPERIMENTAL_IMPORT_COOKIES_FROM_BROWSER_CHANNEL,
+  BB_DESKTOP_BROWSER_EXPERIMENTAL_CLEAR_IMPORTED_COOKIES_CHANNEL,
+  BB_DESKTOP_BROWSER_EXPERIMENTAL_LIST_COOKIE_IMPORT_SOURCES_CHANNEL,
   BB_DESKTOP_BROWSER_FIND_RESULT_CHANNEL,
   BB_DESKTOP_BROWSER_GO_BACK_CHANNEL,
   BB_DESKTOP_BROWSER_GO_FORWARD_CHANNEL,
@@ -109,10 +113,42 @@ const electronMock = vi.hoisted(() => {
       },
     },
     ipcRenderer: {
-      invoke(channel: string): Promise<BbDesktopInfo | BbDesktopWindowState> {
+      invoke(channel: string): Promise<
+        | BbDesktopInfo
+        | BbDesktopWindowState
+        | { importedCookies: number }
+        | {
+            sources: {
+              family: string;
+              label: string;
+              profiles: { id: string; label: string }[];
+            }[];
+          }
+      > {
         invokeCalls.push(channel);
         if (channel === "bb-desktop:get-window-state") {
           return Promise.resolve(desktopWindowState);
+        }
+        if (
+          channel === BB_DESKTOP_BROWSER_EXPERIMENTAL_IMPORT_COOKIES_CHANNEL ||
+          channel ===
+            BB_DESKTOP_BROWSER_EXPERIMENTAL_IMPORT_COOKIES_FROM_BROWSER_CHANNEL
+        ) {
+          return Promise.resolve({ importedCookies: 3 });
+        }
+        if (
+          channel ===
+          BB_DESKTOP_BROWSER_EXPERIMENTAL_LIST_COOKIE_IMPORT_SOURCES_CHANNEL
+        ) {
+          return Promise.resolve({
+            sources: [
+              {
+                family: "chrome",
+                label: "Google Chrome",
+                profiles: [{ id: "Default", label: "Default" }],
+              },
+            ],
+          });
         }
         return Promise.resolve(desktopInfo);
       },
@@ -201,10 +237,34 @@ describe("desktop preload browser API", () => {
       tabId: "browser:a",
       action: "clearSelection" as const,
     };
+    const nativeImportRequest = {
+      family: "chrome",
+      profileId: "Default",
+      tabId: "browser:a",
+    };
 
     expect(Object.keys(api.browser).sort()).toEqual([
       "attach",
       "detach",
+      "experimental_browserEventWaitVersion",
+      "experimental_browserFrameRuntimeVersion",
+      "experimental_browserPageRuntimeVersion",
+      "experimental_browserTrustedInputVersion",
+      "experimental_cancelBrowserEvent",
+      "experimental_captureBrowserPage",
+      "experimental_clearBrowserViewportProfile",
+      "experimental_clearImportedCookies",
+      "experimental_closeBrowserTab",
+      "experimental_importCookies",
+      "experimental_importCookiesFromBrowser",
+      "experimental_listBrowserFrames",
+      "experimental_listCookieImportSources",
+      "experimental_runBrowserAutomation",
+      "experimental_runBrowserPageScript",
+      "experimental_sendBrowserPointerInput",
+      "experimental_sendBrowserTrustedInput",
+      "experimental_setBrowserViewportProfile",
+      "experimental_waitBrowserEvent",
       "findInPage",
       "focus",
       "goBack",
@@ -239,6 +299,25 @@ describe("desktop preload browser API", () => {
     api.browser.setVisibleWithoutFocus?.(visibleRequest);
     api.browser.findInPage?.(findRequest);
     api.browser.stopFindInPage?.(stopFindRequest);
+    await expect(
+      api.browser.experimental_listCookieImportSources?.({
+        tabId: "browser:a",
+      }),
+    ).resolves.toEqual({
+      sources: [
+        {
+          family: "chrome",
+          label: "Google Chrome",
+          profiles: [{ id: "Default", label: "Default" }],
+        },
+      ],
+    });
+    await expect(
+      api.browser.experimental_importCookiesFromBrowser?.(nativeImportRequest),
+    ).resolves.toEqual({ importedCookies: 3 });
+    await api.browser.experimental_clearImportedCookies?.({
+      tabId: "browser:a",
+    });
     api.setTheme("dark");
     await api.checkForUpdates();
     await expect(api.getWindowState?.()).resolves.toEqual({
@@ -304,6 +383,9 @@ describe("desktop preload browser API", () => {
     );
     expect(electronMock.invokeCalls).toContain(
       BB_DESKTOP_GET_WINDOW_STATE_CHANNEL,
+    );
+    expect(electronMock.invokeCalls).toContain(
+      BB_DESKTOP_BROWSER_EXPERIMENTAL_CLEAR_IMPORTED_COOKIES_CHANNEL,
     );
     expect(electronMock.invokeCalls).toContain(
       BB_DESKTOP_INSTALL_UPDATE_CHANNEL,

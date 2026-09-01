@@ -118,6 +118,22 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         experimental: true,
       },
       {
+        id: "browser-actions",
+        title: "Browser tab controls",
+        summary:
+          "Adds a compact control to the navigation chrome of bb's visible Browser tab. With this, a plugin can:",
+        bullets: [
+          "Receive the exact tab, thread, project, URL, and navigation revision currently on screen",
+          "Run a bounded page script or capture that same tab without opening a separate browser session",
+          "Lease the Browser overlay while its own dialog or menu is open",
+        ],
+        apiSymbols: [
+          "PluginBrowserActionRegistration",
+          "PluginBrowserActionProps",
+        ],
+        experimental: true,
+      },
+      {
         id: "message-directives",
         title: "Rich message embeds",
         summary:
@@ -479,7 +495,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
     sections: [
       {
         title: "Commands & agent capabilities",
-        surfaceIds: ["cli", "agent-tools"],
+        surfaceIds: ["cli", "agent-tools", "browser-agent-control"],
       },
       {
         title: "Running & reacting",
@@ -540,6 +556,31 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Remote access",
           "Workflows",
         ],
+      },
+      {
+        id: "browser-agent-control",
+        tagline: "Create, inspect, or act on a visible Browser tab",
+        title: "Browser agent control",
+        summary:
+          "Lets an approved native agent tool or plugin CLI discover, create, and control visible Browser tabs. With this, a plugin can:",
+        bullets: [
+          "Discover connected and inactive tabs plus zero-tab panel owners",
+          "Create or activate a tab and receive its stable native page revision",
+          "Run bounded interactions, uploads, cookie-profile import, waits, screenshots, dialogs, permissions, storage, diagnostics, and scripts",
+          "Batch explicit targets through bb.sdk.browser with per-item results and bounded concurrency",
+          "Receive cancellation, policy, and stale-target errors instead of silent retargeting",
+        ],
+        apiSymbols: [
+          "PluginBrowser",
+          "PluginBrowserOpenOptions",
+          "BrowserControlAction",
+          "BrowserControlError",
+          "BrowserFrameDescriptor",
+          "BrowserFrameTarget",
+          "BrowserWaitCriteria",
+          "BrowserWaitResult",
+        ],
+        experimental: true,
       },
       {
         id: "background",

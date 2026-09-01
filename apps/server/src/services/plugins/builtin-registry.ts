@@ -46,6 +46,12 @@ export const BUILTIN_PLUGINS = [
     category: "Workflow management",
   },
   {
+    name: "browser",
+    pluginId: "browser",
+    defaultEnabled: true,
+    category: "Developer tools",
+  },
+  {
     name: "connect",
     pluginId: "connect",
     defaultEnabled: true,

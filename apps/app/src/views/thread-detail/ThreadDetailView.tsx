@@ -105,9 +105,7 @@ import {
   useCreateThreadTerminal,
   useThreadTerminals,
 } from "@/hooks/queries/thread-terminal-queries";
-import {
-  getEnvironmentWorkspaceSummaryDisplay,
-} from "@/lib/environment-workspace-display";
+import { getEnvironmentWorkspaceSummaryDisplay } from "@/lib/environment-workspace-display";
 import { formatWorkspaceCheckoutDisplay } from "@/lib/workspace-checkout-display";
 import {
   getAbsoluteDirname,
@@ -203,6 +201,11 @@ import {
   getDesktopBrowserApi,
   isDesktopBrowserAvailable,
 } from "@/lib/bb-desktop";
+import {
+  registerBrowserControlOwner,
+  type BrowserControlOwnerRegistration,
+  waitForBrowserControlTab,
+} from "@/lib/browser-control-client";
 import {
   openUrlByPreference,
   useOpenLinksInAppBrowserPreference,
@@ -672,7 +675,6 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
     enabled: isSecondaryPanelOpen,
   });
   const {
-    activeBrowserTab,
     activeHostFileLineRange,
     activeHostFilePath,
     activeStorageFilePath,
@@ -722,48 +724,6 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
       );
     },
     [],
-  );
-  const renderBrowserDeck = useCallback(
-    ({
-      canHandleBrowserCommands,
-      canShowNativeBrowserView,
-      onNativeFocus,
-      activeBrowserTabId = activeBrowserTab?.id ?? null,
-    }: {
-      canHandleBrowserCommands?: boolean;
-      canShowNativeBrowserView: boolean;
-      onNativeFocus?: () => void;
-      activeBrowserTabId?: string | null;
-    }) => {
-      if (browserDeckThreadId === null) {
-        return null;
-      }
-      return (
-        <LazyBrowserTabDeck
-          browserTabs={browserTabs}
-          activeBrowserTabId={activeBrowserTabId}
-          addressFocusRequest={browserAddressFocusRequest}
-          onAddressFocusRequestConsumed={
-            handleBrowserAddressFocusRequestConsumed
-          }
-          environmentId={browserDeckEnvironmentId}
-          canShowNativeBrowserView={canShowNativeBrowserView}
-          canHandleBrowserCommands={canHandleBrowserCommands}
-          onNativeFocus={onNativeFocus}
-          threadId={browserDeckThreadId}
-          onUpdate={updateBrowserTab}
-        />
-      );
-    },
-    [
-      activeBrowserTab?.id,
-      browserAddressFocusRequest,
-      browserTabs,
-      browserDeckEnvironmentId,
-      browserDeckThreadId,
-      handleBrowserAddressFocusRequestConsumed,
-      updateBrowserTab,
-    ],
   );
   const openPersistedWorkspaceFile =
     useCallback<ThreadSecondaryPanelWorkspaceFileOpenHandler>(
@@ -1172,6 +1132,51 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
     },
     [addQuoteToComposer, dismissCompactKeyboard],
   );
+  const renderBrowserDeck = useCallback(
+    ({
+      activeBrowserTabId = null,
+      canShowNativeBrowserView,
+      canHandleBrowserCommands = canShowNativeBrowserView,
+      onNativeFocus,
+    }: {
+      activeBrowserTabId?: string | null;
+      canHandleBrowserCommands?: boolean;
+      canShowNativeBrowserView: boolean;
+      onNativeFocus?: () => void;
+    }) => {
+      if (browserDeckThreadId === null) {
+        return null;
+      }
+      return (
+        <LazyBrowserTabDeck
+          browserTabs={browserTabs}
+          activeBrowserTabId={activeBrowserTabId}
+          addressFocusRequest={browserAddressFocusRequest}
+          onAddressFocusRequestConsumed={
+            handleBrowserAddressFocusRequestConsumed
+          }
+          onSelectionAddToChat={handleSelectionAddToChat}
+          environmentId={browserDeckEnvironmentId}
+          canShowNativeBrowserView={canShowNativeBrowserView}
+          canHandleBrowserCommands={canHandleBrowserCommands}
+          onNativeFocus={onNativeFocus}
+          threadId={browserDeckThreadId}
+          projectId={thread?.projectId ?? null}
+          onUpdate={updateBrowserTab}
+        />
+      );
+    },
+    [
+      browserAddressFocusRequest,
+      browserTabs,
+      browserDeckEnvironmentId,
+      browserDeckThreadId,
+      thread?.projectId,
+      handleBrowserAddressFocusRequestConsumed,
+      handleSelectionAddToChat,
+      updateBrowserTab,
+    ],
+  );
   const sendSideChatMessageToMain =
     useCallback<ThreadTimelineSendToMainMessageHandler>(
       (target) => {
@@ -1260,6 +1265,61 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
     openPersistedWorkspaceFile,
     togglePersistedPanel: toggleDefaultPersistedSecondaryPanel,
   });
+  const openControlledBrowserTab = useCallback(
+    async (url: string) => {
+      const tab = openTab({ kind: "browser", url });
+      if (tab?.kind !== "browser") {
+        throw new Error("The visible Browser tab could not be created");
+      }
+      openCompactDrawer();
+      return waitForBrowserControlTab(tab.id);
+    },
+    [openCompactDrawer, openTab],
+  );
+  const activateControlledBrowserTab = useCallback(
+    async (tabId: string) => {
+      activateTab(tabId);
+      openCompactDrawer();
+      return waitForBrowserControlTab(tabId);
+    },
+    [activateTab, openCompactDrawer],
+  );
+  const browserOwnerRegistrationRef =
+    useRef<BrowserControlOwnerRegistration | null>(null);
+  useEffect(() => {
+    if (thread === undefined || !isDesktopBrowserAvailable()) return;
+    const registration = registerBrowserControlOwner({
+      active: true,
+      activateTab: activateControlledBrowserTab,
+      openTab: openControlledBrowserTab,
+      ownerId: `thread:${thread.id}`,
+      closeTab,
+      projectId: thread.projectId,
+      threadId: thread.id,
+      tabs: [],
+    });
+    browserOwnerRegistrationRef.current = registration;
+    return () => {
+      if (browserOwnerRegistrationRef.current === registration) {
+        browserOwnerRegistrationRef.current = null;
+      }
+      registration.dispose();
+    };
+  }, [
+    activateControlledBrowserTab,
+    closeTab,
+    openControlledBrowserTab,
+    thread,
+  ]);
+  useEffect(() => {
+    browserOwnerRegistrationRef.current?.updateTabs(
+      browserTabs.map(({ id, title, url }) => ({
+        tabId: id,
+        title,
+        url,
+      })),
+    );
+  }, [browserTabs]);
   const fixedTabDestinations = useMemo(
     () => [
       createThreadInfoFixedTabDestination(() =>

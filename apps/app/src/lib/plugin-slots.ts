@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import type {
   ComposerCustomization,
   PluginDiffRendererRegistration,
+  PluginBrowserActionRegistration,
   PluginPendingInteractionRegistration,
   PluginFileOpenerRegistration,
   PluginHomepageSectionRegistration,
@@ -31,6 +32,8 @@ export interface PluginRegistrationSet {
   sidebarFooterActions: readonly PluginSidebarFooterActionRegistration[];
   threadLists?: readonly PluginThreadListRegistration[];
   threadHeaderActions?: readonly PluginThreadHeaderActionRegistration[];
+  /** Optional for bundles built before this experimental slot existed. */
+  browserActions?: readonly PluginBrowserActionRegistration[];
   fileOpeners: readonly PluginFileOpenerRegistration[];
   sourceCodeRenderers?: readonly PluginSourceCodeRendererRegistration[];
   diffRenderers?: readonly PluginDiffRendererRegistration[];
@@ -66,6 +69,8 @@ export interface PluginThreadListSlot
   extends PluginThreadListRegistration, PluginSlotBase {}
 interface PluginThreadHeaderActionSlot
   extends PluginThreadHeaderActionRegistration, PluginSlotBase {}
+export interface PluginBrowserActionSlot
+  extends PluginBrowserActionRegistration, PluginSlotBase {}
 export interface PluginFileOpenerSlot
   extends PluginFileOpenerRegistration, PluginSlotBase {}
 export interface PluginSourceCodeRendererSlot
@@ -94,6 +99,7 @@ export interface PluginSlotSnapshot {
   sidebarFooterActions: readonly PluginSidebarFooterActionSlot[];
   threadLists: readonly PluginThreadListSlot[];
   threadHeaderActions: readonly PluginThreadHeaderActionSlot[];
+  browserActions: readonly PluginBrowserActionSlot[];
   fileOpeners: readonly PluginFileOpenerSlot[];
   sourceCodeRenderers: readonly PluginSourceCodeRendererSlot[];
   diffRenderers: readonly PluginDiffRendererSlot[];
@@ -115,6 +121,7 @@ export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
   sidebarFooterActions: [],
   threadLists: [],
   threadHeaderActions: [],
+  browserActions: [],
   fileOpeners: [],
   sourceCodeRenderers: [],
   diffRenderers: [],
@@ -143,6 +150,7 @@ const SLOT_KINDS: readonly SlotKind[] = [
   "sidebarFooterActions",
   "threadLists",
   "threadHeaderActions",
+  "browserActions",
   "fileOpeners",
   "sourceCodeRenderers",
   "diffRenderers",
@@ -183,6 +191,7 @@ function flattenRegistrations(
     sidebarFooterActions: stamp(set.sidebarFooterActions),
     threadLists: stamp(set.threadLists),
     threadHeaderActions: stamp(set.threadHeaderActions),
+    browserActions: stamp(set.browserActions),
     fileOpeners: stamp(set.fileOpeners),
     sourceCodeRenderers: stamp(set.sourceCodeRenderers),
     diffRenderers: stamp(set.diffRenderers),

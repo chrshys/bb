@@ -5,16 +5,27 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
+  type ChangeEvent,
   type FormEvent,
+  type PointerEvent,
+  type ReactNode,
   type RefObject,
+  type WheelEvent,
 } from "react";
+import { useSonner } from "sonner";
 import type {
   BbDesktopBrowserApi,
+  BbDesktopBrowserCookieImport,
+  BbDesktopBrowserCookieImportSource,
   BbDesktopBrowserFindInPageRequest,
+  BbDesktopBrowserPageCaptureResult,
+  BbDesktopBrowserPointerInputEvent,
   BbDesktopBrowserState,
   BbDesktopBrowserViewportBounds,
   BbDesktopBrowserViewBounds,
 } from "@bb/desktop-contract";
+import type { BrowserTabTarget } from "@bb/server-contract";
 import {
   BB_DESKTOP_BROWSER_MAX_FIND_TEXT_LENGTH,
   clampBbDesktopBrowserViewBounds,
@@ -23,8 +34,11 @@ import {
   COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
   COARSE_POINTER_TEXT_SM_CLASS,
+  COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS,
 } from "@bb/shared-ui/coarse-pointer-sizing";
 import { Icon } from "@bb/shared-ui/icon";
+import { Button } from "@bb/shared-ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import { getBbDesktopInfo, getDesktopBrowserApi } from "@/lib/bb-desktop";
 import { cn } from "@bb/shared-ui/lib/utils";
 import {
@@ -34,10 +48,13 @@ import {
 } from "@/lib/browser-url";
 import { useBrowserHistory } from "@/lib/browser-history";
 import { BROWSER_VIEW_BOUNDS_SYNC_EVENT } from "@/lib/browser-view-bounds-sync";
+import { updateDesktopBrowserViewAperture } from "@/lib/desktop-browser-view-aperture";
 import { useIsBrowserDimmingModalOpen } from "@/hooks/useBrowserDimmingModal";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import { BrowserFindBar, type BrowserFindMatches } from "./BrowserFindBar";
+import { BrowserScreenshotAnnotation } from "./BrowserScreenshotAnnotation";
 import { BrowserNewTabScreen } from "./BrowserNewTabScreen";
+import { BrowserCookieImportWizard } from "./BrowserCookieImportWizard";
 import {
   registerBrowserView,
   type BrowserViewVisibilityCoordinator,
@@ -51,18 +68,47 @@ import {
 import type { AppShortcutPresentation } from "@/lib/app-keybindings";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
 import { isLocalOnlyUrl } from "@/lib/loopback-hostname";
+import { PluginBrowserActions } from "@/components/plugin/PluginBrowserActions";
+import { copyToClipboardWithToast } from "@/lib/clipboard";
+import { parseBrowserCookieImport } from "@/lib/browser-cookie-import";
+import {
+  BROWSER_ELEMENT_ANNOTATION_INTENTS,
+  browserCancelElementPickerSource,
+  browserElementAnnotationAgentText,
+  browserElementAnnotationsAgentText,
+  browserElementAnnotationCaptureSchema,
+  browserElementPickerSource,
+  redactBrowserElementAnnotation,
+  type BrowserElementAnnotation,
+  type BrowserElementAnnotationIntent,
+  type BrowserElementAnnotationNote,
+} from "@/lib/browser-element-annotation";
+import {
+  browserControlActivitySnapshot,
+  registerBrowserControlTab,
+  subscribeBrowserControlActivity,
+} from "@/lib/browser-control-client";
+import {
+  browserCookieImportRecordSnapshot,
+  setBrowserCookieImportRecord,
+  subscribeBrowserCookieImportRecord,
+} from "@/lib/browser-cookie-import-state";
 
 interface BrowserTabContentProps {
   tabId: string;
   initialUrl: string;
   addressFocusRequest: BrowserAddressFocusRequest | null;
   onAddressFocusRequestConsumed?: (request: BrowserAddressFocusRequest) => void;
+  onSelectionAddToChat?: (text: string) => void;
   canShowNativeBrowserView: boolean;
   canHandleBrowserCommands?: boolean;
   onNativeFocus?: () => void;
+  onControlOpenTab?: (url: string) => Promise<BrowserTabTarget>;
+  onControlCloseTab?: () => void;
   visibilityCoordinator: BrowserViewVisibilityCoordinator | null;
   environmentId: string | null;
   threadId: string;
+  projectId: string | null;
   onUpdate: (args: UpdateBrowserTabArgs) => void;
 }
 
@@ -87,10 +133,22 @@ interface BrowserChromeProps {
   onOpenExternal: () => void;
   locationShortcut: AppShortcutPresentation | null;
   reloadShortcut: AppShortcutPresentation | null;
+  navigationControlsRef: RefObject<HTMLDivElement | null>;
+  annotationAction: ReactNode;
+  pluginActions: ReactNode;
 }
 
 interface NavButtonProps {
-  icon: "ChevronLeft" | "ChevronRight" | "RotateCcw" | "X" | "ExternalLink";
+  icon:
+    | "ChevronLeft"
+    | "ChevronRight"
+    | "RotateCcw"
+    | "X"
+    | "ExternalLink"
+    | "Eye"
+    | "EditFile"
+    | "File"
+    | "MessageSquarePlus";
   label: string;
   disabled?: boolean;
   onClick: () => void;
@@ -129,6 +187,7 @@ const EMPTY_BROWSER_VIEW_BOUNDS: BbDesktopBrowserViewBounds = {
   width: 0,
   height: 0,
 };
+const TOAST_SNAPSHOT_RELEASE_DELAY_MS = 250;
 
 function roundedBoundsFromRect(rect: DOMRect): BbDesktopBrowserViewBounds {
   return {
@@ -177,6 +236,17 @@ function browserPageLoadErrorTitle(args: {
   return "Page unavailable";
 }
 
+function browserElementPickerTheme() {
+  const styles = getComputedStyle(document.documentElement);
+  const outlineColor =
+    styles.getPropertyValue("--ring").trim() ||
+    styles.getPropertyValue("--foreground").trim();
+  return {
+    fillColor: `color-mix(in oklab, ${outlineColor} 14%, transparent)`,
+    outlineColor,
+  };
+}
+
 function NavButton({
   icon,
   label,
@@ -186,20 +256,27 @@ function NavButton({
 }: NavButtonProps) {
   const accessibleLabel = shortcut ? `${label} (${shortcut.label})` : label;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={accessibleLabel}
-      aria-keyshortcuts={shortcut?.ariaKeyshortcuts}
-      className={cn(
-        "flex shrink-0 items-center justify-center transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40",
-        COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
-        CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
-      )}
-    >
-      <Icon name={icon} aria-hidden />
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-label={accessibleLabel}
+            aria-keyshortcuts={shortcut?.ariaKeyshortcuts}
+            className={cn(
+              "flex shrink-0 items-center justify-center transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40",
+              COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
+              CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+            )}
+          >
+            <Icon name={icon} aria-hidden />
+          </button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{accessibleLabel}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -219,6 +296,9 @@ function BrowserChrome({
   onOpenExternal,
   locationShortcut,
   reloadShortcut,
+  navigationControlsRef,
+  annotationAction,
+  pluginActions,
 }: BrowserChromeProps) {
   const isLoading = state?.isLoading ?? false;
   const security = getBrowserUrlSecurity(currentUrl);
@@ -236,9 +316,10 @@ function BrowserChrome({
       )}
     >
       <div
+        ref={navigationControlsRef}
         data-testid="browser-tab-nav-controls"
         className={cn(
-          "absolute inset-x-0 top-0 flex h-11 translate-y-0 items-center gap-1 py-1.5 pl-2 pr-4 opacity-100 max-md:pointer-coarse:h-[52px]",
+          "absolute inset-x-0 top-0 flex h-11 translate-y-0 items-center gap-1 px-2 py-1.5 opacity-100 max-md:pointer-coarse:h-[52px]",
         )}
       >
         <NavButton
@@ -318,6 +399,8 @@ function BrowserChrome({
           disabled={currentUrl.length === 0}
           onClick={onOpenExternal}
         />
+        {annotationAction}
+        {pluginActions}
         {isLoading ? (
           <span className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
             <span className="block h-full w-1/3 animate-pulse bg-ring/70 motion-reduce:animate-none" />
@@ -404,18 +487,348 @@ function BrowserPageLoadError({
     </div>
   );
 }
+interface BrowserElementAnnotationReviewProps {
+  annotation: BrowserElementAnnotation;
+  dialogLabel: string;
+  screenshotUrl: string | null;
+  initialComment: string;
+  initialIntent: BrowserElementAnnotationIntent;
+  submitLabel: string;
+  onSubmit: (comment: string, intent: BrowserElementAnnotationIntent) => void;
+  onClose: () => void;
+}
+
+interface BrowserElementAnnotationTrayProps {
+  annotations: readonly BrowserElementAnnotationNote[];
+  onAddToChat?: (text: string) => void;
+  onClear: () => void;
+  onCopy: (text: string) => void;
+  onRemove: (id: string) => void;
+  onSelectElement: () => void;
+  onEdit: (note: BrowserElementAnnotationNote) => void;
+  tabId: string;
+}
+
+interface CropBrowserElementScreenshotArgs {
+  annotation: BrowserElementAnnotation;
+  capture: BbDesktopBrowserPageCaptureResult;
+}
+
+async function preloadBrowserSnapshot(dataUrl: string): Promise<void> {
+  if (typeof Image === "undefined") return;
+  const image = new Image();
+  image.src = dataUrl;
+  if (typeof image.decode === "function") await image.decode();
+}
+
+async function cropBrowserElementScreenshot({
+  annotation,
+  capture,
+}: CropBrowserElementScreenshotArgs): Promise<string | null> {
+  const image = new Image();
+  image.src = capture.dataUrl;
+  try {
+    await image.decode();
+  } catch {
+    return null;
+  }
+  const scaleX = image.naturalWidth / annotation.viewport.width;
+  const scaleY = image.naturalHeight / annotation.viewport.height;
+  const sourceX = Math.max(0, Math.floor(annotation.rect.x * scaleX));
+  const sourceY = Math.max(0, Math.floor(annotation.rect.y * scaleY));
+  const sourceWidth = Math.min(
+    image.naturalWidth - sourceX,
+    Math.max(1, Math.ceil(annotation.rect.width * scaleX)),
+  );
+  const sourceHeight = Math.min(
+    image.naturalHeight - sourceY,
+    Math.max(1, Math.ceil(annotation.rect.height * scaleY)),
+  );
+  if (sourceWidth <= 0 || sourceHeight <= 0) return null;
+  const scale = Math.min(1, 640 / Math.max(sourceWidth, sourceHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const context = canvas.getContext("2d");
+  if (context === null) return null;
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function BrowserElementAnnotationReview({
+  annotation,
+  dialogLabel,
+  screenshotUrl,
+  initialComment,
+  initialIntent,
+  submitLabel,
+  onSubmit,
+  onClose,
+}: BrowserElementAnnotationReviewProps) {
+  const [comment, setComment] = useState(initialComment);
+  const [intent, setIntent] =
+    useState<BrowserElementAnnotationIntent>(initialIntent);
+  const canSubmit = !annotation.sensitive && comment.trim().length > 0;
+  const cardWidth = 352;
+  const inset = 12;
+  const targetCenterX = annotation.rect.x + annotation.rect.width / 2;
+  const left = Math.min(
+    Math.max(inset, targetCenterX - cardWidth / 2),
+    Math.max(inset, annotation.viewport.width - cardWidth - inset),
+  );
+  const belowTop = annotation.rect.y + annotation.rect.height + 10;
+  const top =
+    belowTop + 400 <= annotation.viewport.height - inset
+      ? belowTop
+      : Math.max(inset, annotation.rect.y - 410);
+  return (
+    <aside
+      role="dialog"
+      aria-label={dialogLabel}
+      style={{ left, top }}
+      className="absolute z-30 w-[min(22rem,calc(100%-1.5rem))]"
+    >
+      <div className="rounded-xl border border-border bg-popover/95 p-3 text-popover-foreground shadow-xl backdrop-blur">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-foreground">{dialogLabel}</p>
+          <button
+            type="button"
+            aria-label="Close page annotation"
+            onClick={onClose}
+            className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <Icon name="X" className="size-3.5" aria-hidden />
+          </button>
+        </div>
+        {screenshotUrl === null ? null : (
+          <img
+            src={screenshotUrl}
+            alt="Selected page element"
+            className="mb-3 max-h-28 w-full rounded-md border border-border bg-surface-recessed object-contain"
+          />
+        )}
+        <div className="mb-3 rounded-md border border-border bg-surface-recessed px-3 py-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Selected object
+          </p>
+          <p className="mt-0.5 truncate text-sm font-medium text-foreground">
+            {(annotation.accessibility.name ?? annotation.text) ||
+              annotation.dom.tag}
+          </p>
+          <code className="mt-1 block truncate text-xs text-muted-foreground">
+            {annotation.dom.selector}
+          </code>
+        </div>
+        {annotation.sensitive ? (
+          <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+            Sensitive form fields are never copied or attached to an agent.
+          </p>
+        ) : (
+          <>
+            <label className="sr-only" htmlFor="browser-annotation-feedback">
+              Feedback
+            </label>
+            <textarea
+              id="browser-annotation-feedback"
+              value={comment}
+              maxLength={2_000}
+              autoFocus
+              onChange={(event) => setComment(event.target.value)}
+              placeholder="Describe what the agent should change here..."
+              className="h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <div
+              className="mt-2 grid grid-cols-2 gap-2"
+              role="group"
+              aria-label="Annotation intent"
+            >
+              {BROWSER_ELEMENT_ANNOTATION_INTENTS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  aria-pressed={intent === option}
+                  onClick={() => setIntent(option)}
+                  className={cn(
+                    "h-8 rounded-md border px-3 text-xs font-medium transition-colors",
+                    intent === option
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-foreground hover:bg-state-hover",
+                  )}
+                >
+                  {option === "fix"
+                    ? "Fix"
+                    : option === "change"
+                      ? "Change"
+                      : option === "question"
+                        ? "Question"
+                        : "Approve"}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 items-center rounded-md px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={() => {
+              const trimmedComment = comment.trim();
+              if (!canSubmit) return;
+              onSubmit(trimmedComment, intent);
+            }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Icon name="MessageSquarePlus" className="size-3.5" aria-hidden />
+            {submitLabel}
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function BrowserElementAnnotationTray({
+  annotations,
+  onAddToChat,
+  onClear,
+  onCopy,
+  onEdit,
+  onRemove,
+  onSelectElement,
+  tabId,
+}: BrowserElementAnnotationTrayProps) {
+  const agentText = browserElementAnnotationsAgentText(annotations, tabId);
+  return (
+    <aside
+      aria-label="Page annotations"
+      className="absolute bottom-3 right-3 z-30 flex max-h-[45%] w-[min(20rem,calc(100%-1.5rem))] flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-xl backdrop-blur"
+    >
+      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+        <span className="min-w-0 flex-1 text-sm font-medium">
+          {annotations.length}{" "}
+          {annotations.length === 1 ? "annotation" : "annotations"}
+        </span>
+        <button
+          type="button"
+          aria-label="Clear page annotations"
+          onClick={onClear}
+          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+        >
+          <Icon name="Clean" className="size-3.5" aria-hidden />
+        </button>
+      </header>
+      <ol className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+        {annotations.map((note, index) => (
+          <li
+            key={note.id}
+            className="group flex gap-2 rounded-lg border border-border/70 bg-background/80 px-2.5 py-2 text-xs shadow-sm transition-colors hover:bg-state-hover focus-within:bg-state-hover"
+          >
+            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+              {index + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-foreground">
+                {(note.annotation.accessibility.name ?? note.annotation.text) ||
+                  note.annotation.dom.tag}
+              </p>
+              <p className="mt-0.5 text-muted-foreground">{note.intent}</p>
+              <p className="mt-1 whitespace-pre-wrap text-foreground">
+                {note.comment}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-start gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+              <button
+                type="button"
+                aria-label={`Edit annotation ${index + 1}`}
+                onClick={() => onEdit(note)}
+                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:opacity-100"
+              >
+                <Icon name="EditFile" className="size-3.5" aria-hidden />
+              </button>
+              <button
+                type="button"
+                aria-label={`Remove annotation ${index + 1}`}
+                onClick={() => onRemove(note.id)}
+                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:opacity-100"
+              >
+                <Icon name="X" className="size-3.5" aria-hidden />
+              </button>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <footer className="flex flex-wrap justify-end gap-1.5 border-t border-border bg-popover/85 px-3 py-2">
+        <button
+          type="button"
+          onClick={onSelectElement}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-state-hover"
+        >
+          <Icon name="MessageSquarePlus" className="size-3.5" aria-hidden />
+          Add annotation
+        </button>
+        <button
+          type="button"
+          disabled={agentText === null}
+          onClick={() => {
+            if (agentText === null) return;
+            onCopy(agentText);
+          }}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-state-hover disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Icon name="Copy" className="size-3.5" aria-hidden />
+          Copy
+        </button>
+        {onAddToChat === undefined ? null : (
+          <button
+            type="button"
+            disabled={agentText === null}
+            onClick={() => {
+              if (agentText === null) return;
+              onAddToChat(agentText);
+            }}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-40"
+          >
+            <Icon name="Sent" className="size-3.5" aria-hidden />
+            Add to chat
+          </button>
+        )}
+      </footer>
+    </aside>
+  );
+}
 
 export function BrowserTabContent({
   tabId,
   initialUrl,
   addressFocusRequest,
   onAddressFocusRequestConsumed,
+  onSelectionAddToChat,
   canShowNativeBrowserView,
   canHandleBrowserCommands = canShowNativeBrowserView,
   onNativeFocus,
+  onControlOpenTab,
+  onControlCloseTab,
   visibilityCoordinator,
   environmentId,
   threadId,
+  projectId,
   onUpdate,
 }: BrowserTabContentProps) {
   const locationShortcut = useAppCommandShortcut("browser.focusLocation");
@@ -425,7 +838,8 @@ export function BrowserTabContent({
     () => getDesktopBrowserApi(),
     [],
   );
-  const contentRef = useRef<HTMLDivElement>(null);
+  const browserViewportRef = useRef<HTMLDivElement>(null);
+  const navigationControlsRef = useRef<HTMLDivElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
   const findInputRef = useRef<HTMLInputElement>(null);
   const isPointerCoarse = usePointerCoarse();
@@ -436,6 +850,16 @@ export function BrowserTabContent({
   } = useBrowserHistory(threadId);
 
   const [state, setState] = useState<BbDesktopBrowserState | null>(null);
+  const [cookieImportSources, setCookieImportSources] = useState<
+    readonly BbDesktopBrowserCookieImportSource[] | null
+  >(null);
+  const [isLoadingCookieImportSources, setIsLoadingCookieImportSources] =
+    useState(false);
+  const activeAgentRequestCount = useSyncExternalStore(
+    subscribeBrowserControlActivity,
+    () => browserControlActivitySnapshot(tabId),
+    () => 0,
+  );
   const [currentUrl, setCurrentUrl] = useState(initialUrl);
   const [addressDraft, setAddressDraft] = useState(initialUrl);
   const [isEditing, setIsEditing] = useState(false);
@@ -446,8 +870,81 @@ export function BrowserTabContent({
   const [findMatches, setFindMatches] = useState<BrowserFindMatches | null>(
     null,
   );
+  const [browserChromeWidth, setBrowserChromeWidth] = useState<number | null>(
+    null,
+  );
+  const [pluginOverlayLeases, setPluginOverlayLeases] = useState<
+    ReadonlySet<symbol>
+  >(() => new Set());
+  const [pluginOverlayRoot, setPluginOverlayRoot] =
+    useState<HTMLDivElement | null>(null);
+  // Bitmap stand-in pushed by the desktop main process while the native view
+  // is hidden during a native window resize; null outside resize bursts.
   const [resizeSnapshotUrl, setResizeSnapshotUrl] = useState<string | null>(
     null,
+  );
+  const { toasts: appToasts } = useSonner();
+  const [isToastSnapshotActive, setIsToastSnapshotActive] = useState(
+    appToasts.length > 0,
+  );
+  const [toastSnapshotUrl, setToastSnapshotUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (appToasts.length > 0) {
+      setIsToastSnapshotActive(true);
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setIsToastSnapshotActive(false),
+      TOAST_SNAPSHOT_RELEASE_DELAY_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [appToasts.length]);
+  const [pendingElementAnnotation, setPendingElementAnnotation] =
+    useState<BrowserElementAnnotation | null>(null);
+  const [
+    pendingElementAnnotationScreenshotUrl,
+    setPendingElementAnnotationScreenshotUrl,
+  ] = useState<string | null>(null);
+  const [
+    elementAnnotationPageSnapshotUrl,
+    setElementAnnotationPageSnapshotUrl,
+  ] = useState<string | null>(null);
+  const [elementAnnotations, setElementAnnotations] = useState<
+    readonly BrowserElementAnnotationNote[]
+  >([]);
+  const [editingElementAnnotationId, setEditingElementAnnotationId] = useState<
+    string | null
+  >(null);
+  const editingElementAnnotation =
+    editingElementAnnotationId === null
+      ? null
+      : (elementAnnotations.find(
+          (annotation) => annotation.id === editingElementAnnotationId,
+        ) ?? null);
+  const [screenshotAnnotationUrl, setScreenshotAnnotationUrl] = useState<
+    string | null
+  >(null);
+  const [activeElementPickerMode, setActiveElementPickerMode] = useState<
+    "annotate" | "grab" | null
+  >(null);
+  const [isResumingElementPicker, setIsResumingElementPicker] = useState(false);
+  const elementPickerControllerRef = useRef<AbortController | null>(null);
+  const cookieImportInputRef = useRef<HTMLInputElement | null>(null);
+  const [cookieImportMessage, setCookieImportMessage] = useState<string | null>(
+    null,
+  );
+  const [cookieImportMessageTone, setCookieImportMessageTone] = useState<
+    "error" | "success" | null
+  >(null);
+  const [isImportingCookies, setIsImportingCookies] = useState(false);
+  const [isCookieImportWizardOpen, setIsCookieImportWizardOpen] =
+    useState(false);
+  const [isClearingImportedCookies, setIsClearingImportedCookies] =
+    useState(false);
+  const currentCookieImport = useSyncExternalStore(
+    subscribeBrowserCookieImportRecord,
+    browserCookieImportRecordSnapshot,
+    () => null,
   );
 
   const onUpdateRef = useRef(onUpdate);
@@ -462,19 +959,201 @@ export function BrowserTabContent({
     attachedBrowserViewIdentity.environmentId === environmentId &&
     attachedBrowserViewIdentity.tabId === tabId &&
     attachedBrowserViewIdentity.threadId === threadId;
-
   const hasPage = currentUrl.length > 0;
   const supportsNativePaneFocus =
     desktopBrowser?.focus !== undefined &&
     desktopBrowser.onFocus !== undefined &&
     desktopBrowser.setVisibleWithoutFocus !== undefined;
+  const browserControlRegistrationRef = useRef<ReturnType<
+    typeof registerBrowserControlTab
+  > | null>(null);
+  const browserControlSnapshotRef = useRef({
+    active: canShowNativeBrowserView,
+    state,
+    url: currentUrl,
+  });
+
+  useLayoutEffect(() => {
+    browserControlSnapshotRef.current = {
+      active: canShowNativeBrowserView,
+      state,
+      url: currentUrl,
+    };
+  }, [canShowNativeBrowserView, currentUrl, state]);
+
+  useEffect(() => {
+    if (desktopBrowser === null || !isBrowserViewAttached || !hasPage) return;
+    const snapshot = browserControlSnapshotRef.current;
+    const registration = registerBrowserControlTab({
+      active: snapshot.active,
+      desktopBrowser,
+      tabId,
+      threadId,
+      projectId,
+      state: snapshot.state,
+      url: snapshot.url,
+      openTab: onControlOpenTab,
+      closeTab: onControlCloseTab,
+    });
+    browserControlRegistrationRef.current = registration;
+    return () => {
+      if (browserControlRegistrationRef.current === registration) {
+        browserControlRegistrationRef.current = null;
+      }
+      registration.dispose();
+    };
+  }, [
+    desktopBrowser,
+    hasPage,
+    isBrowserViewAttached,
+    onControlCloseTab,
+    onControlOpenTab,
+    projectId,
+    tabId,
+    threadId,
+  ]);
+
+  useEffect(() => {
+    browserControlRegistrationRef.current?.update({
+      active: canShowNativeBrowserView,
+      state,
+      url: currentUrl,
+    });
+  }, [canShowNativeBrowserView, currentUrl, state]);
+  const runElementPickerCleanup = useCallback(() => {
+    const expectedNavigationEpoch = state?.navigationEpoch;
+    const runPageScript = desktopBrowser?.experimental_runBrowserPageScript;
+    if (runPageScript === undefined || expectedNavigationEpoch === undefined) {
+      return;
+    }
+    void runPageScript(
+      {
+        expectedNavigationEpoch,
+        input: {},
+        requestId: `cancel-element-picker-${crypto.randomUUID()}`,
+        source: browserCancelElementPickerSource,
+        tabId,
+        timeoutMs: 5_000,
+        world: "isolated",
+      },
+      {},
+    ).catch(() => {});
+  }, [desktopBrowser, state?.navigationEpoch, tabId]);
+
+  const cancelElementPicker = useCallback(() => {
+    runElementPickerCleanup();
+    elementPickerControllerRef.current?.abort();
+    elementPickerControllerRef.current = null;
+    setActiveElementPickerMode(null);
+  }, [runElementPickerCleanup]);
+
+  const closeElementAnnotation = useCallback(() => {
+    setPendingElementAnnotation(null);
+    setPendingElementAnnotationScreenshotUrl(null);
+  }, []);
+
+  const addElementAnnotation = useCallback(
+    (comment: string, intent: BrowserElementAnnotationIntent) => {
+      if (pendingElementAnnotation === null) return;
+      setElementAnnotations((current) => [
+        ...current,
+        {
+          annotation: pendingElementAnnotation,
+          comment,
+          createdAt: new Date().toISOString(),
+          id: crypto.randomUUID(),
+          pageId: tabId,
+          intent,
+          screenshotUrl: pendingElementAnnotationScreenshotUrl,
+          priority: "important",
+        },
+      ]);
+      runElementPickerCleanup();
+      closeElementAnnotation();
+    },
+    [
+      closeElementAnnotation,
+      pendingElementAnnotation,
+      pendingElementAnnotationScreenshotUrl,
+      runElementPickerCleanup,
+      tabId,
+    ],
+  );
+
+  const updateElementAnnotation = useCallback(
+    (comment: string, intent: BrowserElementAnnotationIntent) => {
+      if (editingElementAnnotationId === null) return;
+      setElementAnnotations((current) =>
+        current.map((annotation) =>
+          annotation.id === editingElementAnnotationId
+            ? { ...annotation, comment, intent }
+            : annotation,
+        ),
+      );
+      setEditingElementAnnotationId(null);
+    },
+    [editingElementAnnotationId],
+  );
+
+  const closeScreenshotAnnotation = useCallback(() => {
+    setScreenshotAnnotationUrl(null);
+  }, []);
+
+  useEffect(() => {
+    cancelElementPicker();
+    closeElementAnnotation();
+    closeScreenshotAnnotation();
+    setElementAnnotations([]);
+    setElementAnnotationPageSnapshotUrl(null);
+    setIsResumingElementPicker(false);
+    setEditingElementAnnotationId(null);
+  }, [
+    cancelElementPicker,
+    closeElementAnnotation,
+    closeScreenshotAnnotation,
+    currentUrl,
+    state?.navigationEpoch,
+  ]);
+
+  useEffect(
+    () => () => {
+      elementPickerControllerRef.current?.abort();
+    },
+    [],
+  );
   const pageLoadErrorText = state?.errorText ?? null;
   const hasPageLoadError = pageLoadErrorText !== null && hasPage;
   const isBrowserDimmingModalOpen = useIsBrowserDimmingModalOpen();
   const lastSentBoundsRef = useRef<BbDesktopBrowserViewBounds | null>(null);
+  const handlePluginOverlayLeaseChange = useCallback(
+    (owner: symbol, open: boolean) => {
+      setPluginOverlayLeases((current) => {
+        if (current.has(owner) === open) return current;
+        const next = new Set(current);
+        if (open) next.add(owner);
+        else next.delete(owner);
+        return next;
+      });
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    const element = navigationControlsRef.current;
+    if (element === null) return;
+    const measure = () => {
+      const width = Math.round(element.getBoundingClientRect().width);
+      setBrowserChromeWidth(width > 0 ? width : null);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const readBounds = useCallback(() => {
-    const element = contentRef.current;
+    const element = browserViewportRef.current;
     if (element === null) {
       return null;
     }
@@ -488,6 +1167,7 @@ export function BrowserTabContent({
       }
       lastSentBoundsRef.current = bounds;
       desktopBrowser.setBounds({ tabId, bounds });
+      updateDesktopBrowserViewAperture({ bounds, tabId });
     },
     [desktopBrowser, tabId],
   );
@@ -604,7 +1284,7 @@ export function BrowserTabContent({
   ]);
 
   useEffect(() => {
-    const element = contentRef.current;
+    const element = browserViewportRef.current;
     if (element === null || desktopBrowser === null) {
       return;
     }
@@ -637,33 +1317,172 @@ export function BrowserTabContent({
     };
   }, [desktopBrowser, syncBoundsIfChanged]);
 
+  const isElementAnnotationOverlayOpen =
+    activeElementPickerMode === null &&
+    !isResumingElementPicker &&
+    elementAnnotationPageSnapshotUrl !== null &&
+    (pendingElementAnnotation !== null || elementAnnotations.length > 0);
   const isViewVisible =
     canShowNativeBrowserView &&
     (canHandleBrowserCommands || supportsNativePaneFocus) &&
     hasPage &&
     !hasPageLoadError &&
     isBrowserViewAttached &&
-    !isBrowserDimmingModalOpen;
-  useLayoutEffect(() => {
-    if (visibilityCoordinator === null) {
+    !isBrowserDimmingModalOpen &&
+    !isCookieImportWizardOpen &&
+    resizeSnapshotUrl === null &&
+    screenshotAnnotationUrl === null &&
+    !isElementAnnotationOverlayOpen &&
+    pluginOverlayLeases.size === 0;
+  const isNativeBrowserViewVisible = isViewVisible && toastSnapshotUrl === null;
+  useEffect(() => {
+    if (!isToastSnapshotActive) {
+      setToastSnapshotUrl(null);
       return;
     }
-    if (isViewVisible) {
+    if (
+      toastSnapshotUrl !== null ||
+      !isViewVisible ||
+      state === null ||
+      desktopBrowser?.experimental_captureBrowserPage === undefined
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void desktopBrowser
+      .experimental_captureBrowserPage({
+        expectedNavigationEpoch: state.navigationEpoch,
+        format: "png",
+        quality: 100,
+        tabId,
+      })
+      .then(async (snapshot) => {
+        if (snapshot.navigationEpoch !== state.navigationEpoch) return;
+        await preloadBrowserSnapshot(snapshot.dataUrl);
+        if (!cancelled) setToastSnapshotUrl(snapshot.dataUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    desktopBrowser,
+    isToastSnapshotActive,
+    isViewVisible,
+    state,
+    tabId,
+    toastSnapshotUrl,
+  ]);
+  const pointForBrowserInput = useCallback(
+    (event: { clientX: number; clientY: number }) => {
+      const viewport = browserViewportRef.current;
+      if (viewport === null) return null;
+      const bounds = viewport.getBoundingClientRect();
+      return {
+        x: Math.max(0, event.clientX - bounds.left),
+        y: Math.max(0, event.clientY - bounds.top),
+      };
+    },
+    [],
+  );
+  const sendBrowserPointerInput = useCallback(
+    (events: BbDesktopBrowserPointerInputEvent[]) => {
+      const navigationEpoch = state?.navigationEpoch;
+      if (
+        desktopBrowser?.experimental_sendBrowserPointerInput === undefined ||
+        navigationEpoch === undefined
+      ) {
+        return;
+      }
+      void desktopBrowser
+        .experimental_sendBrowserPointerInput({
+          expectedNavigationEpoch: navigationEpoch,
+          events,
+          tabId,
+        })
+        .catch(() => {});
+    },
+    [desktopBrowser, state, tabId],
+  );
+  const handleBrowserPointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!isNativeBrowserViewVisible || event.pointerType !== "mouse") return;
+      const point = pointForBrowserInput(event);
+      if (point === null) return;
+      sendBrowserPointerInput([{ type: "mouseMove", ...point }]);
+    },
+    [isNativeBrowserViewVisible, pointForBrowserInput, sendBrowserPointerInput],
+  );
+  const handleBrowserPointerButton = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!isNativeBrowserViewVisible) return;
+      const point = pointForBrowserInput(event);
+      if (point === null) return;
+      let button: "left" | "middle" | "right" | null = null;
+      if (event.button === 0) button = "left";
+      else if (event.button === 1) button = "middle";
+      else if (event.button === 2) button = "right";
+      if (button === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      desktopBrowser?.focus?.(tabId);
+      sendBrowserPointerInput([
+        {
+          type: event.type === "pointerdown" ? "mouseDown" : "mouseUp",
+          button,
+          clickCount: Math.min(2, Math.max(1, event.detail ?? 1)),
+          ...point,
+        },
+      ]);
+    },
+    [
+      desktopBrowser,
+      isNativeBrowserViewVisible,
+      pointForBrowserInput,
+      sendBrowserPointerInput,
+      tabId,
+    ],
+  );
+  const handleBrowserWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      if (!isNativeBrowserViewVisible) return;
+      const point = pointForBrowserInput(event);
+      if (point === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      sendBrowserPointerInput([
+        {
+          type: "mouseWheel",
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+          ...point,
+        },
+      ]);
+    },
+    [isNativeBrowserViewVisible, pointForBrowserInput, sendBrowserPointerInput],
+  );
+  useLayoutEffect(() => {
+    if (visibilityCoordinator === null) return;
+    if (isNativeBrowserViewVisible) {
       visibilityCoordinator.show(tabId, syncBounds, {
         focus: canHandleBrowserCommands,
       });
-      return () => {
-        visibilityCoordinator.hide(tabId);
-      };
+    } else {
+      visibilityCoordinator.cover(tabId);
     }
-    visibilityCoordinator.hide(tabId);
   }, [
     canHandleBrowserCommands,
     visibilityCoordinator,
     tabId,
-    isViewVisible,
+    isNativeBrowserViewVisible,
     syncBounds,
   ]);
+  useLayoutEffect(
+    () => () => {
+      visibilityCoordinator?.hide(tabId);
+    },
+    [visibilityCoordinator, tabId],
+  );
 
   useEffect(() => {
     if (desktopBrowser?.onFocus === undefined || onNativeFocus === undefined) {
@@ -675,9 +1494,14 @@ export function BrowserTabContent({
   }, [desktopBrowser, onNativeFocus, tabId]);
 
   useEffect(() => {
-    if (!isViewVisible || !canHandleBrowserCommands) return;
+    if (!isNativeBrowserViewVisible || !canHandleBrowserCommands) return;
     desktopBrowser?.focus?.(tabId);
-  }, [canHandleBrowserCommands, desktopBrowser, isViewVisible, tabId]);
+  }, [
+    canHandleBrowserCommands,
+    desktopBrowser,
+    isNativeBrowserViewVisible,
+    tabId,
+  ]);
 
   useEffect(() => {
     if (addressFocusRequest === null) {
@@ -843,12 +1667,281 @@ export function BrowserTabContent({
     getBbDesktopInfo()?.openExternalUrl(currentUrl);
   }, [currentUrl]);
 
+  const canPickPageElement =
+    activeElementPickerMode === null &&
+    pendingElementAnnotation === null &&
+    isViewVisible &&
+    state !== null &&
+    desktopBrowser?.experimental_runBrowserPageScript !== undefined;
+  const startElementPicker = useCallback(
+    async (mode: "annotate" | "grab") => {
+      if (
+        desktopBrowser?.experimental_runBrowserPageScript === undefined ||
+        state === null ||
+        state.navigationEpoch === undefined ||
+        !isViewVisible ||
+        activeElementPickerMode !== null
+      ) {
+        return;
+      }
+      const expectedNavigationEpoch = state.navigationEpoch;
+      const pickerTheme = browserElementPickerTheme();
+      const controller = new AbortController();
+      elementPickerControllerRef.current?.abort();
+      elementPickerControllerRef.current = controller;
+      setActiveElementPickerMode(mode);
+      desktopBrowser.focus?.(tabId);
+      try {
+        const result = await desktopBrowser.experimental_runBrowserPageScript(
+          {
+            input: pickerTheme,
+            requestId: `element-picker-${crypto.randomUUID()}`,
+            source: browserElementPickerSource,
+            tabId,
+            expectedNavigationEpoch,
+            timeoutMs: 120_000,
+            world: "isolated",
+          },
+          { signal: controller.signal },
+        );
+        if (result.navigationEpoch !== expectedNavigationEpoch) {
+          return;
+        }
+        const capture = browserElementAnnotationCaptureSchema.safeParse(
+          result.value,
+        );
+        if (!capture.success) {
+          return;
+        }
+        const annotation = redactBrowserElementAnnotation(capture.data);
+        if (annotation === null || controller.signal.aborted) {
+          return;
+        }
+        if (mode === "grab") {
+          const text = browserElementAnnotationAgentText(annotation);
+          if (text !== null) {
+            void copyToClipboardWithToast(text);
+          }
+          return;
+        }
+        let screenshotUrl: string | null = null;
+        if (desktopBrowser.experimental_captureBrowserPage !== undefined) {
+          try {
+            const screenshot =
+              await desktopBrowser.experimental_captureBrowserPage({
+                expectedNavigationEpoch: result.navigationEpoch,
+                format: "jpeg",
+                quality: 82,
+                tabId,
+              });
+            if (
+              screenshot.navigationEpoch === result.navigationEpoch &&
+              !controller.signal.aborted
+            ) {
+              screenshotUrl = await cropBrowserElementScreenshot({
+                annotation,
+                capture: screenshot,
+              });
+              setElementAnnotationPageSnapshotUrl(screenshot.dataUrl);
+            }
+          } catch {}
+        }
+        if (controller.signal.aborted) return;
+        setPendingElementAnnotation(annotation);
+        setPendingElementAnnotationScreenshotUrl(screenshotUrl);
+      } catch {
+      } finally {
+        if (elementPickerControllerRef.current === controller) {
+          elementPickerControllerRef.current = null;
+          setActiveElementPickerMode(null);
+        }
+      }
+    },
+    [desktopBrowser, activeElementPickerMode, isViewVisible, state, tabId],
+  );
+  useEffect(() => {
+    if (!isResumingElementPicker || !isViewVisible) return;
+    setIsResumingElementPicker(false);
+    void startElementPicker("annotate");
+  }, [isResumingElementPicker, isViewVisible, startElementPicker]);
+  const canAnnotateScreenshot =
+    screenshotAnnotationUrl === null &&
+    isViewVisible &&
+    state !== null &&
+    desktopBrowser?.experimental_captureBrowserPage !== undefined;
+  const startScreenshotAnnotation = useCallback(async () => {
+    if (
+      desktopBrowser?.experimental_captureBrowserPage === undefined ||
+      state === null ||
+      !isViewVisible
+    ) {
+      return;
+    }
+    try {
+      const screenshot = await desktopBrowser.experimental_captureBrowserPage({
+        expectedNavigationEpoch: state.navigationEpoch,
+        format: "png",
+        quality: 100,
+        tabId,
+      });
+      if (screenshot.navigationEpoch !== state.navigationEpoch) return;
+      await preloadBrowserSnapshot(screenshot.dataUrl);
+      setScreenshotAnnotationUrl(screenshot.dataUrl);
+    } catch {}
+  }, [desktopBrowser, isViewVisible, state, tabId]);
+  const canImportCookies =
+    !isImportingCookies &&
+    !isClearingImportedCookies &&
+    isViewVisible &&
+    desktopBrowser?.experimental_importCookies !== undefined;
+  const handleCookieImport = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.item(0);
+      event.currentTarget.value = "";
+      if (file === null || file === undefined) return;
+      if (desktopBrowser?.experimental_importCookies === undefined) return;
+      setCookieImportMessage(null);
+      setCookieImportMessageTone(null);
+      setIsImportingCookies(true);
+      try {
+        const source: unknown = JSON.parse(await file.text());
+        const cookies: BbDesktopBrowserCookieImport[] =
+          parseBrowserCookieImport(source);
+        setBrowserCookieImportRecord(null);
+        const result = await desktopBrowser.experimental_importCookies({
+          tabId,
+          cookies,
+        });
+        setBrowserCookieImportRecord({
+          fileName: file.name,
+          importedCookies: result.importedCookies,
+          kind: "file",
+        });
+        setCookieImportMessageTone("success");
+        setCookieImportMessage(
+          `Imported ${result.importedCookies} ${result.importedCookies === 1 ? "cookie" : "cookies"}`,
+        );
+      } catch (error) {
+        setCookieImportMessageTone("error");
+        setCookieImportMessage(
+          error instanceof Error ? error.message : "Cookie import failed",
+        );
+      } finally {
+        setIsImportingCookies(false);
+      }
+    },
+    [desktopBrowser, tabId],
+  );
+  const handleOpenCookieImportWizard = useCallback(async () => {
+    setCookieImportMessage(null);
+    setCookieImportMessageTone(null);
+    setCookieImportSources(null);
+    setIsCookieImportWizardOpen(true);
+    if (desktopBrowser?.experimental_listCookieImportSources === undefined) {
+      setCookieImportSources([]);
+      return;
+    }
+    setIsLoadingCookieImportSources(true);
+    try {
+      const result = await desktopBrowser.experimental_listCookieImportSources({
+        tabId,
+      });
+      setCookieImportSources(result.sources);
+    } catch (error) {
+      setCookieImportSources([]);
+      setCookieImportMessageTone("error");
+      setCookieImportMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not find browser profiles",
+      );
+    } finally {
+      setIsLoadingCookieImportSources(false);
+    }
+  }, [desktopBrowser, tabId]);
+  const handleCookieImportFromBrowser = useCallback(
+    async (family: string, profileId: string) => {
+      if (desktopBrowser?.experimental_importCookiesFromBrowser === undefined) {
+        return;
+      }
+      setCookieImportMessage(null);
+      setCookieImportMessageTone(null);
+      setIsImportingCookies(true);
+      try {
+        setBrowserCookieImportRecord(null);
+        const result =
+          await desktopBrowser.experimental_importCookiesFromBrowser({
+            family,
+            profileId,
+            tabId,
+          });
+        setCookieImportMessageTone("success");
+        const source = cookieImportSources?.find(
+          (candidate) => candidate.family === family,
+        );
+        const profile = source?.profiles.find(
+          (candidate) => candidate.id === profileId,
+        );
+        setBrowserCookieImportRecord({
+          family,
+          importedCookies: result.importedCookies,
+          kind: "browser",
+          profileId,
+          profileLabel: profile?.label ?? profileId,
+          sourceLabel: source?.label ?? family,
+        });
+        setCookieImportMessage(
+          `Imported ${result.importedCookies} ${result.importedCookies === 1 ? "cookie" : "cookies"} from ${source?.label ?? family}`,
+        );
+      } catch (error) {
+        setCookieImportMessageTone("error");
+        setCookieImportMessage(
+          error instanceof Error
+            ? error.message
+            : "Browser cookie import failed",
+        );
+      } finally {
+        setIsImportingCookies(false);
+      }
+    },
+    [cookieImportSources, desktopBrowser, tabId],
+  );
+  const handleClearImportedCookies = useCallback(async () => {
+    if (desktopBrowser?.experimental_clearImportedCookies === undefined) return;
+    setCookieImportMessage(null);
+    setCookieImportMessageTone(null);
+    setIsClearingImportedCookies(true);
+    try {
+      await desktopBrowser.experimental_clearImportedCookies({ tabId });
+      setBrowserCookieImportRecord(null);
+      setCookieImportMessageTone("success");
+      setCookieImportMessage("Cleared imported browser session");
+    } catch (error) {
+      setCookieImportMessageTone("error");
+      setCookieImportMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not clear imported browser session",
+      );
+    } finally {
+      setIsClearingImportedCookies(false);
+    }
+  }, [desktopBrowser, tabId]);
   if (desktopBrowser === null) {
     return <BrowserUnavailable />;
   }
 
   return (
     <div data-app-browser className="flex h-full min-h-0 flex-col">
+      <input
+        ref={cookieImportInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="sr-only"
+        onChange={(event) => {
+          void handleCookieImport(event);
+        }}
+      />
       <BrowserChrome
         addressDraft={addressDraft}
         isEditing={isEditing}
@@ -869,6 +1962,99 @@ export function BrowserTabContent({
         onOpenExternal={handleOpenExternal}
         locationShortcut={locationShortcut}
         reloadShortcut={reloadShortcut}
+        navigationControlsRef={navigationControlsRef}
+        annotationAction={
+          <>
+            <NavButton
+              icon="EditFile"
+              label="Annotate screenshot"
+              disabled={!canAnnotateScreenshot}
+              onClick={() => {
+                void startScreenshotAnnotation();
+              }}
+            />
+            <NavButton
+              icon={activeElementPickerMode === "grab" ? "X" : "Eye"}
+              label={
+                activeElementPickerMode === "grab"
+                  ? "Cancel element selection"
+                  : "Grab page element"
+              }
+              disabled={
+                !canPickPageElement && activeElementPickerMode !== "grab"
+              }
+              onClick={() => {
+                if (activeElementPickerMode === "grab") {
+                  cancelElementPicker();
+                  return;
+                }
+                void startElementPicker("grab");
+              }}
+            />
+            <NavButton
+              icon={
+                activeElementPickerMode === "annotate"
+                  ? "X"
+                  : "MessageSquarePlus"
+              }
+              label={
+                activeElementPickerMode === "annotate"
+                  ? "Cancel element annotation"
+                  : "Select and annotate page element"
+              }
+              disabled={
+                !canPickPageElement && activeElementPickerMode !== "annotate"
+              }
+              onClick={() => {
+                if (activeElementPickerMode === "annotate") {
+                  cancelElementPicker();
+                  return;
+                }
+                void startElementPicker("annotate");
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="Import browser session"
+              disabled={!canImportCookies}
+              onClick={() => {
+                void handleOpenCookieImportWizard();
+              }}
+              className={COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS}
+            >
+              <Icon name="File" aria-hidden />
+              Import
+            </Button>
+          </>
+        }
+        pluginActions={
+          <>
+            {activeAgentRequestCount > 0 ? (
+              <span
+                role="status"
+                aria-live="polite"
+                className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-state-hover px-2 text-xs text-muted-foreground"
+              >
+                <span className="size-1.5 animate-pulse rounded-full bg-info motion-reduce:animate-none" />
+                Agent using tab
+              </span>
+            ) : null}
+            <PluginBrowserActions
+              key={`${tabId}:${threadId}:${projectId ?? ""}:${currentUrl}`}
+              chromeWidth={browserChromeWidth}
+              desktopBrowser={desktopBrowser}
+              tabId={tabId}
+              navigationEpoch={state?.navigationEpoch ?? null}
+              threadId={threadId}
+              projectId={projectId}
+              url={currentUrl}
+              overlayRoot={pluginOverlayRoot}
+              onOverlayLeaseChange={handlePluginOverlayLeaseChange}
+            />
+          </>
+        }
       />
       {isFindOpen ? (
         <BrowserFindBar
@@ -882,8 +2068,92 @@ export function BrowserTabContent({
           shortcut={findShortcut}
         />
       ) : null}
-      <div ref={contentRef} className="relative min-h-0 flex-1">
-        {hasPageLoadError ? (
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={browserViewportRef}
+          data-browser-viewport=""
+          className="absolute inset-0"
+          onPointerDown={handleBrowserPointerButton}
+          onPointerMove={handleBrowserPointerMove}
+          onPointerUp={handleBrowserPointerButton}
+          onContextMenu={(event) => {
+            if (!isNativeBrowserViewVisible) return;
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onWheel={handleBrowserWheel}
+        />
+        <div
+          ref={setPluginOverlayRoot}
+          data-browser-plugin-overlay-root=""
+          className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+        />
+        {isCookieImportWizardOpen ? (
+          <BrowserCookieImportWizard
+            currentImport={currentCookieImport}
+            isImporting={isImportingCookies}
+            isClearing={isClearingImportedCookies}
+            isLoadingSources={isLoadingCookieImportSources}
+            message={cookieImportMessage}
+            messageTone={cookieImportMessageTone}
+            sources={cookieImportSources}
+            onClose={() => setIsCookieImportWizardOpen(false)}
+            onClear={() => {
+              void handleClearImportedCookies();
+            }}
+            onImportFromBrowser={(family, profileId) => {
+              void handleCookieImportFromBrowser(family, profileId);
+            }}
+            onImportFromFile={() => cookieImportInputRef.current?.click()}
+          />
+        ) : null}
+        {toastSnapshotUrl === null ? null : (
+          <img
+            src={toastSnapshotUrl}
+            alt=""
+            draggable={false}
+            data-browser-toast-snapshot=""
+            className="pointer-events-none absolute inset-0 size-full"
+          />
+        )}
+        {isElementAnnotationOverlayOpen ? (
+          <img
+            src={elementAnnotationPageSnapshotUrl}
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute inset-0 size-full"
+          />
+        ) : null}
+        {screenshotAnnotationUrl !== null ? (
+          <BrowserScreenshotAnnotation
+            screenshotUrl={screenshotAnnotationUrl}
+            onClose={closeScreenshotAnnotation}
+          />
+        ) : pendingElementAnnotation !== null ? (
+          <BrowserElementAnnotationReview
+            key="new-annotation"
+            annotation={pendingElementAnnotation}
+            dialogLabel="Add page annotation"
+            screenshotUrl={pendingElementAnnotationScreenshotUrl}
+            initialComment=""
+            initialIntent="change"
+            submitLabel="Add"
+            onSubmit={addElementAnnotation}
+            onClose={closeElementAnnotation}
+          />
+        ) : editingElementAnnotation !== null ? (
+          <BrowserElementAnnotationReview
+            key={`edit-${editingElementAnnotation.id}`}
+            annotation={editingElementAnnotation.annotation}
+            dialogLabel="Edit page annotation"
+            screenshotUrl={editingElementAnnotation.screenshotUrl}
+            initialComment={editingElementAnnotation.comment}
+            initialIntent={editingElementAnnotation.intent}
+            submitLabel="Save"
+            onSubmit={updateElementAnnotation}
+            onClose={() => setEditingElementAnnotationId(null)}
+          />
+        ) : hasPageLoadError ? (
           <BrowserPageLoadError
             errorText={pageLoadErrorText}
             onOpenExternal={handleOpenExternal}
@@ -897,6 +2167,44 @@ export function BrowserTabContent({
             onClearRecent={clearRecent}
           />
         )}
+        {screenshotAnnotationUrl === null &&
+        pendingElementAnnotation === null &&
+        editingElementAnnotation === null &&
+        !activeElementPickerMode &&
+        !isResumingElementPicker &&
+        elementAnnotations.length > 0 ? (
+          <BrowserElementAnnotationTray
+            annotations={elementAnnotations}
+            tabId={tabId}
+            onAddToChat={onSelectionAddToChat}
+            onClear={() => {
+              setElementAnnotations([]);
+              setElementAnnotationPageSnapshotUrl(null);
+              setEditingElementAnnotationId(null);
+            }}
+            onCopy={(text) => {
+              void copyToClipboardWithToast(text, {
+                successMessage: "Page annotations copied",
+                errorMessage: "Failed to copy page annotations",
+              });
+            }}
+            onEdit={(note) => setEditingElementAnnotationId(note.id)}
+            onRemove={(id) =>
+              setElementAnnotations((current) => {
+                const next = current.filter(
+                  (annotation) => annotation.id !== id,
+                );
+                if (next.length === 0) {
+                  setElementAnnotationPageSnapshotUrl(null);
+                }
+                return next;
+              })
+            }
+            onSelectElement={() => {
+              setIsResumingElementPicker(true);
+            }}
+          />
+        ) : null}
         {hasPage && resizeSnapshotUrl !== null ? (
           <img
             src={resizeSnapshotUrl}

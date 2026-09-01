@@ -1,6 +1,7 @@
 import type {
   ComposerCustomization,
   PluginAppDefinition,
+  PluginBrowserActionRegistration,
   PluginContentScriptRegistration,
   PluginDiffRendererRegistration,
   PluginFileOpenerRegistration,
@@ -93,6 +94,7 @@ export interface CollectedPluginAppRegistrations {
   sidebarFooterActions: PluginSidebarFooterActionRegistration[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  browserActions: PluginBrowserActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];
   sourceCodeRenderers: PluginSourceCodeRendererRegistration[];
   diffRenderers: PluginDiffRendererRegistration[];
@@ -126,6 +128,7 @@ export function collectPluginAppRegistrations(
     sidebarFooterActions: [],
     threadLists: [],
     threadHeaderActions: [],
+    browserActions: [],
     fileOpeners: [],
     sourceCodeRenderers: [],
     diffRenderers: [],
@@ -147,6 +150,7 @@ export function collectPluginAppRegistrations(
     sidebarFooterAction: new Set<string>(),
     threadList: new Set<string>(),
     threadHeaderAction: new Set<string>(),
+    browserAction: new Set<string>(),
     fileOpener: new Set<string>(),
     sourceCodeRenderer: new Set<string>(),
     diffRenderer: new Set<string>(),
@@ -406,6 +410,16 @@ export function collectPluginAppRegistrations(
         const id = requireSlotId(kind, registration?.id);
         requireUniqueId(kind, seenIds.threadHeaderAction, id);
         collected.threadHeaderActions.push({
+          id,
+          title: requireNonEmptyString(kind, "title", registration.title),
+          component: requireComponent(kind, registration.component),
+        });
+      },
+      experimental_browserAction(registration) {
+        const kind = "slots.experimental_browserAction";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.browserAction, id);
+        collected.browserActions.push({
           id,
           title: requireNonEmptyString(kind, "title", registration.title),
           component: requireComponent(kind, registration.component),

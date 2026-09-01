@@ -53,6 +53,7 @@ import type {
   PluginAgentToolResult,
   PluginAgents,
   PluginBackground,
+  PluginBrowser,
   PluginCli,
   PluginCliCommandInfo,
   PluginCliContext,
@@ -972,10 +973,9 @@ function createFakePluginHostInternal(
         );
       }
       const rows = database
-        .prepare<
-          [],
-          { id: number; statement_hash: string | null }
-        >("SELECT id, statement_hash FROM _bb_migrations ORDER BY id")
+        .prepare<[], { id: number; statement_hash: string | null }>(
+          "SELECT id, statement_hash FROM _bb_migrations ORDER BY id",
+        )
         .all();
       const applied = new Map<number, string | null>();
       for (const row of rows) applied.set(row.id, row.statement_hash);
@@ -1845,6 +1845,14 @@ function createFakePluginHostInternal(
     },
   };
 
+  const browser: PluginBrowser = {
+    listTabs: () => [],
+    listOwners: () => [],
+    openTab: () =>
+      Promise.reject(new Error("Browser tab creation is unavailable in tests")),
+    run: () =>
+      Promise.reject(new Error("Browser control is unavailable in tests")),
+  };
   const bb: BbPluginApi = {
     pluginId,
     log,
@@ -1854,6 +1862,7 @@ function createFakePluginHostInternal(
     rpc,
     realtime,
     background,
+    experimental_browser: browser,
     cli,
     agents,
     providers,
