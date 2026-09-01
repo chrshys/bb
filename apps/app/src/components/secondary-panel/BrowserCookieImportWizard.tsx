@@ -58,7 +58,7 @@ export function BrowserCookieImportWizard({
         <div className="min-w-0">
           <h2 className="text-sm font-medium">Import browser session</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Bring an existing signed-in session into this tab.
+            Bring an existing signed-in session into BB Browser across all threads.
           </p>
         </div>
         <Button

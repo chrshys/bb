@@ -455,15 +455,21 @@ function readChromiumCookies(
   let database: DatabaseSync | null = null;
   try {
     database = new DatabaseSync(snapshot.databasePath, { readOnly: true });
-    const rows = chromiumCookieRowSchema
-      .array()
-      .parse(
-        database
-          .prepare(
-            "SELECT host_key, name, value, path, CAST(expires_utc / 1000000 - 11644473600 AS INTEGER) AS expiration_unix, is_secure, is_httponly, samesite, encrypted_value FROM cookies",
-          )
-          .all(),
-      );
+    let rawRows: unknown[];
+    try {
+      rawRows = database
+        .prepare(
+          "SELECT host_key, name, value, path, CAST(expires_utc / 1000000 - 11644473600 AS INTEGER) AS expiration_unix, is_secure, is_httponly, samesite, encrypted_value FROM cookies WHERE top_frame_site_key = ''",
+        )
+        .all();
+    } catch {
+      rawRows = database
+        .prepare(
+          "SELECT host_key, name, value, path, CAST(expires_utc / 1000000 - 11644473600 AS INTEGER) AS expiration_unix, is_secure, is_httponly, samesite, encrypted_value FROM cookies",
+        )
+        .all();
+    }
+    const rows = chromiumCookieRowSchema.array().parse(rawRows);
     let hasDomainHash = false;
     try {
       const metaVersion = chromiumMetaVersionSchema.safeParse(
@@ -531,15 +537,21 @@ function readFirefoxCookies(
   let database: DatabaseSync | null = null;
   try {
     database = new DatabaseSync(snapshot.databasePath, { readOnly: true });
-    const rows = firefoxCookieRowSchema
-      .array()
-      .parse(
-        database
-          .prepare(
-            "SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies",
-          )
-          .all(),
-      );
+    let rawRows: unknown[];
+    try {
+      rawRows = database
+        .prepare(
+          "SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies WHERE originAttributes NOT LIKE '%partitionKey=%'",
+        )
+        .all();
+    } catch {
+      rawRows = database
+        .prepare(
+          "SELECT host, name, value, path, expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies",
+        )
+        .all();
+    }
+    const rows = firefoxCookieRowSchema.array().parse(rawRows);
     const cookies: BbDesktopBrowserCookieImport[] = [];
     for (const row of rows) {
       if (row.expiry > 0 && row.expiry <= Math.floor(Date.now() / 1_000)) {

@@ -29,15 +29,35 @@ const listeners = new Set<() => void>();
 let initialized = false;
 let currentRecord: BrowserCookieImportRecord | null = null;
 
+function parseBrowserCookieImportRecord(
+  value: string | null,
+): BrowserCookieImportRecord | null {
+  if (value === null) return null;
+  try {
+    const parsed = browserCookieImportRecordSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+
 function initialize(): void {
   if (initialized || typeof localStorage === "undefined") return;
   initialized = true;
-  const value = localStorage.getItem(STORAGE_KEY);
-  if (value === null) return;
-  try {
-    const parsed = browserCookieImportRecordSchema.safeParse(JSON.parse(value));
-    if (parsed.success) currentRecord = parsed.data;
-  } catch {}
+  currentRecord = parseBrowserCookieImportRecord(
+    localStorage.getItem(STORAGE_KEY),
+  );
+  window.addEventListener("storage", (event) => {
+    if (
+      event.storageArea !== localStorage ||
+      (event.key !== STORAGE_KEY && event.key !== null)
+    ) {
+      return;
+    }
+    currentRecord = parseBrowserCookieImportRecord(event.newValue);
+    for (const listener of listeners) listener();
+  });
 }
 
 export function browserCookieImportRecordSnapshot(): BrowserCookieImportRecord | null {
@@ -55,7 +75,7 @@ export function subscribeBrowserCookieImportRecord(
 export function setBrowserCookieImportRecord(
   record: BrowserCookieImportRecord | null,
 ): void {
-  initialized = true;
+  initialize();
   currentRecord = record;
   if (typeof localStorage !== "undefined") {
     if (record === null) localStorage.removeItem(STORAGE_KEY);

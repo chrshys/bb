@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Menu, WebContentsView, session, type Session } from "electron";
+import { Menu, WebContentsView, session, type Cookie, type Session } from "electron";
 import {
   BB_DESKTOP_BROWSER_MAX_TITLE_LENGTH,
   BB_DESKTOP_BROWSER_MAX_URL_LENGTH,
@@ -85,21 +85,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 const COOKIE_IMPORT_BATCH_SIZE = 250;
 
-interface CdpCookieParam {
-  domain?: string;
-  expires?: number;
-  httpOnly: boolean;
-  name: string;
-  path: string;
-  sameSite?: "Strict" | "Lax" | "None";
-  secure: boolean;
-  url?: string;
-  value: string;
-}
+type BrowserCookieSetDetails = Parameters<Session["cookies"]["set"]>[0];
 
-function importedCookieToCdp(
+function importedCookieToSessionDetails(
   cookie: BbDesktopBrowserImportCookiesRequest["cookies"][number],
-): CdpCookieParam | null {
+): BrowserCookieSetDetails | null {
   const isHostPrefixed = cookie.name.startsWith("__Host-");
   const isSecurePrefixed = cookie.name.startsWith("__Secure-");
   const isHttpPrefixed =
@@ -114,80 +104,76 @@ function importedCookieToCdp(
   ) {
     return null;
   }
-  const sameSite =
-    cookie.sameSite === "strict"
-      ? "Strict"
-      : cookie.sameSite === "lax"
-        ? "Lax"
-        : cookie.sameSite === "no_restriction"
-          ? "None"
-          : undefined;
+  const host = cookie.domain.startsWith(".")
+    ? cookie.domain.slice(1)
+    : cookie.domain;
   return {
-    name: cookie.name,
-    value: cookie.value,
-    ...(cookie.domain.startsWith(".")
-      ? { domain: cookie.domain }
-      : { url: `https://${cookie.domain}${cookie.path}` }),
-    path: cookie.path,
-    secure: cookie.secure,
-    httpOnly: cookie.httpOnly,
-    ...(sameSite === undefined ? {} : { sameSite }),
+    ...(cookie.domain.startsWith(".") ? { domain: host } : {}),
     ...(cookie.expirationDate === null
       ? {}
-      : { expires: cookie.expirationDate }),
+      : { expirationDate: cookie.expirationDate }),
+    httpOnly: cookie.httpOnly,
+    name: cookie.name,
+    path: cookie.path,
+    sameSite: cookie.sameSite,
+    secure: cookie.secure,
+    url: `https://${host}${cookie.path}`,
+    value: cookie.value,
   };
 }
 
-async function importCookiesWithDebugger(
-  entry: BrowserViewEntry,
-  cookies: readonly BbDesktopBrowserImportCookiesRequest["cookies"][number][],
-): Promise<number> {
-  const cookieParams = cookies
-    .map(importedCookieToCdp)
-    .filter((cookie): cookie is CdpCookieParam => cookie !== null);
-  if (cookieParams.length === 0) return 0;
-  const browserDebugger = entry.view.webContents.debugger;
-  let attachedHere = false;
+function cookieRemovalUrl(cookie: Cookie): string | null {
+  const domain = cookie.domain?.replace(/^\./, "");
+  if (domain === undefined || domain.length === 0) return null;
   try {
-    if (!browserDebugger.isAttached()) {
-      browserDebugger.attach("1.3");
-      attachedHere = true;
-    }
-    await browserDebugger.sendCommand("Storage.clearCookies");
-    for (
-      let offset = 0;
-      offset < cookieParams.length;
-      offset += COOKIE_IMPORT_BATCH_SIZE
-    ) {
-      await browserDebugger.sendCommand("Storage.setCookies", {
-        cookies: cookieParams.slice(offset, offset + COOKIE_IMPORT_BATCH_SIZE),
-      });
-    }
-    return cookieParams.length;
-  } finally {
-    if (attachedHere && browserDebugger.isAttached()) {
-      browserDebugger.detach();
-    }
+    return new URL(
+      `${cookie.secure === true ? "https" : "http"}://${domain}${cookie.path ?? "/"}`,
+    ).toString();
+  } catch {
+    return null;
   }
 }
 
-async function clearImportedCookiesWithDebugger(
-  entry: BrowserViewEntry,
-): Promise<void> {
-  const browserDebugger = entry.view.webContents.debugger;
-  let attachedHere = false;
-  try {
-    if (!browserDebugger.isAttached()) {
-      browserDebugger.attach("1.3");
-      attachedHere = true;
-    }
-    await browserDebugger.sendCommand("Storage.clearCookies");
-  } finally {
-    if (attachedHere && browserDebugger.isAttached()) {
-      browserDebugger.detach();
+async function clearSessionCookies(browserSession: Session): Promise<void> {
+  const cookies = await browserSession.cookies.get({});
+  await Promise.all(
+    cookies.flatMap((cookie) => {
+      const url = cookieRemovalUrl(cookie);
+      return url === null ? [] : [browserSession.cookies.remove(url, cookie.name)];
+    }),
+  );
+  await browserSession.clearStorageData({ storages: ["cookies"] });
+}
+
+async function importCookiesIntoSession(
+  browserSession: Session,
+  cookies: readonly BbDesktopBrowserImportCookiesRequest["cookies"][number][],
+): Promise<number> {
+  const cookieDetailsByKey = new Map<string, BrowserCookieSetDetails>();
+  for (const cookie of cookies) {
+    const details = importedCookieToSessionDetails(cookie);
+    if (details === null) continue;
+    const key = `${details.domain ?? "\0"}\0${details.name ?? ""}\0${details.path ?? "/"}`;
+    if (!cookieDetailsByKey.has(key)) {
+      cookieDetailsByKey.set(key, details);
     }
   }
+  const cookieDetails = [...cookieDetailsByKey.values()];
+  await clearSessionCookies(browserSession);
+  for (
+    let offset = 0;
+    offset < cookieDetails.length;
+    offset += COOKIE_IMPORT_BATCH_SIZE
+  ) {
+    await Promise.all(
+      cookieDetails
+        .slice(offset, offset + COOKIE_IMPORT_BATCH_SIZE)
+        .map((cookie) => browserSession.cookies.set(cookie)),
+    );
+  }
+  return cookieDetails.length;
 }
+
 
 function viewportParameters(profile: BbDesktopBrowserViewportProfile) {
   switch (profile) {
@@ -538,6 +524,15 @@ export function createDesktopBrowserViewManager(
   const resizingHostIds = new Set<number>();
   let hardenedSession: Session | null = null;
   let viewportProfileGeneration = 0;
+  let nextBrowserSessionMutation: Promise<void> = Promise.resolve();
+  function mutateBrowserSession<T>(operation: () => Promise<T>): Promise<T> {
+    const result = nextBrowserSessionMutation.then(operation, operation);
+    nextBrowserSessionMutation = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
   const appendDiagnostic = (
     bucket: BbDesktopBrowserJsonValue[],
     value: BbDesktopBrowserJsonValue,
@@ -799,6 +794,27 @@ export function createDesktopBrowserViewManager(
     });
     hardenedSession = browserSession;
     return browserSession;
+  }
+
+  async function clearBrowserSessionStorage(): Promise<void> {
+    const browserSession = ensureHardenedSession();
+    await browserSession.clearStorageData();
+    await browserSession.clearCache();
+  }
+
+  function reloadEntriesAfterCookieChange(): void {
+    for (const entry of entries.values()) {
+      if (
+        entry.view.webContents.isDestroyed() ||
+        entry.view.webContents.getURL().length === 0
+      ) {
+        continue;
+      }
+      cancelEntryPageScripts(entry, "navigation");
+      clearEntryViewportProfile(entry);
+      resetEntryRendererRecovery(entry);
+      entry.view.webContents.reload();
+    }
   }
 
   function pushState(
@@ -2235,17 +2251,20 @@ function rejectBrowserEventWaiters(
         },
       };
     },
-    async importCookies({ hostWindow, request }) {
-      const entry = entries.get(browserViewKey(hostWindow, request.tabId));
-      if (entry === undefined || entry.view.webContents.isDestroyed()) {
-        throw new Error("The Browser tab is unavailable");
-      }
-      const importedCookies = await importCookiesWithDebugger(
-        entry,
-        request.cookies,
-      );
-      await ensureHardenedSession().cookies.flushStore();
-      return { importedCookies };
+    importCookies({ hostWindow, request }) {
+      return mutateBrowserSession(async () => {
+        const entry = entries.get(browserViewKey(hostWindow, request.tabId));
+        if (entry === undefined || entry.view.webContents.isDestroyed()) {
+          throw new Error("The Browser tab is unavailable");
+        }
+        const importedCookies = await importCookiesIntoSession(
+          ensureHardenedSession(),
+          request.cookies,
+        );
+        await ensureHardenedSession().cookies.flushStore();
+        reloadEntriesAfterCookieChange();
+        return { importedCookies };
+      });
     },
     listCookieImportSources({ hostWindow, request }) {
       const entry = entries.get(browserViewKey(hostWindow, request.tabId));
@@ -2254,31 +2273,40 @@ function rejectBrowserEventWaiters(
       }
       return { sources: [...listBrowserCookieImportSources()] };
     },
-    async importCookiesFromBrowser({ hostWindow, request }) {
-      const entry = entries.get(browserViewKey(hostWindow, request.tabId));
-      if (entry === undefined || entry.view.webContents.isDestroyed()) {
-        throw new Error("The Browser tab is unavailable");
-      }
-      const cookies = importCookiesFromBrowserSource({
-        family: request.family,
-        profileId: request.profileId,
-      });
-      if (cookies.length > 5_000) {
-        throw new Error(
-          "The selected browser profile has too many cookies to import",
+    importCookiesFromBrowser({ hostWindow, request }) {
+      return mutateBrowserSession(async () => {
+        const entry = entries.get(browserViewKey(hostWindow, request.tabId));
+        if (entry === undefined || entry.view.webContents.isDestroyed()) {
+          throw new Error("The Browser tab is unavailable");
+        }
+        const cookies = importCookiesFromBrowserSource({
+          family: request.family,
+          profileId: request.profileId,
+        });
+        if (cookies.length > 5_000) {
+          throw new Error(
+            "The selected browser profile has too many cookies to import",
+          );
+        }
+        const importedCookies = await importCookiesIntoSession(
+          ensureHardenedSession(),
+          cookies,
         );
-      }
-      const importedCookies = await importCookiesWithDebugger(entry, cookies);
-      await ensureHardenedSession().cookies.flushStore();
-      return { importedCookies };
+        await ensureHardenedSession().cookies.flushStore();
+        reloadEntriesAfterCookieChange();
+        return { importedCookies };
+      });
     },
-    async clearImportedCookies({ hostWindow, tabId }) {
-      const entry = entries.get(browserViewKey(hostWindow, tabId));
-      if (entry === undefined || entry.view.webContents.isDestroyed()) {
-        throw new Error("The Browser tab is unavailable");
-      }
-      await clearImportedCookiesWithDebugger(entry);
-      await ensureHardenedSession().cookies.flushStore();
+    clearImportedCookies({ hostWindow, tabId }) {
+      return mutateBrowserSession(async () => {
+        const entry = entries.get(browserViewKey(hostWindow, tabId));
+        if (entry === undefined || entry.view.webContents.isDestroyed()) {
+          throw new Error("The Browser tab is unavailable");
+        }
+        await clearBrowserSessionStorage();
+        await ensureHardenedSession().cookies.flushStore();
+        reloadEntriesAfterCookieChange();
+      });
     },
     beginWindowResize(hostWindow) {
       if (isHostResizing(hostWindow)) {

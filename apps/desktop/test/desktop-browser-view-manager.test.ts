@@ -609,12 +609,38 @@ const electronMock = vi.hoisted(() => {
   }
 
   class FakeSession {
+    public clearCacheCalls = 0;
+    public readonly clearStorageDataCalls: Array<
+      { storages: string[] } | undefined
+    > = [];
     public flushStoreCalls = 0;
+    public readonly cookieSetCalls: Record<string, unknown>[] = [];
+    public readonly cookieGetResults: Array<{
+      domain?: string;
+      name: string;
+      path?: string;
+      secure?: boolean;
+    }> = [];
+    public readonly cookieRemoveCalls: Array<{ name: string; url: string }> = [];
     public readonly cookies = {
       flushStore: async (): Promise<void> => {
         this.flushStoreCalls += 1;
       },
+      get: async (): Promise<typeof this.cookieGetResults> =>
+        this.cookieGetResults,
+      remove: async (url: string, name: string): Promise<void> => {
+        this.cookieRemoveCalls.push({ name, url });
+      },
+      set: async (details: Record<string, unknown>): Promise<void> => {
+        this.cookieSetCalls.push(details);
+      },
     };
+    async clearCache(): Promise<void> {
+      this.clearCacheCalls += 1;
+    }
+    async clearStorageData(options?: { storages: string[] }): Promise<void> {
+      this.clearStorageDataCalls.push(options);
+    }
     public readonly webRequest = {
       onBeforeRequest: (
         _listener: (
@@ -885,7 +911,7 @@ describe("DesktopBrowserViewManager", () => {
     ]);
   });
 
-  it("preserves valid cookie prefixes and skips malformed prefixed cookies", async () => {
+  it("replaces the global Browser session and reloads every live tab", async () => {
     const manager = createDesktopBrowserViewManager({
       partition: "persist:test",
     });
@@ -898,6 +924,16 @@ describe("DesktopBrowserViewManager", () => {
       hostWindow,
       tabId: "browser:a",
       url: "https://example.com",
+    });
+    const otherHostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 50,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow: otherHostWindow,
+      tabId: "browser:b",
+      url: "https://example.org",
     });
     const request = {
       tabId: "browser:a",
@@ -958,84 +994,292 @@ describe("DesktopBrowserViewManager", () => {
     await expect(
       manager.importCookies({ hostWindow, request }),
     ).resolves.toEqual({ importedCookies: 4 });
-    const view = requireFakeView(0);
-    expect(view.webContents.debugger.attachCalls).toEqual(["1.3"]);
-    expect(view.webContents.debugger.detachCalls).toBe(0);
-    const storageCalls = view.webContents.debugger.sendCommandCalls.filter(
-      (call) => call.method.startsWith("Storage."),
-    );
-    expect(storageCalls).toEqual([
+    const browserSession = requireFakeSession(0);
+    expect(browserSession.cookieSetCalls).toEqual([
       {
-        method: "Storage.clearCookies",
-        params: undefined,
+        httpOnly: true,
+        name: "__Host-session",
+        path: "/",
+        sameSite: "lax",
+        secure: true,
+        url: "https://example.com/",
+        value: "host-value",
       },
       {
-        method: "Storage.setCookies",
-        params: {
-          cookies: [
-            {
-              httpOnly: true,
-              name: "__Host-session",
-              path: "/",
-              sameSite: "Lax",
-              secure: true,
-              url: "https://example.com/",
-              value: "host-value",
-            },
-            {
-              domain: ".example.com",
-              httpOnly: true,
-              name: "__Secure-session",
-              path: "/",
-              sameSite: "Strict",
-              secure: true,
-              value: "secure-value",
-            },
-            {
-              domain: ".example.com",
-              httpOnly: true,
-              name: "overlap",
-              path: "/",
-              sameSite: "Lax",
-              secure: true,
-              value: "secure-overlap",
-            },
-            {
-              httpOnly: false,
-              name: "overlap",
-              path: "/account",
-              sameSite: "Lax",
-              secure: false,
-              url: "https://sub.example.com/account",
-              value: "insecure-overlap",
-            },
-          ],
-        },
+        domain: "example.com",
+        httpOnly: true,
+        name: "__Secure-session",
+        path: "/",
+        sameSite: "strict",
+        secure: true,
+        url: "https://example.com/",
+        value: "secure-value",
+      },
+      {
+        domain: "example.com",
+        httpOnly: true,
+        name: "overlap",
+        path: "/",
+        sameSite: "lax",
+        secure: true,
+        url: "https://example.com/",
+        value: "secure-overlap",
+      },
+      {
+        httpOnly: false,
+        name: "overlap",
+        path: "/account",
+        sameSite: "lax",
+        secure: false,
+        url: "https://sub.example.com/account",
+        value: "insecure-overlap",
       },
     ]);
-    expect(requireFakeSession(0).flushStoreCalls).toBe(1);
+    expect(browserSession.clearStorageDataCalls).toEqual([
+      { storages: ["cookies"] },
+    ]);
+    expect(browserSession.flushStoreCalls).toBe(1);
+    expect(browserSession.clearCacheCalls).toBe(0);
+    expect(electronMock.fakeSessions).toHaveLength(1);
+    expect(requireFakeView(0).webContents.reloadCalls).toBe(1);
+    expect(requireFakeView(1).webContents.reloadCalls).toBe(1);
 
-    view.webContents.debugger.attached = true;
     await expect(
       manager.importCookies({ hostWindow, request }),
     ).resolves.toEqual({ importedCookies: 4 });
-    expect(view.webContents.debugger.attachCalls).toEqual(["1.3"]);
-    expect(view.webContents.debugger.detachCalls).toBe(0);
-    expect(view.webContents.debugger.isAttached()).toBe(true);
-    expect(
-      view.webContents.debugger.sendCommandCalls.filter((call) =>
-        call.method.startsWith("Storage."),
-      ),
-    ).toHaveLength(4);
-    expect(requireFakeSession(0).flushStoreCalls).toBe(2);
+    expect(browserSession.cookieSetCalls).toHaveLength(8);
+    expect(browserSession.flushStoreCalls).toBe(2);
+    expect(browserSession.clearStorageDataCalls).toEqual([
+      { storages: ["cookies"] },
+      { storages: ["cookies"] },
+    ]);
+    expect(browserSession.clearCacheCalls).toBe(0);
+    expect(requireFakeView(0).webContents.reloadCalls).toBe(2);
+    expect(requireFakeView(1).webContents.reloadCalls).toBe(2);
     await manager.clearImportedCookies({ hostWindow, tabId: "browser:a" });
-    expect(view.webContents.debugger.sendCommandCalls.at(-1)?.method).toBe(
-      "Storage.clearCookies",
-    );
-    expect(requireFakeSession(0).flushStoreCalls).toBe(3);
+    expect(browserSession.flushStoreCalls).toBe(3);
+    expect(browserSession.clearStorageDataCalls).toEqual([
+      { storages: ["cookies"] },
+      { storages: ["cookies"] },
+      undefined,
+    ]);
+    expect(browserSession.clearCacheCalls).toBe(1);
+    expect(requireFakeView(0).webContents.reloadCalls).toBe(3);
+    expect(requireFakeView(1).webContents.reloadCalls).toBe(3);
+    await expect(
+      manager.importCookies({
+        hostWindow,
+        request: { tabId: "browser:a", cookies: [] },
+      }),
+    ).resolves.toEqual({ importedCookies: 0 });
+    expect(browserSession.clearStorageDataCalls).toEqual([
+      { storages: ["cookies"] },
+      { storages: ["cookies"] },
+      undefined,
+      { storages: ["cookies"] },
+    ]);
+    expect(browserSession.clearCacheCalls).toBe(1);
+    expect(requireFakeView(0).webContents.reloadCalls).toBe(4);
+    expect(requireFakeView(1).webContents.reloadCalls).toBe(4);
   });
 
-  it("batches large cookie imports through the privileged debugger", async () => {
+  it("removes existing HttpOnly cookies before importing replacements", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 53,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://github.com",
+    });
+    const browserSession = requireFakeSession(0);
+    browserSession.cookieGetResults.push({
+      domain: ".github.com",
+      name: "user_session",
+      path: "/",
+      secure: true,
+    });
+
+    await expect(
+      manager.importCookies({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          cookies: [
+            {
+              domain: ".github.com",
+              expirationDate: null,
+              httpOnly: true,
+              name: "user_session",
+              path: "/",
+              sameSite: "lax",
+              secure: true,
+              value: "replacement",
+            },
+          ],
+        },
+      }),
+    ).resolves.toEqual({ importedCookies: 1 });
+
+    expect(browserSession.cookieRemoveCalls).toEqual([
+      { name: "user_session", url: "https://github.com/" },
+    ]);
+    expect(browserSession.cookieSetCalls).toEqual([
+      expect.objectContaining({
+        domain: "github.com",
+        httpOnly: true,
+        name: "user_session",
+        value: "replacement",
+      }),
+    ]);
+  });
+
+  it("preserves host-only and domain cookies Electron distinguishes", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 54,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://github.com",
+    });
+
+    await expect(
+      manager.importCookies({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          cookies: [
+            {
+              domain: "github.com",
+              expirationDate: null,
+              httpOnly: true,
+              name: "user_session",
+              path: "/",
+              sameSite: "lax",
+              secure: true,
+              value: "host-only",
+            },
+            {
+              domain: ".github.com",
+              expirationDate: null,
+              httpOnly: true,
+              name: "user_session",
+              path: "/",
+              sameSite: "lax",
+              secure: true,
+              value: "domain",
+            },
+            {
+              domain: ".github.com",
+              expirationDate: null,
+              httpOnly: false,
+              name: "user_session",
+              path: "/",
+              sameSite: "lax",
+              secure: true,
+              value: "domain-duplicate",
+            },
+          ],
+        },
+      }),
+    ).resolves.toEqual({ importedCookies: 2 });
+
+    expect(requireFakeSession(0).cookieSetCalls).toEqual([
+      expect.objectContaining({ value: "host-only" }),
+      expect.objectContaining({ domain: "github.com", value: "domain" }),
+    ]);
+  });
+
+  it("serializes cookie imports across Browser windows", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const firstHostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 51,
+    });
+    const secondHostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 52,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow: firstHostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow: secondHostWindow,
+      tabId: "browser:b",
+      url: "https://example.org",
+    });
+    const firstImport = manager.importCookies({
+      hostWindow: firstHostWindow,
+      request: {
+        tabId: "browser:a",
+        cookies: [
+          {
+            domain: ".example.com",
+            expirationDate: null,
+            httpOnly: true,
+            name: "first",
+            path: "/",
+            sameSite: "lax",
+            secure: true,
+            value: "first-value",
+          },
+        ],
+      },
+    });
+    const secondImport = manager.importCookies({
+      hostWindow: secondHostWindow,
+      request: {
+        tabId: "browser:b",
+        cookies: [
+          {
+            domain: ".example.org",
+            expirationDate: null,
+            httpOnly: true,
+            name: "second",
+            path: "/",
+            sameSite: "lax",
+            secure: true,
+            value: "second-value",
+          },
+        ],
+      },
+    });
+
+    await expect(Promise.all([firstImport, secondImport])).resolves.toEqual([
+      { importedCookies: 1 },
+      { importedCookies: 1 },
+    ]);
+    const browserSession = requireFakeSession(0);
+    expect(browserSession.clearStorageDataCalls).toEqual([
+      { storages: ["cookies"] },
+      { storages: ["cookies"] },
+    ]);
+    expect(browserSession.cookieSetCalls).toEqual([
+      expect.objectContaining({ name: "first", value: "first-value" }),
+      expect.objectContaining({ name: "second", value: "second-value" }),
+    ]);
+    expect(requireFakeView(0).webContents.reloadCalls).toBe(2);
+    expect(requireFakeView(1).webContents.reloadCalls).toBe(2);
+  });
+
+  it("batches large cookie imports through the native session", async () => {
     const manager = createDesktopBrowserViewManager({
       partition: "persist:test",
     });
@@ -1066,16 +1310,19 @@ describe("DesktopBrowserViewManager", () => {
     await expect(
       manager.importCookies({ hostWindow, request }),
     ).resolves.toEqual({ importedCookies: 251 });
-    const calls = requireFakeView(
-      0,
-    ).webContents.debugger.sendCommandCalls.filter((call) =>
-      call.method.startsWith("Storage."),
-    );
-    expect(calls).toHaveLength(3);
-    expect(calls[0]?.method).toBe("Storage.clearCookies");
-    expect(calls[1]?.method).toBe("Storage.setCookies");
-    expect(calls[1]?.params?.cookies).toHaveLength(250);
-    expect(calls[2]?.params?.cookies).toHaveLength(1);
+    const browserSession = requireFakeSession(0);
+    expect(browserSession.clearStorageDataCalls).toEqual([
+      { storages: ["cookies"] },
+    ]);
+    expect(browserSession.cookieSetCalls).toHaveLength(251);
+    expect(browserSession.cookieSetCalls[0]).toMatchObject({
+      name: "session-0",
+      value: "value-0",
+    });
+    expect(browserSession.cookieSetCalls[250]).toMatchObject({
+      name: "session-250",
+      value: "value-250",
+    });
   });
 
   it("binds page captures to the exact navigation epoch", async () => {

@@ -134,4 +134,133 @@ describe("desktop browser cookie import", () => {
       rmSync(home, { force: true, recursive: true });
     }
   });
+
+  it("skips Chromium partitioned cookies the Electron API cannot represent", () => {
+    const previousHome = process.env.HOME;
+    const home = mkdtempSync(join(tmpdir(), "bb-cookie-import-home-"));
+    const profile = join(
+      home,
+      "Library",
+      "Application Support",
+      "Google",
+      "Chrome",
+      "Default",
+    );
+    mkdirSync(profile, { recursive: true });
+    const database = new DatabaseSync(join(profile, "Cookies"));
+    database.exec(`
+      CREATE TABLE cookies (
+        host_key TEXT NOT NULL,
+        top_frame_site_key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        value TEXT NOT NULL,
+        path TEXT NOT NULL,
+        expires_utc INTEGER NOT NULL,
+        is_secure INTEGER NOT NULL,
+        is_httponly INTEGER NOT NULL,
+        samesite INTEGER NOT NULL,
+        encrypted_value BLOB NOT NULL
+      );
+      INSERT INTO cookies VALUES (
+        '.example.com', '', 'session', 'unpartitioned', '/', 0, 1, 1, 1, X''
+      );
+      INSERT INTO cookies VALUES (
+        '.example.com', 'https://embedder.example', 'session', 'partitioned', '/', 0, 1, 1, 1, X''
+      );
+    `);
+    database.close();
+    process.env.HOME = home;
+
+    try {
+      expect(
+        importCookiesFromBrowserSource({
+          family: "chrome",
+          profileId: "Default",
+        }),
+      ).toEqual([
+        {
+          domain: ".example.com",
+          expirationDate: null,
+          httpOnly: true,
+          name: "session",
+          path: "/",
+          sameSite: "lax",
+          secure: true,
+          value: "unpartitioned",
+        },
+      ]);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      rmSync(home, { force: true, recursive: true });
+    }
+  });
+
+  it("skips Firefox partitioned cookies the Electron API cannot represent", () => {
+    const previousHome = process.env.HOME;
+    const home = mkdtempSync(join(tmpdir(), "bb-cookie-import-home-"));
+    const profile = join(
+      home,
+      "Library",
+      "Application Support",
+      "Firefox",
+      "Profiles",
+      "test.default",
+    );
+    mkdirSync(profile, { recursive: true });
+    const database = new DatabaseSync(join(profile, "cookies.sqlite"));
+    database.exec(`
+      CREATE TABLE moz_cookies (
+        originAttributes TEXT NOT NULL DEFAULT '',
+        name TEXT,
+        value TEXT,
+        host TEXT,
+        path TEXT,
+        expiry INTEGER,
+        isSecure INTEGER,
+        isHttpOnly INTEGER,
+        sameSite INTEGER
+      );
+      INSERT INTO moz_cookies VALUES (
+        '', 'session', 'unpartitioned', '.example.com', '/', 0, 1, 1, 1
+      );
+      INSERT INTO moz_cookies VALUES (
+        '^partitionKey=%28https%2Cembedder.example%29',
+        'session',
+        'partitioned',
+        '.example.com',
+        '/',
+        0,
+        1,
+        1,
+        1
+      );
+    `);
+    database.close();
+    process.env.HOME = home;
+
+    try {
+      expect(
+        importCookiesFromBrowserSource({
+          family: "firefox",
+          profileId: "test.default",
+        }),
+      ).toEqual([
+        {
+          domain: ".example.com",
+          expirationDate: null,
+          httpOnly: true,
+          name: "session",
+          path: "/",
+          sameSite: "lax",
+          secure: true,
+          value: "unpartitioned",
+        },
+      ]);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      rmSync(home, { force: true, recursive: true });
+    }
+  });
 });
