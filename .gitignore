@@ -89,3 +89,9 @@ provider-recordings/raw/
 **/provider-corpus/**
 !apps/server/test/provider-corpus/**
 !scripts/provider-corpus/**
+
+# Local BB automation and scratch files
+/.bb/
+/.omp/
+/scripts/test-browser.mjs
+/twitter-timeline.md
