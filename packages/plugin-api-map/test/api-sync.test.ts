@@ -46,6 +46,35 @@ const EXPORTED = new Set([
 
 const SURFACES = SURFACE_GROUPS.flatMap((group) => group.surfaces);
 
+const BROWSER_ACTION_API_SYMBOLS = [
+  "ExperimentalBrowserPageCapture",
+  "ExperimentalBrowserPageContentScriptRequest",
+  "ExperimentalBrowserPageContentScriptResult",
+  "PluginBrowserActionRegistration",
+  "PluginBrowserActionProps",
+];
+
+const BROWSER_AGENT_CONTROL_API_SYMBOLS = [
+  "BrowserControlAction",
+  "BrowserControlError",
+  "BrowserFrameDescriptor",
+  "BrowserFrameTarget",
+  "BrowserTabDescriptor",
+  "BrowserTabOwnerDescriptor",
+  "BrowserTabTarget",
+  "BrowserWaitCriteria",
+  "BrowserWaitResult",
+  "PluginBrowser",
+  "PluginBrowserOpenOptions",
+  "PluginBrowserTabFilter",
+];
+
+function surface(id: string) {
+  const value = SURFACES.find((candidate) => candidate.id === id);
+  if (value === undefined) throw new Error(`Missing ${id} surface`);
+  return value;
+}
+
 describe("public SDK inventory", () => {
   it("ignores declaration trivia but preserves every API token", () => {
     const compact =
@@ -83,6 +112,15 @@ describe("surface-to-SDK links", () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it("keeps each Browser surface linked to its complete public contract", () => {
+    expect(surface("browser-actions").apiSymbols).toEqual(
+      BROWSER_ACTION_API_SYMBOLS,
+    );
+    expect(surface("browser-agent-control").apiSymbols).toEqual(
+      BROWSER_AGENT_CONTROL_API_SYMBOLS,
+    );
   });
 });
 
