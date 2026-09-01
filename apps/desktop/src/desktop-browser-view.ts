@@ -974,32 +974,32 @@ export function createDesktopBrowserViewManager(
         invalidateFrameRecord(entry, debuggerFrameId);
         record = undefined;
       }
+      if (record === undefined) {
+        record = {
+          publicFrameId: randomUUID(),
+          debuggerFrameId,
+          loaderId,
+          parentDebuggerFrameId,
+          documentEpoch: entry.nextFrameDocumentEpoch++,
+          url: typeof urlValue === "string" ? truncate(urlValue, 4_096) : "",
+          name: typeof nameValue === "string" ? truncate(nameValue, 256) : null,
+          depth,
+          active: true,
+          executionContextId:
+            entry.pendingExecutionContextIdsByFrameId.get(debuggerFrameId) ??
+            null,
+        };
+        if (depth > 0) entry.frameRegistry.set(record.publicFrameId, record);
+        entry.frameRecordsByDebuggerId.set(debuggerFrameId, record);
+      } else {
+        record.url =
+          typeof urlValue === "string" ? truncate(urlValue, 4_096) : "";
+        record.name =
+          typeof nameValue === "string" ? truncate(nameValue, 256) : null;
+        record.parentDebuggerFrameId = parentDebuggerFrameId;
+        record.depth = depth;
+      }
       if (depth > 0) {
-        if (record === undefined) {
-          record = {
-            publicFrameId: randomUUID(),
-            debuggerFrameId,
-            loaderId,
-            parentDebuggerFrameId,
-            documentEpoch: entry.nextFrameDocumentEpoch++,
-            url: typeof urlValue === "string" ? truncate(urlValue, 4_096) : "",
-            name: typeof nameValue === "string" ? truncate(nameValue, 256) : null,
-            depth,
-            active: true,
-            executionContextId:
-              entry.pendingExecutionContextIdsByFrameId.get(debuggerFrameId) ??
-              null,
-          };
-          entry.frameRegistry.set(record.publicFrameId, record);
-          entry.frameRecordsByDebuggerId.set(debuggerFrameId, record);
-        } else {
-          record.url =
-            typeof urlValue === "string" ? truncate(urlValue, 4_096) : "";
-          record.name =
-            typeof nameValue === "string" ? truncate(nameValue, 256) : null;
-          record.parentDebuggerFrameId = parentDebuggerFrameId;
-          record.depth = depth;
-        }
         const parent =
           parentDebuggerFrameId === null
             ? null
@@ -1007,7 +1007,7 @@ export function createDesktopBrowserViewManager(
         frames.push({
           frameId: record.publicFrameId,
           documentEpoch: record.documentEpoch,
-          parentFrameId: parent?.publicFrameId ?? null,
+          parentFrameId: depth === 1 ? null : parent?.publicFrameId ?? null,
           url: record.url,
           name: record.name,
           depth: record.depth,
@@ -1197,7 +1197,16 @@ function rejectBrowserEventWaiters(
           const frame = params.frame;
           if (!isObject(frame) || typeof frame.id !== "string") return;
           const record = entry.frameRecordsByDebuggerId.get(frame.id);
-          if (record !== undefined) invalidateFrameRecord(entry, frame.id);
+          if (record === undefined) return;
+          const loaderIdValue = Object.getOwnPropertyDescriptor(
+            frame,
+            "loaderId",
+          )?.value;
+          const loaderId =
+            typeof loaderIdValue === "string" ? loaderIdValue : null;
+          if (record.loaderId === null || record.loaderId !== loaderId) {
+            invalidateFrameRecord(entry, frame.id);
+          }
           return;
         }
         if (method !== "Page.javascriptDialogOpening") return;

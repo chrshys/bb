@@ -271,6 +271,7 @@ const electronMock = vi.hoisted(() => {
     public readonly attachCalls: string[] = [];
     public detachCalls = 0;
     public readonly sendCommandCalls: FakeDebuggerCommand[] = [];
+    public getFrameTreeResult?: object;
     private readonly messageListeners: Array<
       (
         event: FakeWebContentsEvent,
@@ -321,6 +322,13 @@ const electronMock = vi.hoisted(() => {
       if (method === "Page.captureScreenshot") {
         return { data: Buffer.from("full-page").toString("base64") };
       }
+      if (method === "Page.getFrameTree") {
+        return this.getFrameTreeResult ?? {};
+      }
+      if (method === "DOM.getFrameOwner") return { backendNodeId: 1 };
+      if (method === "DOM.getBoxModel") {
+        return { model: { content: [20, 30, 120, 30, 120, 80, 20, 80] } };
+      }
       return {};
     }
   }
@@ -340,6 +348,7 @@ const electronMock = vi.hoisted(() => {
     public readonly findInPageCalls: FakeFindInPageCall[] = [];
     public readonly stopFindInPageCalls: string[] = [];
     public reloadCalls = 0;
+    public readonly sentInputEvents: Array<Record<string, unknown>> = [];
     public readonly pendingCaptureResolvers: Array<
       (image: FakeNativeImage) => void
     > = [];
@@ -449,6 +458,9 @@ const electronMock = vi.hoisted(() => {
 
     reload(): void {
       this.reloadCalls += 1;
+    }
+    sendInputEvent(event: Record<string, unknown>): void {
+      this.sentInputEvents.push(event);
     }
 
     setWindowOpenHandler(handler: FakeWindowOpenHandler): void {
@@ -1264,6 +1276,117 @@ describe("DesktopBrowserViewManager", () => {
       },
     });
   });
+  it("retains a discovered child frame through a same-loader navigation event", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 50,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+    const view = requireFakeView(0);
+    view.webContents.debugger.getFrameTreeResult = {
+      frameTree: {
+        frame: {
+          id: "root",
+          loaderId: "root-loader",
+          name: "",
+          url: "https://example.com",
+        },
+        childFrames: [
+          {
+            frame: {
+              id: "child",
+              loaderId: "child-loader",
+              name: "",
+              url: "https://child.example.com",
+            },
+          },
+        ],
+      },
+    };
+    const first = await manager.listFrames({
+      hostWindow,
+      request: { tabId: "browser:a", expectedNavigationEpoch: 0, maxFrames: 8 },
+    });
+    const child = first.frames[0];
+    if (child === undefined) throw new Error("Expected a discovered child frame.");
+    const target = {
+      frameId: child.frameId,
+      documentEpoch: child.documentEpoch,
+    };
+
+    view.webContents.debugger.emitMessage("Page.frameNavigated", {
+      frame: { id: "child", loaderId: "child-loader" },
+    });
+
+    await expect(
+      manager.sendTrustedInput({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          expectedNavigationEpoch: 0,
+          frame: target,
+          action: {
+            kind: "click",
+            x: 10,
+            y: 20,
+            button: "left",
+            clickCount: 1,
+          },
+        },
+      }),
+    ).resolves.toEqual({
+      navigationEpoch: 0,
+      frame: target,
+      dispatched: 2,
+    });
+    expect(view.webContents.sentInputEvents).toEqual([
+      {
+        type: "mouseDown",
+        x: 30,
+        y: 50,
+        button: "left",
+        clickCount: 1,
+      },
+      {
+        type: "mouseUp",
+        x: 30,
+        y: 50,
+        button: "left",
+        clickCount: 1,
+      },
+    ]);
+
+    view.webContents.debugger.emitMessage("Page.frameNavigated", {
+      frame: { id: "child", loaderId: "next-child-loader" },
+    });
+
+    await expect(
+      manager.sendTrustedInput({
+        hostWindow,
+        request: {
+          tabId: "browser:a",
+          expectedNavigationEpoch: 0,
+          frame: target,
+          action: {
+            kind: "click",
+            x: 10,
+            y: 20,
+            button: "left",
+            clickCount: 1,
+          },
+        },
+      }),
+    ).rejects.toThrow("The Browser frame target changed");
+  });
+
 
   it("forwards resolved browser shortcuts and suppresses the untrusted page", () => {
     const dispatchAppCommand = vi.fn();

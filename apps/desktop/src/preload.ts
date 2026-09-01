@@ -295,7 +295,9 @@ const bbBrowserApi: BbDesktopBrowserApi = {
         { tabId: request.tabId, requestId: request.requestId },
       );
     };
-    signal?.addEventListener("abort", cancel, { once: true });
+    if (typeof signal?.addEventListener === "function") {
+      signal.addEventListener("abort", cancel, { once: true });
+    }
     try {
       const payload: unknown = await ipcRenderer.invoke(
         BB_DESKTOP_BROWSER_EXPERIMENTAL_WAIT_EVENT_CHANNEL,
@@ -303,7 +305,9 @@ const bbBrowserApi: BbDesktopBrowserApi = {
       );
       return bbDesktopBrowserWaitResultSchema.parse(payload);
     } finally {
-      signal?.removeEventListener("abort", cancel);
+      if (typeof signal?.removeEventListener === "function") {
+        signal.removeEventListener("abort", cancel);
+      }
     }
   },
   experimental_cancelBrowserEvent(request) {

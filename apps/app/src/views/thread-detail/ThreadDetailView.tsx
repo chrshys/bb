@@ -1286,6 +1286,8 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
   );
   const browserOwnerRegistrationRef =
     useRef<BrowserControlOwnerRegistration | null>(null);
+  const browserTabsRef = useRef(browserTabs);
+  browserTabsRef.current = browserTabs;
   useEffect(() => {
     if (thread === undefined || !isDesktopBrowserAvailable()) return;
     const registration = registerBrowserControlOwner({
@@ -1296,7 +1298,11 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
       closeTab,
       projectId: thread.projectId,
       threadId: thread.id,
-      tabs: [],
+      tabs: browserTabsRef.current.map(({ id, title, url }) => ({
+        tabId: id,
+        title,
+        url,
+      })),
     });
     browserOwnerRegistrationRef.current = registration;
     return () => {

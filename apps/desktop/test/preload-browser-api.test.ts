@@ -27,6 +27,7 @@ import {
   BB_DESKTOP_BROWSER_EXPERIMENTAL_IMPORT_COOKIES_FROM_BROWSER_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_CLEAR_IMPORTED_COOKIES_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_LIST_COOKIE_IMPORT_SOURCES_CHANNEL,
+  BB_DESKTOP_BROWSER_EXPERIMENTAL_WAIT_EVENT_CHANNEL,
   BB_DESKTOP_BROWSER_FIND_RESULT_CHANNEL,
   BB_DESKTOP_BROWSER_GO_BACK_CHANNEL,
   BB_DESKTOP_BROWSER_GO_FORWARD_CHANNEL,
@@ -124,6 +125,11 @@ const electronMock = vi.hoisted(() => {
               profiles: { id: string; label: string }[];
             }[];
           }
+        | {
+            navigationEpoch: number;
+            requestId: string;
+            value: { kind: "load-state"; state: "load" };
+          }
       > {
         invokeCalls.push(channel);
         if (channel === "bb-desktop:get-window-state") {
@@ -148,6 +154,13 @@ const electronMock = vi.hoisted(() => {
                 profiles: [{ id: "Default", label: "Default" }],
               },
             ],
+          });
+        }
+        if (channel === BB_DESKTOP_BROWSER_EXPERIMENTAL_WAIT_EVENT_CHANNEL) {
+          return Promise.resolve({
+            navigationEpoch: 0,
+            requestId: "wait-1",
+            value: { kind: "load-state", state: "load" },
           });
         }
         return Promise.resolve(desktopInfo);
@@ -391,6 +404,32 @@ describe("desktop preload browser API", () => {
       BB_DESKTOP_INSTALL_UPDATE_CHANNEL,
     );
   }, 10_000);
+
+  it("accepts a bridged wait signal without event listener methods", async () => {
+    const waitOptions = {
+      signal: { aborted: false },
+    } as unknown as { signal: AbortSignal };
+
+    await expect(
+      api.browser.experimental_waitBrowserEvent?.(
+        {
+          tabId: "browser:a",
+          expectedNavigationEpoch: 0,
+          requestId: "wait-1",
+          criteria: {
+            kind: "load-state",
+            document: "current",
+            state: "load",
+          },
+        },
+        waitOptions,
+      ),
+    ).resolves.toEqual({
+      navigationEpoch: 0,
+      requestId: "wait-1",
+      value: { kind: "load-state", state: "load" },
+    });
+  });
 
   it("converts zoomed renderer bounds to native window coordinates", () => {
     electronMock.setZoomFactor(1.25);

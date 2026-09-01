@@ -950,6 +950,21 @@ const snapshotScript = `async ({ input, signal }) => {
     }
     return parts.join(" > ");
   };
+  const implicitRole = (element) => {
+    if (element instanceof HTMLAnchorElement && element.hasAttribute("href")) return "link";
+    if (element instanceof HTMLButtonElement) return "button";
+    if (element instanceof HTMLSelectElement) return element.multiple ? "listbox" : "combobox";
+    if (element instanceof HTMLTextAreaElement) return "textbox";
+    if (element instanceof HTMLInputElement) {
+      if (element.type === "checkbox") return "checkbox";
+      if (element.type === "radio") return "radio";
+      if (["button", "reset", "submit"].includes(element.type)) return "button";
+      return "textbox";
+    }
+    if (/^H[1-6]$/.test(element.tagName)) return "heading";
+    if (element instanceof HTMLImageElement) return "img";
+    return null;
+  };
   while (queue.length > 0 && nodes.length < maxNodes && scanned < 10000) {
     if (signal.aborted) throw new Error("Browser snapshot cancelled");
     const scope = queue.shift();
@@ -965,7 +980,7 @@ const snapshotScript = `async ({ input, signal }) => {
       const editable = element.matches("input,textarea,[contenteditable]") || element.closest("[contenteditable]") !== null || element.isContentEditable || document.designMode === "on";
       const text = editable ? "" : (element.innerText || element.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 240);
       const label = element.getAttribute("aria-label") || "";
-      const role = element.getAttribute("role") || (interactive ? element.localName : "");
+      const role = element.getAttribute("role") || implicitRole(element) || (interactive ? element.localName : "");
       if (!interactive && !text && !label) continue;
       nodes.push({
         locator: { selectors: [...scope.shadowHosts, selectorFor(element, scope.root)] },
