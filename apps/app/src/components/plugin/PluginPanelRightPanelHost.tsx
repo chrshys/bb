@@ -255,6 +255,9 @@ export function PluginPanelRightPanelHost({
   const [isCompactDrawerOpen, setCompactDrawerOpen] = useAtom(
     compactDrawerOpenAtomFamily(panelStateId),
   );
+  const closeCompactDrawer = useCallback(() => {
+    setCompactDrawerOpen(false);
+  }, [setCompactDrawerOpen]);
   const isCompactViewport = useIsCompactViewport();
   const isOpen = isCompactViewport
     ? isCompactDrawerOpen
@@ -295,6 +298,7 @@ export function PluginPanelRightPanelHost({
     syncThreadId: null,
     environmentId: null,
     fileOwnerThreadId: null,
+    onCloseLastTab: closeCompactDrawer,
     preserveWorkspaceTabsAcrossContexts: true,
     storageFiles: undefined,
     terminalSessions: undefined,
@@ -338,8 +342,8 @@ export function PluginPanelRightPanelHost({
   ]);
 
   useEffect(() => {
-    setCompactDrawerOpen(false);
-  }, [setCompactDrawerOpen, subPath]);
+    closeCompactDrawer();
+  }, [closeCompactDrawer, subPath]);
 
   const revealPanel = useCallback(() => {
     if (isCompactViewport) {
@@ -469,11 +473,11 @@ export function PluginPanelRightPanelHost({
   );
   const hidePanel = useCallback(() => {
     if (isCompactViewport) {
-      setCompactDrawerOpen(false);
+      closeCompactDrawer();
       return;
     }
     closePersistedPanel();
-  }, [closePersistedPanel, isCompactViewport, setCompactDrawerOpen]);
+  }, [closeCompactDrawer, closePersistedPanel, isCompactViewport]);
   const openNewTab = useCallback(() => {
     openTab({ kind: "new-tab" });
     revealPanel();

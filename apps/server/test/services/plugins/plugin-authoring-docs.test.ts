@@ -162,6 +162,7 @@ const BB_PLUGIN_API_KEYS = [
   "experimental_browser",
   "hosts",
   "experimental_aiServices",
+  "experimental_hooks",
   "sdk",
   "onDispose",
 ] as const satisfies readonly (keyof BbPluginApi)[];
@@ -211,6 +212,17 @@ const THREAD_EVENT_PAYLOAD_FIELDS = {
   "thread.failed": ["thread", "error"],
   "thread.archived": ["thread"],
   "thread.deleted": ["thread"],
+  "message.queued": ["entry"],
+  "message.dispatched": ["entry"],
+  "turn.failed": [
+    "threadId",
+    "requestId",
+    "turnId",
+    "errorInfo",
+    "inputAccepted",
+    "rateLimits",
+    "attemptNumber",
+  ],
 } as const satisfies {
   [E in keyof PluginThreadEventPayloads]: readonly (keyof PluginThreadEventPayloads[E])[];
 };
