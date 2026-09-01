@@ -112,6 +112,15 @@ describe("Browser operation contract", () => {
         url: "file:///Users/test/page.html",
       }),
     });
+    await executeBrowserOperation({
+      browser,
+      context: agentContext,
+      defaultHomepageUrl: "https://search.example/",
+      operation: browserOperationSchema.parse({
+        operation: "open",
+      }),
+    });
+
 
     expect(calls).toEqual([
       {
@@ -120,7 +129,10 @@ describe("Browser operation contract", () => {
         timeoutMs: undefined,
       },
     ]);
-    expect(openCalls).toEqual(["file:///Users/test/page.html"]);
+    expect(openCalls).toEqual([
+      "file:///Users/test/page.html",
+      "https://search.example/",
+    ]);
   });
 
   it("rejects ambiguous agent targets before service dispatch", () => {

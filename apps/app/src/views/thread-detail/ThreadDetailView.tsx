@@ -175,7 +175,6 @@ import {
   LazyThreadTerminalPanel,
   LazyWorkspaceFilePreviewTabContent,
 } from "@/components/secondary-panel/lazySecondaryPanelComponents";
-import type { BrowserAddressFocusRequest } from "@/components/secondary-panel/BrowserTabContent";
 import {
   SIDE_CHAT_PLUGIN_ID,
   SIDE_CHAT_PLUGIN_PANEL_ACTION_ID,
@@ -654,8 +653,6 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
     () => setShouldAutoFocusNewTab(false),
     [],
   );
-  const [browserAddressFocusRequest, setBrowserAddressFocusRequest] =
-    useState<BrowserAddressFocusRequest | null>(null);
   const shouldLoadThreadStorageFiles = shouldLoadThreadStorageFileList({
     hasThread: thread !== undefined,
     isSecondaryPanelOpen,
@@ -716,17 +713,6 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
   });
   const browserDeckThreadId = thread?.id ?? null;
   const browserDeckEnvironmentId = thread?.environmentId ?? null;
-  const handleBrowserAddressFocusRequestConsumed = useCallback(
-    (request: BrowserAddressFocusRequest) => {
-      setBrowserAddressFocusRequest((current) =>
-        current?.requestId === request.requestId &&
-        current.tabId === request.tabId
-          ? null
-          : current,
-      );
-    },
-    [],
-  );
   const openPersistedWorkspaceFile =
     useCallback<ThreadSecondaryPanelWorkspaceFileOpenHandler>(
       (file, options) =>
@@ -747,14 +733,10 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
     );
   const openBrowserTab = useCallback(
     (url?: string) => {
-      const browserUrl = url ?? "";
-      const tab = openTab({ kind: "browser", url: browserUrl });
-      if (browserUrl.length === 0 && tab?.kind === "browser") {
-        setBrowserAddressFocusRequest((current) => ({
-          requestId: (current?.requestId ?? 0) + 1,
-          tabId: tab.id,
-        }));
-      }
+      openTab({
+        kind: "browser",
+        url: url ?? "https://www.google.com/",
+      });
     },
     [openTab],
   );
@@ -1153,10 +1135,6 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
         <LazyBrowserTabDeck
           browserTabs={browserTabs}
           activeBrowserTabId={activeBrowserTabId}
-          addressFocusRequest={browserAddressFocusRequest}
-          onAddressFocusRequestConsumed={
-            handleBrowserAddressFocusRequestConsumed
-          }
           onSelectionAddToChat={handleSelectionAddToChat}
           environmentId={browserDeckEnvironmentId}
           canShowNativeBrowserView={canShowNativeBrowserView}
@@ -1169,12 +1147,10 @@ function ThreadDetailViewInternal(props: ThreadRoutePathArgs) {
       );
     },
     [
-      browserAddressFocusRequest,
       browserTabs,
       browserDeckEnvironmentId,
       browserDeckThreadId,
       thread?.projectId,
-      handleBrowserAddressFocusRequestConsumed,
       handleSelectionAddToChat,
       updateBrowserTab,
     ],

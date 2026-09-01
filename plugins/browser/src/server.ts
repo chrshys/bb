@@ -19,12 +19,22 @@ function errorResult(error: unknown): PluginAgentToolResult {
 }
 
 export default function plugin(bb: BbPluginApi) {
+  const settings = bb.settings.define({
+    homepageUrl: {
+      type: "string",
+      label: "Default URL for new browser tabs",
+      description:
+        "Used when an agent opens a Browser tab without specifying a URL.",
+      default: "https://www.google.com/",
+    },
+  });
+
   bb.agents.registerTool({
     name: toolName,
     description:
       "Create, inspect, and control visible BB Browser tabs in an explicitly selected client and panel owner.",
     instructions:
-      "Call operation=list before every action. Operation=open can create the first visible tab in the current thread without an existing tab; use its returned exact client/window/tab/navigation revision for later actions. Snapshot before ref actions, and never assume an active Browser tab. Navigation, interactions, screenshots, waits, diagnostics, and scripts run only through the visible native Browser service.",
+      "Call operation=list before every action. Operation=open can create the first visible tab in the current thread without an existing tab; omit url to open the configured default URL. Use its returned exact client/window/tab/navigation revision for later actions. Snapshot before ref actions, and never assume an active Browser tab. Navigation, interactions, screenshots, waits, diagnostics, and scripts run only through the visible native Browser service.",
     presentation: {
       label: {
         pending: "Controlling Browser",
@@ -35,9 +45,11 @@ export default function plugin(bb: BbPluginApi) {
     parameters: browserOperationSchema,
     async execute(operation, context) {
       try {
+        const { homepageUrl } = await settings.get();
         const result = await executeBrowserOperation({
           browser: bb,
           context,
+          defaultHomepageUrl: homepageUrl,
           operation,
         });
         return JSON.stringify(result);

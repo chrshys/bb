@@ -298,7 +298,7 @@ const listOperationSchema = z
 const openOperationSchema = z
   .object({
     operation: z.literal("open"),
-    url: z.string().min(1).max(16_384),
+    url: z.string().min(1).max(16_384).optional(),
     clientId: z.string().min(1).max(128).optional(),
     windowId: z.string().min(1).max(128).optional(),
     ownerId: z.string().min(1).max(256).optional(),
@@ -435,9 +435,10 @@ const diagnosticsSource = `({ signal }) => {
 export async function executeBrowserOperation(args: {
   browser: BrowserAccess;
   context: BrowserContext;
+  defaultHomepageUrl?: string;
   operation: BrowserOperation;
 }): Promise<unknown> {
-  const { browser, context, operation } = args;
+  const { browser, context, defaultHomepageUrl, operation } = args;
   if (operation.operation === "list") {
     const filter = {
       ...(operation.threadId === undefined
@@ -454,20 +455,24 @@ export async function executeBrowserOperation(args: {
     };
   }
   if (operation.operation === "open") {
-    return browser.experimental_browser.openTab(context, operation.url, {
-      ...(operation.clientId === undefined
-        ? {}
-        : { clientId: operation.clientId }),
-      ...(operation.windowId === undefined
-        ? {}
-        : { windowId: operation.windowId }),
-      ...(operation.ownerId === undefined
-        ? {}
-        : { ownerId: operation.ownerId }),
-      ...(operation.timeoutMs === undefined
-        ? {}
-        : { timeoutMs: operation.timeoutMs }),
-    });
+    return browser.experimental_browser.openTab(
+      context,
+      operation.url ?? defaultHomepageUrl ?? "https://www.google.com/",
+      {
+        ...(operation.clientId === undefined
+          ? {}
+          : { clientId: operation.clientId }),
+        ...(operation.windowId === undefined
+          ? {}
+          : { windowId: operation.windowId }),
+        ...(operation.ownerId === undefined
+          ? {}
+          : { ownerId: operation.ownerId }),
+        ...(operation.timeoutMs === undefined
+          ? {}
+          : { timeoutMs: operation.timeoutMs }),
+      },
+    );
   }
   if (operation.operation === "run") {
     return browser.experimental_browser.run(
