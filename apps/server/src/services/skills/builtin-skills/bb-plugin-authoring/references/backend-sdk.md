@@ -26,7 +26,9 @@ Call `listOwners(context, filter?)` to discover visible panel owners even when
 they contain no tabs. It returns `BrowserTabOwnerDescriptor` values. Use
 `openTab(context, url, options?)` with `PluginBrowserOpenOptions` to create and
 foreground the first or a subsequent tab in the caller's thread/project owner;
-specify `clientId`, `windowId`, or `ownerId` when discovery is ambiguous.
+specify `clientId`, `windowId`, or `ownerId` when discovery is ambiguous. These
+methods and `listTabs` are defined by `PluginBrowser`; `PluginBrowserTabFilter`
+is its tab filter.
 
 Call `listTabs(context, filter?)` before choosing an existing target.
 `PluginBrowserTabFilter` narrows by thread, project, or active state. The call
@@ -36,25 +38,29 @@ through the connected tab in the same owner. Copy the exact `clientId`,
 `windowId`, `tabId`, and `navigationEpoch` into `BrowserTabTarget`. Browser
 rejects stale targets rather than substituting another tab.
 
-`run(target, action, { context, timeoutMs? })` accepts one
-`BrowserControlAction`, covering snapshots; CSS, accessibility, shadow-root, and
-nested cross-origin frame locators; native pointer and form actions; bounded
-base64 uploads; navigation and tab lifecycle; typed waits; screenshots; one-shot
-dialogs; tab-scoped permissions; page storage; native browser-profile cookie
-import; bounded diagnostics; annotations; and scripts. Discover child frames
-with `list-frames`; only use the returned opaque frame target, and discard it
-after a child-document or main-page revision. Profile import returns counts,
-never cookie values. Clearing imported cookies requires `confirm: true` and
-affects the shared managed Browser partition. Downloads remain blocked and can
-only be observed through a `download-blocked` wait. Scripts default to the
-isolated world; use `main` only for page-owned JavaScript state.
+`run(target, action, { context, timeoutMs? })` accepts a
+`BrowserControlAction` and returns action-specific results such as
+`BrowserWaitResult`; `BrowserWaitCriteria` defines wait actions. It covers
+snapshots; CSS, accessibility, shadow-root, and nested cross-origin frame
+locators; native pointer and form actions; bounded base64 uploads; navigation
+and tab lifecycle; typed waits; screenshots; one-shot dialogs; tab-scoped
+permissions; page storage; native browser-profile cookie import; bounded
+diagnostics; annotations; and scripts. Discover child frames with `list-frames`;
+only use the returned `BrowserFrameDescriptor` and its opaque
+`BrowserFrameTarget`, and discard it after a child-document or main-page
+revision. Profile import returns counts, never cookie values. Clearing imported
+cookies requires `confirm: true` and affects the shared managed Browser
+partition. Downloads remain blocked and can only be observed through a
+`download-blocked` wait. Scripts default to the isolated world; use `main` only
+for page-owned JavaScript state.
 
 For bounded multi-target work, use `bb.sdk.browser.batch` with explicit item
 ids, targets, and actions. It preserves input order, limits concurrency to four,
 and returns an independent success or error for every item.
 
-All failures — cancellation, timeout, navigation, disconnect, and stale target
-— reject; do not retry against a different client, window, tab, or revision.
+All failures reject as `BrowserControlError` with a stable `code`, including
+cancellation, timeout, navigation, disconnect, and stale target. Do not retry
+against a different client, window, tab, or revision.
 
 **Area map.** Every area below is reachable from `bb.sdk`. This lists the
 methods, not their arguments — read the bundled `bb-plugin-sdk.d.ts` for exact
