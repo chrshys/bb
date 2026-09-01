@@ -16,8 +16,9 @@ import {
 } from "@bb/shared-ui/tooltip";
 import { appToast } from "@/components/ui/app-toast";
 import { copyImageToClipboardWithToast } from "@/lib/clipboard";
+import type { BrowserScreenshotEditorSnapshot } from "./browserAnnotationState";
 
-type Tool = "pen" | "highlight" | "arrow" | "rect" | "ellipse" | "text";
+export type Tool = "pen" | "highlight" | "arrow" | "rect" | "ellipse" | "text";
 
 type Point = { x: number; y: number };
 
@@ -56,13 +57,15 @@ type TextShape = {
   text: string;
 };
 
-type Shape = InkShape | ArrowShape | BoxShape | TextShape;
+export type Shape = InkShape | ArrowShape | BoxShape | TextShape;
 
 type PendingText = { at: Point; id: string };
 
 interface BrowserScreenshotAnnotationProps {
   screenshotUrl: string;
   onClose: () => void;
+  initialEditorState?: BrowserScreenshotEditorSnapshot;
+  onEditorStateChange?: (editor: BrowserScreenshotEditorSnapshot) => void;
 }
 
 const COLOR_OPTIONS = [
@@ -212,19 +215,29 @@ export function annotatedScreenshotBlob(
 export function BrowserScreenshotAnnotation({
   screenshotUrl,
   onClose,
+  initialEditorState,
+  onEditorStateChange,
 }: BrowserScreenshotAnnotationProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const activeShapeRef = useRef<Shape | null>(null);
   const shapesRef = useRef<Shape[]>([]);
-  const [color, setColor] = useState<string>(COLOR_OPTIONS[0].value);
-  const [fontSize, setFontSize] = useState(18);
-  const [past, setPast] = useState<Shape[][]>([]);
+  const [color, setColor] = useState<string>(
+    initialEditorState?.color ?? COLOR_OPTIONS[0].value,
+  );
+  const [fontSize, setFontSize] = useState(initialEditorState?.fontSize ?? 18);
+  const [past, setPast] = useState<Shape[][]>(initialEditorState?.past ?? []);
   const [pendingText, setPendingText] = useState<PendingText | null>(null);
-  const [redo, setRedo] = useState<Shape[][]>([]);
-  const [shapes, setShapes] = useState<Shape[]>([]);
-  const [tool, setTool] = useState<Tool>("pen");
-  const [width, setWidth] = useState(4);
+  const [redo, setRedo] = useState<Shape[][]>(initialEditorState?.redo ?? []);
+  const [shapes, setShapes] = useState<Shape[]>(
+    initialEditorState?.shapes ?? [],
+  );
+  const [tool, setTool] = useState<Tool>(initialEditorState?.tool ?? "pen");
+  const [width, setWidth] = useState(initialEditorState?.width ?? 4);
+
+  useEffect(() => {
+    onEditorStateChange?.({ color, fontSize, past, redo, shapes, tool, width });
+  }, [color, fontSize, onEditorStateChange, past, redo, shapes, tool, width]);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;

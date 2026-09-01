@@ -6,6 +6,7 @@ import {
   BrowserTabContent,
   type BrowserAddressFocusRequest,
 } from "./BrowserTabContent";
+import { clearBrowserAnnotationRecordsForTab } from "./browserAnnotationState";
 import {
   createBrowserViewVisibilityCoordinator,
   destroyPersistedBrowserView,
@@ -67,6 +68,7 @@ export function BrowserTabLifecycleObserver({
       for (const tabId of previous.tabIds) {
         if (!tabIds.has(tabId)) {
           destroyPersistedBrowserView({ desktopBrowser, tabId });
+          clearBrowserAnnotationRecordsForTab(tabId);
         }
       }
     }

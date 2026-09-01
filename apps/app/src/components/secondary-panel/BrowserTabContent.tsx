@@ -93,6 +93,18 @@ import {
   setBrowserCookieImportRecord,
   subscribeBrowserCookieImportRecord,
 } from "@/lib/browser-cookie-import-state";
+import {
+  browserAnnotationSnapshot,
+  clearBrowserAnnotationRecord,
+  createEmptyBrowserScreenshotEditor,
+  markBrowserAnnotationEpoch,
+  setBrowserAnnotationElements,
+  setBrowserAnnotationScreenshot,
+  subscribeBrowserAnnotationStore,
+  type BrowserAnnotationKey,
+  type BrowserElementReviewDraft,
+  type BrowserScreenshotEditorSnapshot,
+} from "./browserAnnotationState";
 
 interface BrowserTabContentProps {
   tabId: string;
@@ -491,8 +503,10 @@ interface BrowserElementAnnotationReviewProps {
   annotation: BrowserElementAnnotation;
   dialogLabel: string;
   screenshotUrl: string | null;
-  initialComment: string;
-  initialIntent: BrowserElementAnnotationIntent;
+  comment: string;
+  intent: BrowserElementAnnotationIntent;
+  onCommentChange: (comment: string) => void;
+  onIntentChange: (intent: BrowserElementAnnotationIntent) => void;
   submitLabel: string;
   onSubmit: (comment: string, intent: BrowserElementAnnotationIntent) => void;
   onClose: () => void;
@@ -569,15 +583,14 @@ function BrowserElementAnnotationReview({
   annotation,
   dialogLabel,
   screenshotUrl,
-  initialComment,
-  initialIntent,
+  comment,
+  intent,
+  onCommentChange,
+  onIntentChange,
   submitLabel,
   onSubmit,
   onClose,
 }: BrowserElementAnnotationReviewProps) {
-  const [comment, setComment] = useState(initialComment);
-  const [intent, setIntent] =
-    useState<BrowserElementAnnotationIntent>(initialIntent);
   const canSubmit = !annotation.sensitive && comment.trim().length > 0;
   const cardWidth = 352;
   const inset = 12;
@@ -643,7 +656,7 @@ function BrowserElementAnnotationReview({
               value={comment}
               maxLength={2_000}
               autoFocus
-              onChange={(event) => setComment(event.target.value)}
+              onChange={(event) => onCommentChange(event.target.value)}
               placeholder="Describe what the agent should change here..."
               className="h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
             />
@@ -657,7 +670,7 @@ function BrowserElementAnnotationReview({
                   key={option}
                   type="button"
                   aria-pressed={intent === option}
-                  onClick={() => setIntent(option)}
+                  onClick={() => onIntentChange(option)}
                   className={cn(
                     "h-8 rounded-md border px-3 text-xs font-medium transition-colors",
                     intent === option
@@ -899,36 +912,48 @@ export function BrowserTabContent({
     );
     return () => window.clearTimeout(timeout);
   }, [appToasts.length]);
-  const [pendingElementAnnotation, setPendingElementAnnotation] =
-    useState<BrowserElementAnnotation | null>(null);
-  const [
-    pendingElementAnnotationScreenshotUrl,
-    setPendingElementAnnotationScreenshotUrl,
-  ] = useState<string | null>(null);
-  const [
-    elementAnnotationPageSnapshotUrl,
-    setElementAnnotationPageSnapshotUrl,
-  ] = useState<string | null>(null);
-  const [elementAnnotations, setElementAnnotations] = useState<
-    readonly BrowserElementAnnotationNote[]
-  >([]);
-  const [editingElementAnnotationId, setEditingElementAnnotationId] = useState<
-    string | null
-  >(null);
+  const annotationKey = useMemo<BrowserAnnotationKey>(
+    () => ({ environmentId, threadId, tabId }),
+    [environmentId, threadId, tabId],
+  );
+  const annotationRecord = useSyncExternalStore(
+    subscribeBrowserAnnotationStore,
+    () => browserAnnotationSnapshot(annotationKey),
+    () => null,
+  );
+  const annotationRecordRef = useRef(annotationRecord);
+  annotationRecordRef.current = annotationRecord;
+  const isAnnotationTargetCurrent =
+    state !== null &&
+    annotationRecord !== null &&
+    state.tabId === tabId &&
+    state.navigationEpoch === annotationRecord.navigationEpoch;
+  const screenshotAnnotationUrl = isAnnotationTargetCurrent
+    ? (annotationRecord?.screenshot?.screenshotUrl ?? null)
+    : null;
+  const elementAnnotationPageSnapshotUrl = isAnnotationTargetCurrent
+    ? (annotationRecord?.elements?.pageSnapshotUrl ?? null)
+    : null;
+  const elementAnnotations: readonly BrowserElementAnnotationNote[] =
+    isAnnotationTargetCurrent ? (annotationRecord?.elements?.notes ?? []) : [];
+  const activeReviewDraft: BrowserElementReviewDraft | null =
+    isAnnotationTargetCurrent
+      ? (annotationRecord?.elements?.review ?? null)
+      : null;
+  const pendingElementAnnotation =
+    activeReviewDraft?.kind === "new" ? activeReviewDraft.annotation : null;
   const editingElementAnnotation =
-    editingElementAnnotationId === null
-      ? null
-      : (elementAnnotations.find(
-          (annotation) => annotation.id === editingElementAnnotationId,
-        ) ?? null);
-  const [screenshotAnnotationUrl, setScreenshotAnnotationUrl] = useState<
-    string | null
-  >(null);
+    activeReviewDraft?.kind === "edit"
+      ? (elementAnnotations.find(
+          (annotation) => annotation.id === activeReviewDraft.noteId,
+        ) ?? null)
+      : null;
   const [activeElementPickerMode, setActiveElementPickerMode] = useState<
     "annotate" | "grab" | null
   >(null);
   const [isResumingElementPicker, setIsResumingElementPicker] = useState(false);
   const elementPickerControllerRef = useRef<AbortController | null>(null);
+  const elementPickerEpochRef = useRef<number | null>(null);
   const cookieImportInputRef = useRef<HTMLInputElement | null>(null);
   const [cookieImportMessage, setCookieImportMessage] = useState<string | null>(
     null,
@@ -1021,7 +1046,8 @@ export function BrowserTabContent({
     });
   }, [canShowNativeBrowserView, currentUrl, state]);
   const runElementPickerCleanup = useCallback(() => {
-    const expectedNavigationEpoch = state?.navigationEpoch;
+    const expectedNavigationEpoch =
+      elementPickerEpochRef.current ?? state?.navigationEpoch;
     const runPageScript = desktopBrowser?.experimental_runBrowserPageScript;
     if (runPageScript === undefined || expectedNavigationEpoch === undefined) {
       return;
@@ -1048,78 +1074,202 @@ export function BrowserTabContent({
   }, [runElementPickerCleanup]);
 
   const closeElementAnnotation = useCallback(() => {
-    setPendingElementAnnotation(null);
-    setPendingElementAnnotationScreenshotUrl(null);
-  }, []);
+    const record = annotationRecordRef.current;
+    if (record === null || record === undefined) return;
+    const elements = record.elements;
+    if (elements === null || elements.review === null) return;
+    setBrowserAnnotationElements(annotationKey, record.navigationEpoch, {
+      ...elements,
+      review: null,
+    });
+  }, [annotationKey]);
 
   const addElementAnnotation = useCallback(
     (comment: string, intent: BrowserElementAnnotationIntent) => {
-      if (pendingElementAnnotation === null) return;
-      setElementAnnotations((current) => [
-        ...current,
-        {
-          annotation: pendingElementAnnotation,
-          comment,
-          createdAt: new Date().toISOString(),
-          id: crypto.randomUUID(),
-          pageId: tabId,
-          intent,
-          screenshotUrl: pendingElementAnnotationScreenshotUrl,
-          priority: "important",
-        },
-      ]);
+      const record = annotationRecordRef.current;
+      if (record === null || record === undefined) return;
+      const elements = record.elements;
+      if (elements === null) return;
+      const draft = elements.review;
+      if (draft === null || draft.kind !== "new") {
+        return;
+      }
+      const note: BrowserElementAnnotationNote = {
+        annotation: draft.annotation,
+        comment,
+        createdAt: new Date().toISOString(),
+        id: crypto.randomUUID(),
+        pageId: tabId,
+        intent,
+        screenshotUrl: draft.screenshotUrl,
+        priority: "important",
+      };
+      setBrowserAnnotationElements(annotationKey, record.navigationEpoch, {
+        pageSnapshotUrl: elements.pageSnapshotUrl,
+        notes: [...elements.notes, note],
+        review: null,
+      });
       runElementPickerCleanup();
-      closeElementAnnotation();
     },
-    [
-      closeElementAnnotation,
-      pendingElementAnnotation,
-      pendingElementAnnotationScreenshotUrl,
-      runElementPickerCleanup,
-      tabId,
-    ],
+    [annotationKey, runElementPickerCleanup, tabId],
+  );
+
+  const updateElementReviewDraft = useCallback(
+    (draft: BrowserElementReviewDraft) => {
+      const record = annotationRecordRef.current;
+      if (record === null || record === undefined) return;
+      const elements = record.elements;
+      if (elements === null) return;
+      setBrowserAnnotationElements(annotationKey, record.navigationEpoch, {
+        ...elements,
+        review: draft,
+      });
+    },
+    [annotationKey],
   );
 
   const updateElementAnnotation = useCallback(
     (comment: string, intent: BrowserElementAnnotationIntent) => {
-      if (editingElementAnnotationId === null) return;
-      setElementAnnotations((current) =>
-        current.map((annotation) =>
-          annotation.id === editingElementAnnotationId
+      const record = annotationRecordRef.current;
+      if (record === null || record === undefined) return;
+      const elements = record.elements;
+      if (elements === null) return;
+      const draft = elements.review;
+      if (draft === null || draft.kind !== "edit") {
+        return;
+      }
+      setBrowserAnnotationElements(annotationKey, record.navigationEpoch, {
+        ...elements,
+        notes: elements.notes.map((annotation) =>
+          annotation.id === draft.noteId
             ? { ...annotation, comment, intent }
             : annotation,
         ),
-      );
-      setEditingElementAnnotationId(null);
+        review: null,
+      });
     },
-    [editingElementAnnotationId],
+    [annotationKey],
+  );
+
+  const clearElementAnnotations = useCallback(() => {
+    const record = annotationRecordRef.current;
+    if (record === null || record === undefined || record.elements === null) {
+      return;
+    }
+    setBrowserAnnotationElements(annotationKey, record.navigationEpoch, null);
+  }, [annotationKey]);
+
+  const editElementAnnotation = useCallback(
+    (note: BrowserElementAnnotationNote) => {
+      const record = annotationRecordRef.current;
+      if (record === null || record === undefined) return;
+      const elements = record.elements;
+      if (elements === null) return;
+      setBrowserAnnotationElements(annotationKey, record.navigationEpoch, {
+        ...elements,
+        review: {
+          comment: note.comment,
+          intent: note.intent,
+          kind: "edit",
+          noteId: note.id,
+        },
+      });
+    },
+    [annotationKey],
+  );
+
+  const removeElementAnnotation = useCallback(
+    (id: string) => {
+      const record = annotationRecordRef.current;
+      if (record === null || record === undefined) return;
+      const elements = record.elements;
+      if (elements === null) return;
+      const notes = elements.notes.filter((annotation) => annotation.id !== id);
+      setBrowserAnnotationElements(annotationKey, record.navigationEpoch, {
+        pageSnapshotUrl: notes.length > 0 ? elements.pageSnapshotUrl : null,
+        notes,
+        review:
+          elements.review?.kind === "edit" && elements.review.noteId === id
+            ? null
+            : elements.review,
+      });
+    },
+    [annotationKey],
   );
 
   const closeScreenshotAnnotation = useCallback(() => {
-    setScreenshotAnnotationUrl(null);
-  }, []);
+    const record = annotationRecordRef.current;
+    if (record === null || record === undefined || record.screenshot === null) {
+      return;
+    }
+    setBrowserAnnotationScreenshot(annotationKey, record.navigationEpoch, null);
+  }, [annotationKey]);
 
+  const publishScreenshotEditor = useCallback(
+    (editor: BrowserScreenshotEditorSnapshot) => {
+      const record = annotationRecordRef.current;
+      if (record === null || record === undefined || record.screenshot === null) {
+        return;
+      }
+      setBrowserAnnotationScreenshot(annotationKey, record.navigationEpoch, {
+        ...record.screenshot,
+        editor,
+      });
+    },
+    [annotationKey],
+  );
+
+  const annotationTargetRef = useRef<{ epoch: number | null; url: string | null }>(
+    { epoch: null, url: null },
+  );
   useEffect(() => {
+    const epoch = state?.navigationEpoch;
+    if (epoch === undefined) return;
+    const previous = annotationTargetRef.current;
+    const firstObservation = previous.epoch === null;
+    const epochChanged = previous.epoch !== epoch;
+    const urlChanged = previous.url !== null && previous.url !== currentUrl;
+    annotationTargetRef.current = { epoch, url: currentUrl };
+    if (firstObservation) {
+      markBrowserAnnotationEpoch(annotationKey, epoch);
+      const stored = annotationRecordRef.current;
+      if (stored !== null && stored.navigationEpoch !== epoch) {
+        clearBrowserAnnotationRecord(annotationKey);
+      }
+      return;
+    }
+    if (!epochChanged && !urlChanged) return;
+    if (epochChanged) {
+      markBrowserAnnotationEpoch(annotationKey, epoch);
+    }
+    clearBrowserAnnotationRecord(annotationKey);
     cancelElementPicker();
-    closeElementAnnotation();
-    closeScreenshotAnnotation();
-    setElementAnnotations([]);
-    setElementAnnotationPageSnapshotUrl(null);
     setIsResumingElementPicker(false);
-    setEditingElementAnnotationId(null);
-  }, [
-    cancelElementPicker,
-    closeElementAnnotation,
-    closeScreenshotAnnotation,
-    currentUrl,
-    state?.navigationEpoch,
-  ]);
+  }, [annotationKey, cancelElementPicker, currentUrl, state?.navigationEpoch]);
 
   useEffect(
     () => () => {
-      elementPickerControllerRef.current?.abort();
+      const controller = elementPickerControllerRef.current;
+      elementPickerControllerRef.current = null;
+      controller?.abort();
+      const epoch = elementPickerEpochRef.current;
+      const runPageScript = desktopBrowser?.experimental_runBrowserPageScript;
+      if (epoch !== null && runPageScript !== undefined) {
+        void runPageScript(
+          {
+            expectedNavigationEpoch: epoch,
+            input: {},
+            requestId: `cancel-element-picker-${crypto.randomUUID()}`,
+            source: browserCancelElementPickerSource,
+            tabId,
+            timeoutMs: 5_000,
+            world: "isolated",
+          },
+          {},
+        ).catch(() => {});
+      }
     },
-    [],
+    [desktopBrowser, tabId],
   );
   const pageLoadErrorText = state?.errorText ?? null;
   const hasPageLoadError = pageLoadErrorText !== null && hasPage;
@@ -1689,6 +1839,7 @@ export function BrowserTabContent({
       const controller = new AbortController();
       elementPickerControllerRef.current?.abort();
       elementPickerControllerRef.current = controller;
+      elementPickerEpochRef.current = expectedNavigationEpoch;
       setActiveElementPickerMode(mode);
       desktopBrowser.focus?.(tabId);
       try {
@@ -1725,6 +1876,7 @@ export function BrowserTabContent({
           return;
         }
         let screenshotUrl: string | null = null;
+        let pageSnapshotUrl: string | null = null;
         if (desktopBrowser.experimental_captureBrowserPage !== undefined) {
           try {
             const screenshot =
@@ -1742,13 +1894,27 @@ export function BrowserTabContent({
                 annotation,
                 capture: screenshot,
               });
-              setElementAnnotationPageSnapshotUrl(screenshot.dataUrl);
+              pageSnapshotUrl = screenshot.dataUrl;
             }
           } catch {}
         }
         if (controller.signal.aborted) return;
-        setPendingElementAnnotation(annotation);
-        setPendingElementAnnotationScreenshotUrl(screenshotUrl);
+        const existingElements = annotationRecordRef.current?.elements;
+        setBrowserAnnotationElements(
+          annotationKey,
+          expectedNavigationEpoch,
+          {
+            notes: existingElements?.notes ?? [],
+            pageSnapshotUrl,
+            review: {
+              annotation,
+              comment: "",
+              intent: "change",
+              kind: "new",
+              screenshotUrl,
+            },
+          },
+        );
       } catch {
       } finally {
         if (elementPickerControllerRef.current === controller) {
@@ -1757,7 +1923,14 @@ export function BrowserTabContent({
         }
       }
     },
-    [desktopBrowser, activeElementPickerMode, isViewVisible, state, tabId],
+    [
+      annotationKey,
+      desktopBrowser,
+      activeElementPickerMode,
+      isViewVisible,
+      state,
+      tabId,
+    ],
   );
   useEffect(() => {
     if (!isResumingElementPicker || !isViewVisible) return;
@@ -1777,18 +1950,22 @@ export function BrowserTabContent({
     ) {
       return;
     }
+    const expectedNavigationEpoch = state.navigationEpoch;
     try {
       const screenshot = await desktopBrowser.experimental_captureBrowserPage({
-        expectedNavigationEpoch: state.navigationEpoch,
+        expectedNavigationEpoch,
         format: "png",
         quality: 100,
         tabId,
       });
-      if (screenshot.navigationEpoch !== state.navigationEpoch) return;
+      if (screenshot.navigationEpoch !== expectedNavigationEpoch) return;
       await preloadBrowserSnapshot(screenshot.dataUrl);
-      setScreenshotAnnotationUrl(screenshot.dataUrl);
+      setBrowserAnnotationScreenshot(annotationKey, expectedNavigationEpoch, {
+        editor: createEmptyBrowserScreenshotEditor(),
+        screenshotUrl: screenshot.dataUrl,
+      });
     } catch {}
-  }, [desktopBrowser, isViewVisible, state, tabId]);
+  }, [annotationKey, desktopBrowser, isViewVisible, state, tabId]);
   const canImportCookies =
     !isImportingCookies &&
     !isClearingImportedCookies &&
@@ -2128,30 +2305,46 @@ export function BrowserTabContent({
           <BrowserScreenshotAnnotation
             screenshotUrl={screenshotAnnotationUrl}
             onClose={closeScreenshotAnnotation}
+            initialEditorState={annotationRecord?.screenshot?.editor}
+            onEditorStateChange={publishScreenshotEditor}
           />
-        ) : pendingElementAnnotation !== null ? (
+        ) : activeReviewDraft !== null && activeReviewDraft.kind === "new" ? (
           <BrowserElementAnnotationReview
             key="new-annotation"
-            annotation={pendingElementAnnotation}
+            annotation={activeReviewDraft.annotation}
             dialogLabel="Add page annotation"
-            screenshotUrl={pendingElementAnnotationScreenshotUrl}
-            initialComment=""
-            initialIntent="change"
+            screenshotUrl={activeReviewDraft.screenshotUrl}
+            comment={activeReviewDraft.comment}
+            intent={activeReviewDraft.intent}
+            onCommentChange={(comment) =>
+              updateElementReviewDraft({ ...activeReviewDraft, comment })
+            }
+            onIntentChange={(intent) =>
+              updateElementReviewDraft({ ...activeReviewDraft, intent })
+            }
             submitLabel="Add"
             onSubmit={addElementAnnotation}
             onClose={closeElementAnnotation}
           />
-        ) : editingElementAnnotation !== null ? (
+        ) : activeReviewDraft !== null &&
+          activeReviewDraft.kind === "edit" &&
+          editingElementAnnotation !== null ? (
           <BrowserElementAnnotationReview
             key={`edit-${editingElementAnnotation.id}`}
             annotation={editingElementAnnotation.annotation}
             dialogLabel="Edit page annotation"
             screenshotUrl={editingElementAnnotation.screenshotUrl}
-            initialComment={editingElementAnnotation.comment}
-            initialIntent={editingElementAnnotation.intent}
+            comment={activeReviewDraft.comment}
+            intent={activeReviewDraft.intent}
+            onCommentChange={(comment) =>
+              updateElementReviewDraft({ ...activeReviewDraft, comment })
+            }
+            onIntentChange={(intent) =>
+              updateElementReviewDraft({ ...activeReviewDraft, intent })
+            }
             submitLabel="Save"
             onSubmit={updateElementAnnotation}
-            onClose={() => setEditingElementAnnotationId(null)}
+            onClose={closeElementAnnotation}
           />
         ) : hasPageLoadError ? (
           <BrowserPageLoadError
@@ -2178,9 +2371,7 @@ export function BrowserTabContent({
             tabId={tabId}
             onAddToChat={onSelectionAddToChat}
             onClear={() => {
-              setElementAnnotations([]);
-              setElementAnnotationPageSnapshotUrl(null);
-              setEditingElementAnnotationId(null);
+              clearElementAnnotations();
             }}
             onCopy={(text) => {
               void copyToClipboardWithToast(text, {
@@ -2188,18 +2379,8 @@ export function BrowserTabContent({
                 errorMessage: "Failed to copy page annotations",
               });
             }}
-            onEdit={(note) => setEditingElementAnnotationId(note.id)}
-            onRemove={(id) =>
-              setElementAnnotations((current) => {
-                const next = current.filter(
-                  (annotation) => annotation.id !== id,
-                );
-                if (next.length === 0) {
-                  setElementAnnotationPageSnapshotUrl(null);
-                }
-                return next;
-              })
-            }
+            onEdit={(note) => editElementAnnotation(note)}
+            onRemove={(id) => removeElementAnnotation(id)}
             onSelectElement={() => {
               setIsResumingElementPicker(true);
             }}

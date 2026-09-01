@@ -38,6 +38,10 @@ import {
   type PluginRegistrationSet,
 } from "@/lib/plugin-slots";
 import { setBrowserCookieImportRecord } from "@/lib/browser-cookie-import-state";
+import {
+  browserAnnotationSnapshot,
+  resetBrowserAnnotationStore,
+} from "./browserAnnotationState";
 
 const desktopInfo = {
   lastCheckedAt: null,
@@ -199,13 +203,16 @@ function renderBrowserChrome(
     canShowNativeBrowserView?: boolean;
     onNativeFocus?: () => void;
     onSelectionAddToChat?: (text: string) => void;
+    threadId?: string;
+    tabId?: string;
+    environmentId?: string | null;
   } = {},
 ) {
   window.bbDesktop = createBbDesktopApi(desktopInfo, harness.api);
   return render(
     <TooltipProvider delayDuration={0}>
       <BrowserTabContent
-        tabId="browser:test"
+        tabId={options.tabId ?? "browser:test"}
         initialUrl={initialUrl}
         addressFocusRequest={null}
         onSelectionAddToChat={options.onSelectionAddToChat}
@@ -215,8 +222,8 @@ function renderBrowserChrome(
         visibilityCoordinator={createBrowserViewVisibilityCoordinator(
           harness.api,
         )}
-        environmentId={null}
-        threadId="thread-1"
+        environmentId={options.environmentId ?? null}
+        threadId={options.threadId ?? "thread-1"}
         projectId="project-1"
         onUpdate={() => {}}
       />
@@ -240,8 +247,12 @@ describe("BrowserTabContent persistent navigation", () => {
     document.documentElement.style.removeProperty("--ring");
     window.localStorage.clear();
     setBrowserCookieImportRecord(null);
+    resetBrowserAnnotationStore();
     resetPluginSlotStoreForTest();
     delete window.bbDesktop;
+    Reflect.deleteProperty(HTMLCanvasElement.prototype, "setPointerCapture");
+    Reflect.deleteProperty(HTMLCanvasElement.prototype, "hasPointerCapture");
+    Reflect.deleteProperty(HTMLCanvasElement.prototype, "releasePointerCapture");
   });
 
   it("keeps the top navigation visible through pointer and focus changes", () => {
@@ -1168,9 +1179,16 @@ describe("BrowserTabContent persistent navigation", () => {
     let pickerSignal: AbortSignal | null = null;
     const runPageScript = vi.fn(
       (
-        _request: unknown,
-        options: { signal?: AbortSignal },
+        request: { source: string },
+        options: { signal?: AbortSignal } = {},
       ): Promise<BrowserPickerResult> => {
+        if (request.source.includes("__bbBrowserElementPickerCleanup?.()")) {
+          return Promise.resolve({
+            navigationEpoch: 7,
+            requestId: "cleanup",
+            value: null,
+          });
+        }
         pickerSignal = options.signal ?? null;
         pickerSignal?.addEventListener("abort", () => {
           selected.reject(new DOMException("cancelled", "AbortError"));
@@ -1195,5 +1213,632 @@ describe("BrowserTabContent persistent navigation", () => {
     view.unmount();
 
     await waitFor(() => expect(pickerSignal?.aborted).toBe(true));
+  });
+  it("restores the screenshot annotation across a thread switch without a second capture", async () => {
+    vi.stubGlobal(
+      "Image",
+      class {
+        public src = "";
+        async decode(): Promise<void> {}
+      },
+    );
+    Object.defineProperty(HTMLCanvasElement.prototype, "setPointerCapture", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(HTMLCanvasElement.prototype, "hasPointerCapture", {
+      configurable: true,
+      value: () => true,
+    });
+    Object.defineProperty(
+      HTMLCanvasElement.prototype,
+      "releasePointerCapture",
+      { configurable: true, value: vi.fn() },
+    );
+    const capturePage = vi.fn().mockResolvedValue({
+      dataUrl: "data:image/png;base64,thread-a-shot",
+      navigationEpoch: 7,
+      pixelSize: { height: 600, width: 800 },
+    });
+    const harness = createBrowserChromeHarness(undefined, undefined, capturePage);
+
+    const viewA = renderBrowserChrome(harness, "https://example.com/one", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    const annotateButton = await screen.findByRole("button", {
+      name: "Annotate screenshot",
+    });
+    await waitFor(() =>
+      expect(annotateButton.hasAttribute("disabled")).toBe(false),
+    );
+    fireEvent.click(annotateButton);
+    await screen.findByRole("region", { name: "Screenshot annotation" });
+    expect(capturePage).toHaveBeenCalledOnce();
+
+    const canvas = screen.getByLabelText("Drawing canvas") as HTMLCanvasElement;
+    fireEvent.pointerDown(canvas, {
+      button: 0,
+      clientX: 12,
+      clientY: 12,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(canvas, { clientX: 60, clientY: 48, pointerId: 1 });
+    fireEvent.pointerUp(canvas, { pointerId: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Arrow" }));
+    expect(
+      screen.getByRole("button", { name: "Undo" }).hasAttribute("disabled"),
+    ).toBe(false);
+
+    viewA.unmount();
+    const viewB = renderBrowserChrome(harness, "https://example.com/one", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-b",
+      tabId: "browser:tab-b",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-b" }),
+      ),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Screenshot annotation" }),
+    ).toBeNull();
+    expect(capturePage).toHaveBeenCalledOnce();
+
+    viewB.unmount();
+    const viewA2 = renderBrowserChrome(harness, "https://example.com/one", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    await screen.findByRole("region", { name: "Screenshot annotation" });
+    expect(capturePage).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", { name: "Undo" }).hasAttribute("disabled"),
+    ).toBe(false);
+    expect(
+      screen.getByRole("button", { name: "Arrow" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "Redo" }).hasAttribute("disabled"),
+    ).toBe(true);
+    viewA2.unmount();
+  });
+
+  it("restores the page-element review draft and tray across a thread switch", async () => {
+    const capture = {
+      accessibility: { description: null, name: "Purchase", role: "button" },
+      ancestorPath: ["main", "body"],
+      dom: {
+        attributes: { role: "button" },
+        classes: [],
+        id: "purchase",
+        selector: "button#purchase",
+        tag: "button",
+      },
+      editable: false,
+      fullDomPath: "body > main > button#purchase",
+      html: '<button id="purchase">Purchase</button>',
+      reactComponents: "<PurchaseButton> <Pricing>",
+      sourceFile: "/app/frontend/src/pricing.tsx:42:3",
+      rect: { height: 32, width: 120, x: 24, y: 48 },
+      capturedAt: "2026-08-31T00:00:00.000Z",
+      devicePixelRatio: 2,
+      nearbyElements: [],
+      rectPage: { height: 32, width: 120, x: 24, y: 48 },
+      scroll: { x: 0, y: 0 },
+      selectedText: null,
+      styles: {
+        backgroundColor: "rgb(0, 0, 0)",
+        color: "rgb(255, 255, 255)",
+        display: "inline-flex",
+        fontSize: "14px",
+        fontWeight: "600",
+        opacity: "1",
+        position: "relative",
+      },
+      text: "Purchase",
+      title: "Pricing",
+      url: "https://example.com/pricing",
+      viewport: { height: 900, width: 1440 },
+    };
+    const runPageScript = vi.fn(async (request) => ({
+      requestId: request.requestId,
+      navigationEpoch: 7,
+      value: capture,
+    }));
+    vi.stubGlobal(
+      "Image",
+      class {
+        public naturalHeight = 900;
+        public naturalWidth = 1440;
+        public src = "";
+        async decode(): Promise<void> {}
+      },
+    );
+    const canvasContext = Object.create(null);
+    canvasContext.drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      canvasContext,
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/jpeg;base64,clipped-element",
+    );
+    const capturePage = vi.fn().mockResolvedValue({
+      dataUrl: "data:image/jpeg;base64,full-page",
+      navigationEpoch: 7,
+      pixelSize: { height: 900, width: 1440 },
+    });
+    const harness = createBrowserChromeHarness(
+      runPageScript,
+      undefined,
+      capturePage,
+    );
+
+    const viewA = renderBrowserChrome(harness, "https://example.com/pricing", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    const pickerButton = await screen.findByRole("button", {
+      name: "Select and annotate page element",
+    });
+    await waitFor(() =>
+      expect(pickerButton.hasAttribute("disabled")).toBe(false),
+    );
+    fireEvent.click(pickerButton);
+    await screen.findByRole("dialog", { name: "Add page annotation" });
+    const preview = screen.getByAltText("Selected page element");
+    expect(preview.getAttribute("src")).toBe(
+      "data:image/jpeg;base64,clipped-element",
+    );
+    expect(screen.getByText("button#purchase")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Feedback"), {
+      target: { value: "Move the CTA above the fold." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Fix" }));
+
+    viewA.unmount();
+    const viewB = renderBrowserChrome(harness, "https://example.com/pricing", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-b",
+      tabId: "browser:tab-b",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-b" }),
+      ),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Add page annotation" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("complementary", { name: "Page annotations" }),
+    ).toBeNull();
+
+    viewB.unmount();
+    const viewA2 = renderBrowserChrome(harness, "https://example.com/pricing", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    await screen.findByRole("dialog", { name: "Add page annotation" });
+    const restoredPreview = screen.getByAltText("Selected page element");
+    expect(restoredPreview.getAttribute("src")).toBe(
+      "data:image/jpeg;base64,clipped-element",
+    );
+    expect(screen.getByText("button#purchase")).not.toBeNull();
+    const feedback = screen.getByLabelText(
+      "Feedback",
+    ) as HTMLTextAreaElement;
+    expect(feedback.value).toBe("Move the CTA above the fold.");
+    expect(
+      screen.getByRole("button", { name: "Fix" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByRole("complementary", { name: "Page annotations" });
+
+    viewA2.unmount();
+    const viewA3 = renderBrowserChrome(harness, "https://example.com/pricing", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    await screen.findByRole("complementary", { name: "Page annotations" });
+    expect(screen.getByText("1 annotation")).not.toBeNull();
+    expect(screen.getByText("Move the CTA above the fold.")).not.toBeNull();
+    viewA3.unmount();
+  });
+
+  it("aborts a pending picker on thread switch and never restarts it", async () => {
+    const picker = { signal: null as AbortSignal | null };
+    const cleanupCalls: Array<{
+      expectedNavigationEpoch: number;
+      tabId: string;
+    }> = [];
+    const runPageScript = vi.fn(
+      (
+        request: { source: string; tabId: string; expectedNavigationEpoch: number },
+        options: { signal?: AbortSignal } = {},
+      ): Promise<BrowserPickerResult> => {
+        if (request.source.includes("__bbBrowserElementPickerCleanup?.()")) {
+          cleanupCalls.push({
+            expectedNavigationEpoch: request.expectedNavigationEpoch,
+            tabId: request.tabId,
+          });
+          return Promise.resolve({
+            navigationEpoch: request.expectedNavigationEpoch,
+            requestId: "cleanup",
+            value: null,
+          });
+        }
+        const pending = createPendingBrowserPicker();
+        picker.signal = options.signal ?? null;
+        picker.signal?.addEventListener("abort", () => {
+          pending.reject(new DOMException("cancelled", "AbortError"));
+        });
+        return pending.promise;
+      },
+    );
+    const harness = createBrowserChromeHarness(runPageScript);
+
+    const viewA = renderBrowserChrome(harness, "https://example.com/one", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    const annotateButton = await screen.findByRole("button", {
+      name: "Select and annotate page element",
+    });
+    await waitFor(() =>
+      expect(annotateButton.hasAttribute("disabled")).toBe(false),
+    );
+    fireEvent.click(annotateButton);
+    await waitFor(() => expect(picker.signal).not.toBeNull());
+    const firstSignal = picker.signal;
+
+    viewA.unmount();
+    await waitFor(() => expect(firstSignal?.aborted).toBe(true));
+    expect(cleanupCalls).toEqual([
+      { expectedNavigationEpoch: 7, tabId: "browser:tab-a" },
+    ]);
+
+    const viewA2 = renderBrowserChrome(harness, "https://example.com/one", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    const grabButton = await screen.findByRole("button", {
+      name: "Grab page element",
+    });
+    await waitFor(() =>
+      expect(grabButton.hasAttribute("disabled")).toBe(false),
+    );
+    const pickerCallsBeforeGrab = runPageScript.mock.calls.length;
+    fireEvent.click(grabButton);
+    await waitFor(() =>
+      expect(runPageScript.mock.calls.length).toBe(pickerCallsBeforeGrab + 1),
+    );
+    const secondSignal = picker.signal;
+    viewA2.unmount();
+    await waitFor(() => expect(secondSignal?.aborted).toBe(true));
+    expect(cleanupCalls).toHaveLength(2);
+    expect(cleanupCalls[1]).toEqual({
+      expectedNavigationEpoch: 7,
+      tabId: "browser:tab-a",
+    });
+
+    const callsAfterReturn = runPageScript.mock.calls.length;
+    const viewA3 = renderBrowserChrome(harness, "https://example.com/one", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "Select and annotate page element" })
+          .hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Cancel element annotation" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Cancel element selection" }),
+    ).toBeNull();
+    expect(runPageScript.mock.calls.length).toBe(callsAfterReturn);
+    viewA3.unmount();
+  });
+
+  it("drops stored screenshot sessions on navigation and rejects stale captures", async () => {
+    let finishCapture:
+      | ((result: {
+          dataUrl: string;
+          navigationEpoch: number;
+          pixelSize: { height: number; width: number };
+        }) => void)
+      | null = null;
+    const pendingCapture = new Promise<{
+      dataUrl: string;
+      navigationEpoch: number;
+      pixelSize: { height: number; width: number };
+    }>((resolve) => {
+      finishCapture = resolve;
+    });
+    const capturePage = vi.fn().mockImplementationOnce(() => pendingCapture);
+    vi.stubGlobal(
+      "Image",
+      class {
+        public src = "";
+        async decode(): Promise<void> {}
+      },
+    );
+    const harness = createBrowserChromeHarness(undefined, undefined, capturePage);
+
+    const view = renderBrowserChrome(harness, "https://example.com/one", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    const annotateButton = await screen.findByRole("button", {
+      name: "Annotate screenshot",
+    });
+    await waitFor(() =>
+      expect(annotateButton.hasAttribute("disabled")).toBe(false),
+    );
+    fireEvent.click(annotateButton);
+    await waitFor(() => expect(capturePage).toHaveBeenCalledOnce());
+
+    act(() =>
+      harness.emitState(
+        browserState({
+          navigationEpoch: 8,
+          tabId: "browser:tab-a",
+          url: "https://example.com/two",
+        }),
+      ),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Screenshot annotation" }),
+    ).toBeNull();
+
+    await act(async () => {
+      finishCapture?.({
+        dataUrl: "data:image/png;base64,stale-shot",
+        navigationEpoch: 7,
+        pixelSize: { height: 600, width: 800 },
+      });
+    });
+    expect(
+      screen.queryByRole("region", { name: "Screenshot annotation" }),
+    ).toBeNull();
+    expect(
+      browserAnnotationSnapshot({
+        environmentId: null,
+        tabId: "browser:tab-a",
+        threadId: "thread-a",
+      }),
+    ).toBeNull();
+
+    view.unmount();
+    const view2 = renderBrowserChrome(harness, "https://example.com/two", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({
+          navigationEpoch: 8,
+          tabId: "browser:tab-a",
+          url: "https://example.com/two",
+        }),
+      ),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Screenshot annotation" }),
+    ).toBeNull();
+    expect(capturePage).toHaveBeenCalledOnce();
+    view2.unmount();
+  });
+
+  it("drops the page-element tray when the URL changes and does not restore it", async () => {
+    const runPageScript = vi.fn(async (request) => ({
+      requestId: request.requestId,
+      navigationEpoch: 7,
+      value: {
+        accessibility: { description: null, name: "Purchase", role: "button" },
+        ancestorPath: ["main", "body"],
+        dom: {
+          attributes: { role: "button" },
+          classes: [],
+          id: "purchase",
+          selector: "button#purchase",
+          tag: "button",
+        },
+        editable: false,
+        fullDomPath: "body > main > button#purchase",
+        html: '<button id="purchase">Purchase</button>',
+        reactComponents: "<PurchaseButton> <Pricing>",
+        sourceFile: "/app/frontend/src/pricing.tsx:42:3",
+        rect: { height: 32, width: 120, x: 24, y: 48 },
+        capturedAt: "2026-08-31T00:00:00.000Z",
+        devicePixelRatio: 2,
+        nearbyElements: [],
+        rectPage: { height: 32, width: 120, x: 24, y: 48 },
+        scroll: { x: 0, y: 0 },
+        selectedText: null,
+        styles: {
+          backgroundColor: "rgb(0, 0, 0)",
+          color: "rgb(255, 255, 255)",
+          display: "inline-flex",
+          fontSize: "14px",
+          fontWeight: "600",
+          opacity: "1",
+          position: "relative",
+        },
+        text: "Purchase",
+        title: "Pricing",
+        url: "https://example.com/pricing",
+        viewport: { height: 900, width: 1440 },
+      },
+    }));
+    vi.stubGlobal(
+      "Image",
+      class {
+        public naturalHeight = 900;
+        public naturalWidth = 1440;
+        public src = "";
+        async decode(): Promise<void> {}
+      },
+    );
+    const canvasContext = Object.create(null);
+    canvasContext.drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      canvasContext,
+    );
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/jpeg;base64,clipped-element",
+    );
+    const capturePage = vi.fn().mockResolvedValue({
+      dataUrl: "data:image/jpeg;base64,full-page",
+      navigationEpoch: 7,
+      pixelSize: { height: 900, width: 1440 },
+    });
+    const harness = createBrowserChromeHarness(
+      runPageScript,
+      undefined,
+      capturePage,
+    );
+
+    const view = renderBrowserChrome(harness, "https://example.com/pricing", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      threadId: "thread-a",
+      tabId: "browser:tab-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ navigationEpoch: 7, tabId: "browser:tab-a" }),
+      ),
+    );
+    const pickerButton = await screen.findByRole("button", {
+      name: "Select and annotate page element",
+    });
+    await waitFor(() =>
+      expect(pickerButton.hasAttribute("disabled")).toBe(false),
+    );
+    fireEvent.click(pickerButton);
+    await screen.findByRole("dialog", { name: "Add page annotation" });
+    fireEvent.change(screen.getByLabelText("Feedback"), {
+      target: { value: "Why is this action disabled?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByRole("complementary", { name: "Page annotations" });
+
+    act(() =>
+      harness.emitState(
+        browserState({
+          navigationEpoch: 7,
+          tabId: "browser:tab-a",
+          url: "https://example.com/pricing?page=two",
+        }),
+      ),
+    );
+    expect(
+      screen.queryByRole("complementary", { name: "Page annotations" }),
+    ).toBeNull();
+    expect(
+      browserAnnotationSnapshot({
+        environmentId: null,
+        tabId: "browser:tab-a",
+        threadId: "thread-a",
+      }),
+    ).toBeNull();
+
+    view.unmount();
+    const view2 = renderBrowserChrome(
+      harness,
+      "https://example.com/pricing?page=two",
+      {
+        canHandleBrowserCommands: true,
+        canShowNativeBrowserView: true,
+        threadId: "thread-a",
+        tabId: "browser:tab-a",
+      },
+    );
+    act(() =>
+      harness.emitState(
+        browserState({
+          navigationEpoch: 7,
+          tabId: "browser:tab-a",
+          url: "https://example.com/pricing?page=two",
+        }),
+      ),
+    );
+    expect(
+      screen.queryByRole("complementary", { name: "Page annotations" }),
+    ).toBeNull();
+    view2.unmount();
   });
 });

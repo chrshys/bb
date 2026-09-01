@@ -16,6 +16,13 @@ import {
 } from "@/test/bb-desktop-test-utils";
 import { POINTER_COARSE_QUERY } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import { TooltipProvider } from "@bb/shared-ui/tooltip";
+import {
+  browserAnnotationSnapshot,
+  createEmptyBrowserScreenshotEditor,
+  markBrowserAnnotationEpoch,
+  resetBrowserAnnotationStore,
+  setBrowserAnnotationScreenshot,
+} from "./browserAnnotationState";
 import { BrowserTabDeck, BrowserTabLifecycleObserver } from "./BrowserTabDeck";
 import { resetBrowserViewPersistence } from "./browserViewVisibilityCoordinator";
 
@@ -59,6 +66,13 @@ function makeBrowserTab(id: string, url: string): BrowserFixedPanelTab {
     kind: "browser",
     title: null,
     url,
+  };
+}
+
+function screenshotSessionForTest() {
+  return {
+    editor: createEmptyBrowserScreenshotEditor(),
+    screenshotUrl: "data:image/png;base64,session",
   };
 }
 
@@ -181,6 +195,7 @@ describe("BrowserTabLifecycleObserver", () => {
     cleanup();
     vi.restoreAllMocks();
     resetBrowserViewPersistence();
+    resetBrowserAnnotationStore();
     delete window.bbDesktop;
   });
 
@@ -201,6 +216,79 @@ describe("BrowserTabLifecycleObserver", () => {
     expect(
       visibility.filter((request) => request.tabId === "tab-closed"),
     ).toEqual([{ tabId: "tab-closed", visible: false }]);
+  });
+
+  it("clears a closed tab's annotation record but keeps another tab's", async () => {
+    const { api, detachments } = createRecordingBrowserApi();
+    installDesktopBrowser(api);
+    const keyClosed = {
+      environmentId: null,
+      tabId: "tab-closed",
+      threadId: "thread-1",
+    };
+    const keyKept = {
+      environmentId: null,
+      tabId: "tab-kept",
+      threadId: "thread-1",
+    };
+    markBrowserAnnotationEpoch(keyClosed, 7);
+    setBrowserAnnotationScreenshot(
+      keyClosed,
+      7,
+      screenshotSessionForTest(),
+    );
+    markBrowserAnnotationEpoch(keyKept, 7);
+    setBrowserAnnotationScreenshot(keyKept, 7, screenshotSessionForTest());
+
+    const view = render(
+      <BrowserTabLifecycleObserver
+        browserTabs={[
+          makeBrowserTab("tab-closed", "https://example.com"),
+          makeBrowserTab("tab-kept", "https://example.com"),
+        ]}
+        threadId="thread-1"
+      />,
+    );
+    await waitFor(() => expect(detachments).toHaveLength(0));
+    view.rerender(
+      <BrowserTabLifecycleObserver
+        browserTabs={[makeBrowserTab("tab-kept", "https://example.com")]}
+        threadId="thread-1"
+      />,
+    );
+
+    await waitFor(() => expect(detachments).toEqual(["tab-closed"]));
+    expect(browserAnnotationSnapshot(keyClosed)).toBeNull();
+    expect(browserAnnotationSnapshot(keyKept)?.screenshot).not.toBeNull();
+  });
+
+  it("keeps the annotation record when only the thread changes", async () => {
+    const { api, detachments } = createRecordingBrowserApi();
+    installDesktopBrowser(api);
+    const key = {
+      environmentId: null,
+      tabId: "tab-closed",
+      threadId: "thread-1",
+    };
+    markBrowserAnnotationEpoch(key, 7);
+    setBrowserAnnotationScreenshot(key, 7, screenshotSessionForTest());
+
+    const view = render(
+      <BrowserTabLifecycleObserver
+        browserTabs={[makeBrowserTab("tab-closed", "https://example.com")]}
+        threadId="thread-1"
+      />,
+    );
+    await waitFor(() => expect(detachments).toHaveLength(0));
+    view.rerender(
+      <BrowserTabLifecycleObserver
+        browserTabs={[makeBrowserTab("tab-closed", "https://example.com")]}
+        threadId="thread-2"
+      />,
+    );
+
+    expect(detachments).toHaveLength(0);
+    expect(browserAnnotationSnapshot(key)?.screenshot).not.toBeNull();
   });
 });
 
