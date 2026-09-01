@@ -41,8 +41,7 @@ Usage:
       the source dev server (and the desktop shell with --desktop).
 
   scripts/bb-dev-app branch <branch> [--open] [--desktop]
-      Fetch origin, switch this checkout to a local branch (or create it from
-      origin/<branch>), fast-forward its upstream, merge latest origin/main,
+      Switch this checkout to a local branch, or create it from origin/<branch>,
       then start the source dev server (and the desktop shell with --desktop).
 
   scripts/bb-dev-app current [--open] [--desktop]
@@ -255,10 +254,6 @@ switch_to_branch() {
   if git -C "${REPO_ROOT}" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
     log "Fast-forwarding ${branch} from its upstream"
     git -C "${REPO_ROOT}" pull --ff-only
-  fi
-  if [[ "${branch}" != "main" ]]; then
-    log "Merging origin/main into ${branch}"
-    git -C "${REPO_ROOT}" merge --no-edit origin/main
   fi
 }
 
