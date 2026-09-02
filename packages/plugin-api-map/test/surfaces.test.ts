@@ -26,22 +26,22 @@ function surfaceIds(groupId: string): string[] {
 }
 
 describe("product-map surfaces", () => {
-  it("keeps app-window annotations in their stable sequential order", () => {
+  it("keeps app-window annotations in column-major visual reading order", () => {
     const ordered = [
-      "nav-panel",
       "sidebar-navigation",
-      "thread-list",
+      "nav-panel",
       "thread-row-status",
+      "thread-list",
       "sidebar-footer",
       "thread-header",
       "browser-actions",
+      "timeline-renderers",
       "message-directives",
       "message-actions",
       "pending-interaction",
       "code-renderers",
       "thread-panel",
       "file-opener",
-      "timeline-renderers",
       "content-scripts",
     ];
     expect(surfaceIds("app-shell")).toEqual(ordered);
