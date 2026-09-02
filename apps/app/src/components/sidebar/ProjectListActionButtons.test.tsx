@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 describe("ProjectListSearchThreadsAction", () => {
-  it("keeps the trailing Search shortcut visible without changing activation", () => {
+  it("reveals the reserved trailing Search shortcut on hover or focus without changing activation", () => {
     const onSearchThreads = vi.fn();
     render(
       <ProjectListSearchThreadsAction onSearchThreads={onSearchThreads} />,
@@ -42,8 +42,23 @@ describe("ProjectListSearchThreadsAction", () => {
     expect(shortcut.tagName).toBe("KBD");
     expect(shortcut.getAttribute("aria-hidden")).toBe("true");
     expect(label.classList.contains("flex-1")).toBe(true);
-    expect(shortcut.parentElement?.lastElementChild).toBe(shortcut);
-    expect(button.classList.contains("[&_kbd]:opacity-60")).toBe(true);
+    const shortcutSlot = shortcut.parentElement;
+    expect(shortcutSlot?.lastElementChild).toBe(shortcut);
+    expect(button.classList.contains("group/search-threads")).toBe(true);
+    expect(shortcutSlot?.classList.contains("opacity-0")).toBe(true);
+    expect(
+      shortcutSlot?.classList.contains(
+        "group-hover/search-threads:opacity-100",
+      ),
+    ).toBe(true);
+    expect(
+      shortcutSlot?.classList.contains(
+        "group-focus-visible/search-threads:opacity-100",
+      ),
+    ).toBe(true);
+    expect(
+      shortcutSlot?.classList.contains("max-md:pointer-coarse:hidden"),
+    ).toBe(true);
     expect(button.classList.contains("pr-1")).toBe(true);
 
     fireEvent.click(button);
