@@ -508,7 +508,7 @@ function SidebarNavigationInlineCustomizeMode({
           <Icon name="ChevronLeft" aria-hidden="true" />
         </Button>
         <div className={cn("min-w-0 flex-1 px-1", CHROME_SECTION_LABEL_CLASS)}>
-          Sidebar
+          Customize sidebar
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pt-1">
@@ -582,7 +582,7 @@ function SidebarNavigationCustomizeMenu({
         align="start"
         sideOffset={8}
         className="w-52 p-2"
-        mobileTitle="Sidebar"
+        mobileTitle="Customize sidebar"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           contentRef.current
@@ -593,7 +593,7 @@ function SidebarNavigationCustomizeMenu({
         }}
       >
         <div className={cn("px-2 py-1", CHROME_SECTION_LABEL_CLASS)}>
-          Sidebar
+          Customize sidebar
         </div>
         <SidebarNavigationCustomizeList
           rows={rows}
