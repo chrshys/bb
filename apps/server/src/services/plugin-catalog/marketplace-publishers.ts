@@ -1,7 +1,9 @@
 import { listPluginMarketplaces, type DbQueryConnection } from "@bb/db";
 import {
+  BUNDLED_MARKETPLACE_NAME,
   BUILTIN_PUBLISHER_LABEL,
   CURATED_MARKETPLACE_NAME,
+  parseBundledMarketplaceManifestJson,
   parseMarketplaceManifestJson,
 } from "./marketplace-manifest.js";
 
@@ -15,7 +17,10 @@ export function marketplacePublisherLabel(args: {
   marketplaceName: string;
   displayName: string;
 }): string {
-  if (args.marketplaceName === CURATED_MARKETPLACE_NAME)
+  if (
+    args.marketplaceName === CURATED_MARKETPLACE_NAME ||
+    args.marketplaceName === BUNDLED_MARKETPLACE_NAME
+  )
     return args.displayName;
   return args.displayName in RESERVED_PUBLISHER_LABELS
     ? args.marketplaceName
@@ -29,10 +34,13 @@ export function marketplacePublisherLabels(
   for (const row of listPluginMarketplaces(db)) {
     let displayName = row.name;
     try {
-      displayName = parseMarketplaceManifestJson(
-        row.manifestJson,
-        `stored "${row.name}" marketplace catalog`,
-      ).displayName;
+      const location = `stored "${row.name}" marketplace catalog`;
+      displayName =
+        row.name === BUNDLED_MARKETPLACE_NAME
+          ? parseBundledMarketplaceManifestJson(row.manifestJson, location)
+              .displayName
+          : parseMarketplaceManifestJson(row.manifestJson, location)
+              .displayName;
     } catch {}
     labels.set(
       row.name,
