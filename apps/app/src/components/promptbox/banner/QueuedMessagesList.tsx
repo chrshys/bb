@@ -863,9 +863,9 @@ const QueuedMessageRow = memo(function QueuedMessageRow({
                 data-queued-message-actions=""
                 className={cn(
                   QUEUED_MESSAGE_ACTION_TAKEOVER_CLASS,
-                  "pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md opacity-0 transition-opacity duration-[120ms] ease-out md:flex",
-                  "group-hover/dispatch-row:pointer-events-auto group-hover/dispatch-row:opacity-100",
-                  "group-focus-within/dispatch-row:pointer-events-auto group-focus-within/dispatch-row:opacity-100",
+                  compact
+                    ? "hidden"
+                    : "pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md opacity-0 transition-opacity duration-[120ms] ease-out group-hover/dispatch-row:pointer-events-auto group-hover/dispatch-row:opacity-100 group-focus-within/dispatch-row:pointer-events-auto group-focus-within/dispatch-row:opacity-100 md:flex",
                 )}
               >
                 {sendNowAllowed ? (
@@ -944,11 +944,10 @@ const QueuedMessageRow = memo(function QueuedMessageRow({
                   variant="ghost"
                   className={cn(
                     QUEUED_MESSAGE_ACTION_TAKEOVER_CLASS,
-                    "pointer-events-none absolute right-2.5 top-1/2 shrink-0 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity duration-[120ms] ease-out md:hidden",
-                    "group-hover/dispatch-row:pointer-events-auto group-hover/dispatch-row:opacity-100",
-                    "group-focus-within/dispatch-row:pointer-events-auto group-focus-within/dispatch-row:opacity-100",
-                    "data-[state=open]:pointer-events-auto data-[state=open]:opacity-100",
-                    "[@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
+                    "absolute right-2.5 top-1/2 shrink-0 -translate-y-1/2 text-muted-foreground transition-opacity duration-[120ms] ease-out",
+                    compact
+                      ? "pointer-events-auto opacity-100"
+                      : "pointer-events-none opacity-0 group-hover/dispatch-row:pointer-events-auto group-hover/dispatch-row:opacity-100 group-focus-within/dispatch-row:pointer-events-auto group-focus-within/dispatch-row:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:opacity-100 md:hidden [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100",
                     compact ? "size-7" : "size-8",
                   )}
                   disabled={actionDisabled}

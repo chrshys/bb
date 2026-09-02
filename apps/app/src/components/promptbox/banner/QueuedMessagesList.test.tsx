@@ -362,7 +362,7 @@ describe("QueuedMessagesList", () => {
     ).toBe("collapsed");
   });
 
-  it("uses labeled hover-revealed icon actions on desktop and an overflow menu on mobile widths", async () => {
+  it("renders labeled icon actions and the overflow menu alternative", async () => {
     const { container, findByRole, getByRole, queryByRole } =
       renderQueuedMessages([
         makeQueuedMessage("q_one", "First queued message"),
@@ -378,7 +378,9 @@ describe("QueuedMessagesList", () => {
       name: "Delete queued message 1",
     });
 
-    expect(getByRole("button", { name: "Queued message 1 actions" })).toBeTruthy();
+    expect(
+      getByRole("button", { name: "Queued message 1 actions" }),
+    ).toBeTruthy();
     expect(editButton).toBeTruthy();
     expect(deleteButton).toBeTruthy();
     expect(container.querySelector('[data-icon="Sent"]')).not.toBeNull();
@@ -403,6 +405,27 @@ describe("QueuedMessagesList", () => {
         expect(queryByRole("tooltip")).toBeNull();
       });
     }
+  });
+
+  it("keeps the compact queue overflow trigger visible at desktop viewport widths", () => {
+    const { container, getByRole } = renderQueuedMessages([
+      makeQueuedMessage("q_one", "First queued message"),
+    ]);
+
+    const overflowTrigger = getByRole("button", {
+      name: "Queued message 1 actions",
+    });
+
+    expect(overflowTrigger.classList.contains("md:hidden")).toBe(false);
+    expect(overflowTrigger.classList.contains("pointer-events-auto")).toBe(
+      true,
+    );
+    expect(overflowTrigger.classList.contains("opacity-100")).toBe(true);
+    expect(
+      container
+        .querySelector("[data-queued-message-actions]")
+        ?.classList.contains("hidden"),
+    ).toBe(true);
   });
 
   it("replaces the edited row with the real inline composer", () => {
@@ -464,7 +487,9 @@ describe("QueuedMessagesList", () => {
     ).not.toBeNull();
     expect(getByTestId("inline-queue-editor")).toBeTruthy();
 
-    fireEvent.click(getByRole("button", { name: "Stop editing queued message" }));
+    fireEvent.click(
+      getByRole("button", { name: "Stop editing queued message" }),
+    );
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
