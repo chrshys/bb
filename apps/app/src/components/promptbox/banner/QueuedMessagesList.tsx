@@ -120,6 +120,7 @@ export interface QueuedMessageInlineEditor {
 }
 
 export interface QueuedMessagesListProps {
+  attachedToComposer: boolean;
   queuedMessages: readonly ThreadQueuedMessage[];
   resolveMentionLink?: PromptMentionLinkResolver;
   sendDisabled: boolean;
@@ -132,6 +133,10 @@ export interface QueuedMessagesListProps {
   onSetGroupBoundary: (request: QueuedMessageGroupBoundaryRequest) => void;
   onEdit: (request: QueuedMessageEditRequest) => void;
   onDelete: (id: string) => void;
+}
+
+interface QueuedMessagesPendingCardProps {
+  queuedMessageCount: number;
 }
 
 interface QueuedMessagePreviewText {
@@ -196,6 +201,15 @@ function getDrawerHeight({
   return Math.min(
     DRAWER_HEIGHT,
     DRAWER_CHROME_HEIGHT + DRAWER_LIST_PADDING + rowsHeight,
+  );
+}
+
+function getPendingDrawerHeight(queuedMessageCount: number): number {
+  return Math.min(
+    DRAWER_HEIGHT,
+    DRAWER_CHROME_HEIGHT +
+      DRAWER_LIST_PADDING +
+      Math.max(1, queuedMessageCount) * DRAWER_ROW_HEIGHT,
   );
 }
 
@@ -1084,7 +1098,36 @@ function QueuedMessageInlineEditorSlot({
   );
 }
 
+export function QueuedMessagesPendingCard({
+  queuedMessageCount,
+}: QueuedMessagesPendingCardProps) {
+  return (
+    <PromptStackCard
+      ariaLabel="Queued messages"
+      style={{ height: getPendingDrawerHeight(queuedMessageCount) }}
+      className="relative z-10 -mb-5 flex min-h-0 flex-col overflow-hidden rounded-xl rounded-b-none border-b-0 bg-surface-raised-solid pb-3 shadow-lift"
+    >
+      <header className="flex h-8 shrink-0 items-center gap-2 border-b border-border/35 px-2">
+        <div className="flex min-w-16 items-baseline gap-1.5 pl-1">
+          <span className="text-xs font-medium text-foreground">Queue</span>
+          <span className="text-2xs tabular-nums text-subtle-foreground">
+            {queuedMessageCount}
+          </span>
+        </div>
+      </header>
+      <div
+        role="status"
+        className="flex min-h-0 flex-1 items-center gap-2 px-3 text-xs text-subtle-foreground"
+      >
+        <Icon name="Loading" className="size-3.5 animate-spin" aria-hidden />
+        <span>Loading queued message details…</span>
+      </div>
+    </PromptStackCard>
+  );
+}
+
 export function QueuedMessagesList({
+  attachedToComposer,
   queuedMessages,
   resolveMentionLink,
   sendDisabled,
@@ -1636,7 +1679,7 @@ export function QueuedMessagesList({
       style={{ height: surfaceHeight }}
       className={cn(
         "relative z-10 flex min-h-0 flex-col overflow-hidden bg-surface-raised-solid shadow-lift",
-        inlineEditor
+        inlineEditor || !attachedToComposer
           ? "mb-0 rounded-xl pb-4"
           : "-mb-5 rounded-xl rounded-b-none border-b-0 pb-3",
         !surfaceDragging &&

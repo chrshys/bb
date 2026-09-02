@@ -273,6 +273,7 @@ interface ServiceInstance {
 
 interface PluginRuntimeContext {
   deps: PluginServiceDeps;
+  settingsChanged?: () => void;
   nextCronRunAt: (cron: string, now: number) => number;
   settledWithin: (
     promise: Promise<unknown>,
@@ -299,6 +300,7 @@ function createKeyedLock() {
 
 export function createPluginRuntime(context: PluginRuntimeContext) {
   const { deps, nextCronRunAt, settledWithin } = context;
+  const settingsChanged = context.settingsChanged ?? (() => {});
   const logger = deps.logger;
   const loadTimeoutMs = deps.loadTimeoutMs ?? DEFAULT_LOAD_TIMEOUT_MS;
   const serviceStopTimeoutMs =
@@ -1310,6 +1312,10 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       runBrowserControl: (target, action, options) =>
         deps.hub.runBrowserControl?.({ target, action, ...options }) ??
         Promise.reject(new Error("Browser control is unavailable")),
+      settingsChanged: () => {
+        deps.onSettingsChanged?.(row.id);
+        settingsChanged();
+      },
       reportNeedsConfiguration: (message) => {
         reportNeedsConfiguration(row.id, message);
       },

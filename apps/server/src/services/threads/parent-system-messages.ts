@@ -46,6 +46,7 @@ import {
   LIVE_DAEMON_COMMAND_TIMEOUT_MS,
   startLiveHostCommand,
 } from "../hosts/live-command.js";
+import { queueInputForStartingTurn } from "./thread-turn-starting.js";
 
 const PARENT_SYSTEM_MESSAGE_SOURCE = "tell";
 
@@ -243,6 +244,39 @@ async function queueActiveParentSystemMessage(
   args: QueueReadyParentSystemMessageArgs,
 ): Promise<boolean> {
   const expectedSteerTurnId = getActiveTurnId(deps, args.thread.id);
+  if (expectedSteerTurnId === null) {
+    const outcome = queueInputForStartingTurn(deps, {
+      claimed: null,
+      input: {
+        input: args.input,
+        execution: args.execution,
+        payload: { kind: "inline" },
+        senderThreadId: null,
+        systemNotice: {
+          kind: args.systemMessageKind,
+          subject: args.systemMessageSubject,
+        },
+      },
+      threadId: args.thread.id,
+    });
+    if (outcome.kind === "queued") return true;
+    if (outcome.kind === "dispatched") return false;
+    if (outcome.kind === "retry") {
+      const currentThread = outcome.thread;
+      if (
+        currentThread === null ||
+        currentThread.archivedAt !== null ||
+        currentThread.deletedAt !== null ||
+        currentThread.status === "stopping"
+      ) {
+        return false;
+      }
+      return queueReadyParentSystemMessage(deps, {
+        ...args,
+        thread: currentThread,
+      });
+    }
+  }
   const permissionEscalation = resolvePermissionEscalation({
     initiator: "system",
   });
@@ -400,9 +434,13 @@ export async function queueParentSystemMessage(
     // queues on the thread's queue like every other blocked dispatch, carrying
     // its own taxonomy so the turn it eventually becomes is the same turn it
     // would have been a moment earlier.
-    const execution = await buildExecutionOptions(deps, {}, {
-      threadId: parentThread.id,
-    });
+    const execution = await buildExecutionOptions(
+      deps,
+      {},
+      {
+        threadId: parentThread.id,
+      },
+    );
     createQueuedThreadMessage(deps.db, deps.hub, {
       threadId: parentThread.id,
       content: args.input,

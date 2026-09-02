@@ -6,7 +6,7 @@ import {
   type StandardSchemaV1InferOutput,
 } from "@get-bb/plugin-sdk/app";
 import { Input } from "@bb/shared-ui/input";
-import { MAX_AUTOMATIC_LIMIT, MAX_LIMIT_VALUE } from "./limits.js";
+import { MAX_LIMIT_VALUE } from "./limits.js";
 import type { concurrencyLimitRpcContract } from "./server.js";
 
 type ConfigurationView = StandardSchemaV1InferOutput<
@@ -192,7 +192,7 @@ function ConcurrencyLimitSettings() {
       <div className="border-t border-border/60 pt-4">
         <h3 className="text-sm font-medium text-foreground">Host limits</h3>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-          Auto uses half the available processors, up to {MAX_AUTOMATIC_LIMIT}.
+          Auto allows one thread per available processor.
         </p>
 
         <div className="ml-2 mt-2 border-l border-border/60 pl-2">
@@ -212,13 +212,13 @@ function ConcurrencyLimitSettings() {
                       {host.name}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {host.availableParallelism === null
-                        ? host.status === "connected"
+                      {host.status === "disconnected"
+                        ? host.availableParallelism === null
+                          ? "Offline"
+                          : `${host.availableParallelism} processors · Offline`
+                        : host.availableParallelism === null
                           ? "Detecting processors…"
-                          : "Detect when connected"
-                        : host.status === "connected"
-                          ? `${host.availableParallelism} processors`
-                          : `${host.availableParallelism} processors · Offline`}
+                          : `${host.availableParallelism} processors`}
                     </div>
                   </div>
                   <Input

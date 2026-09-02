@@ -11,10 +11,12 @@ import {
   lt,
   lte,
   min,
+  notExists,
   notInArray,
   or,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { QUEUED_MESSAGE_PLUGIN_WAIT_HOLDER_PREFIX } from "@bb/domain";
 import type {
   PermissionMode,
@@ -31,12 +33,17 @@ import type {
   DbTransaction,
 } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { environments, queuedThreadMessages, threads } from "../schema.js";
-import { createQueuedThreadMessageClaimToken, createQueuedThreadMessageId } from "../ids.js";
 import {
-  createOrderKeyAfter,
-  createOrderKeyBetween,
-} from "./order-keys.js";
+  environments,
+  events,
+  queuedThreadMessages,
+  threads,
+} from "../schema.js";
+import {
+  createQueuedThreadMessageClaimToken,
+  createQueuedThreadMessageId,
+} from "../ids.js";
+import { createOrderKeyAfter, createOrderKeyBetween } from "./order-keys.js";
 import { queryInSqliteVariableBatches } from "./events.js";
 
 export interface CreateQueuedThreadMessageInput {
@@ -194,7 +201,8 @@ export type UpdateQueuedThreadMessageResult =
   | { kind: "claimed" }
   | { kind: "stale" };
 
-export type ReleaseQueuedMessageClaimArgs = ClaimedQueuedThreadMessageMutationArgs;
+export type ReleaseQueuedMessageClaimArgs =
+  ClaimedQueuedThreadMessageMutationArgs;
 
 class ReorderQueuedThreadMessageRollback extends Error {
   constructor(readonly result: ReorderQueuedThreadMessageResult) {
@@ -213,7 +221,10 @@ function collectLeadGroupIds(
     const nextQueuedMessage = queuedMessages[index + 1];
     if (
       !nextQueuedMessage ||
-      !queuedMessageGroupingEnvelopeMatches(firstQueuedMessage, nextQueuedMessage)
+      !queuedMessageGroupingEnvelopeMatches(
+        firstQueuedMessage,
+        nextQueuedMessage,
+      )
     ) {
       break;
     }
@@ -244,16 +255,37 @@ function partitionQueuedMessageGroups(
   return groups;
 }
 
+const IDLE_DRAINABLE_WAIT_KINDS = ["thread-busy", "turn-starting"] as const;
+
+function hasOrdinaryTurnEndWait(row: QueuedThreadMessageRow): boolean {
+  if (row.waitingOn === null) return true;
+  try {
+    const parsed = JSON.parse(row.waitingOn) as { kind?: unknown };
+    return parsed.kind === "thread-busy";
+  } catch {
+    return false;
+  }
+}
+
+export function isOrdinaryTurnEndQueuedMessage(
+  row: QueuedThreadMessageRow,
+): boolean {
+  return row.systemNotice === null && hasOrdinaryTurnEndWait(row);
+}
+
 /**
  * The JS mirror of {@link drainableQueuedThreadMessage}'s wait condition, for
  * deciding whole-group eligibility over rows already in hand. Kept next to a
  * pointer at the SQL so the two cannot drift silently.
  */
 function isIdleDrainableQueuedMessage(row: QueuedThreadMessageRow): boolean {
+  if (row.failureReason !== null) return false;
   if (row.waitingOn === null) return true;
   try {
     const parsed = JSON.parse(row.waitingOn) as { kind?: unknown };
-    return parsed.kind === "thread-busy";
+    return IDLE_DRAINABLE_WAIT_KINDS.some(
+      (waitKind) => waitKind === parsed.kind,
+    );
   } catch {
     return false;
   }
@@ -287,7 +319,9 @@ function isQueuedThreadMessageClaimed(row: QueuedThreadMessageRow): boolean {
   return row.claimedAt !== null || row.claimToken !== null;
 }
 
-function requireClaimedQueuedThreadMessage(row: QueuedThreadMessageRow | null): ClaimedQueuedThreadMessageRow | null {
+function requireClaimedQueuedThreadMessage(
+  row: QueuedThreadMessageRow | null,
+): ClaimedQueuedThreadMessageRow | null {
   if (!row || row.claimedAt === null || row.claimToken === null) {
     return null;
   }
@@ -338,7 +372,10 @@ function getLastQueuedThreadMessage(
       .select()
       .from(queuedThreadMessages)
       .where(eq(queuedThreadMessages.threadId, threadId))
-      .orderBy(desc(queuedThreadMessages.sortKey), desc(queuedThreadMessages.id))
+      .orderBy(
+        desc(queuedThreadMessages.sortKey),
+        desc(queuedThreadMessages.id),
+      )
       .limit(1)
       .get() ?? null
   );
@@ -366,7 +403,10 @@ function getPreviousUnclaimedQueuedThreadMessage(
           ),
         ),
       )
-      .orderBy(desc(queuedThreadMessages.sortKey), desc(queuedThreadMessages.id))
+      .orderBy(
+        desc(queuedThreadMessages.sortKey),
+        desc(queuedThreadMessages.id),
+      )
       .limit(1)
       .get() ?? null
   );
@@ -470,7 +510,10 @@ function applyQueuedThreadMessageGroupBoundary(
     }
     const hasMixedExecutionOptions = groupedMessages.some(
       (queuedMessage) =>
-        !queuedMessageGroupingEnvelopeMatches(firstQueuedMessage, queuedMessage),
+        !queuedMessageGroupingEnvelopeMatches(
+          firstQueuedMessage,
+          queuedMessage,
+        ),
     );
     if (hasMixedExecutionOptions) {
       return { kind: "invalid_execution_options" };
@@ -525,9 +568,7 @@ function applyPreservedLeadGroupAfterReorder(
       .run();
   }
 
-  return changed
-    ? listQueuedThreadMessages(db, threadId)
-    : queuedMessages;
+  return changed ? listQueuedThreadMessages(db, threadId) : queuedMessages;
 }
 
 export function createQueuedThreadMessageInTransaction(
@@ -560,8 +601,11 @@ export function createQueuedThreadMessageInTransaction(
         input.systemNotice === null ? null : JSON.stringify(input.systemNotice),
       payloadKind: input.payload.kind,
       retryOfTurnRequestId:
-        input.payload.kind === "retry" ? input.payload.retryOfTurnRequestId : null,
-      retryAttempt: input.payload.kind === "retry" ? input.payload.attempt : null,
+        input.payload.kind === "retry"
+          ? input.payload.retryOfTurnRequestId
+          : null,
+      retryAttempt:
+        input.payload.kind === "retry" ? input.payload.attempt : null,
       retryReason: input.payload.kind === "retry" ? input.payload.reason : null,
       groupWithNext: false,
       claimedAt: null,
@@ -652,6 +696,72 @@ export function hasQueuedThreadMessages(
   );
 }
 
+function manuallyStoppedQueuePauseQuery(
+  db: DbQueryConnection,
+  threadId: string | typeof threads.id,
+) {
+  const interruption = alias(events, "queue_pause_interruption");
+  const laterInterruption = alias(events, "queue_pause_later_interruption");
+  const laterRootTurnStart = alias(events, "queue_pause_later_turn_start");
+  const laterTurnRequest = alias(events, "queue_pause_later_turn_request");
+  return db
+    .select({ sequence: interruption.sequence })
+    .from(interruption)
+    .where(
+      and(
+        sql`${interruption.threadId} = ${threadId}`,
+        eq(interruption.type, "system/thread/interrupted"),
+        sql`json_extract(${interruption.data}, '$.reason') = 'manual-stop'`,
+        notExists(
+          db
+            .select({ sequence: laterInterruption.sequence })
+            .from(laterInterruption)
+            .where(
+              and(
+                eq(laterInterruption.threadId, interruption.threadId),
+                eq(laterInterruption.type, "system/thread/interrupted"),
+                sql`${laterInterruption.sequence} > ${interruption.sequence}`,
+              ),
+            ),
+        ),
+        notExists(
+          db
+            .select({ sequence: laterRootTurnStart.sequence })
+            .from(laterRootTurnStart)
+            .where(
+              and(
+                eq(laterRootTurnStart.threadId, interruption.threadId),
+                eq(laterRootTurnStart.type, "turn/started"),
+                isNull(laterRootTurnStart.parentToolCallId),
+                sql`${laterRootTurnStart.sequence} > ${interruption.sequence}`,
+                exists(
+                  db
+                    .select({ sequence: laterTurnRequest.sequence })
+                    .from(laterTurnRequest)
+                    .where(
+                      and(
+                        eq(laterTurnRequest.threadId, interruption.threadId),
+                        eq(laterTurnRequest.type, "client/turn/requested"),
+                        sql`${laterTurnRequest.sequence} > ${interruption.sequence}`,
+                        sql`${laterTurnRequest.sequence} < ${laterRootTurnStart.sequence}`,
+                      ),
+                    ),
+                ),
+              ),
+            ),
+        ),
+      ),
+    )
+    .limit(1);
+}
+
+export function isThreadQueueAutoSendPaused(
+  db: DbQueryConnection,
+  threadId: string,
+): boolean {
+  return manuallyStoppedQueuePauseQuery(db, threadId).get() !== undefined;
+}
+
 /**
  * Threads a drain could move right now.
  *
@@ -676,6 +786,10 @@ export function listIdleThreadsWithQueuedMessages(
         inArray(threads.status, ["idle", "pending"]),
         isNull(threads.archivedAt),
         isNull(threads.deletedAt),
+        or(
+          notExists(manuallyStoppedQueuePauseQuery(db, threads.id)),
+          isNotNull(queuedThreadMessages.systemNotice),
+        ),
         // A gone environment (destroying/destroyed) is never reprovisioned, so
         // its queued rows can never drain. Leave them out of the sweep instead
         // of failing the same send every cycle (#1789). A thread with NO
@@ -708,7 +822,11 @@ export function claimQueuedThreadMessage(
         .from(queuedThreadMessages)
         .where(eq(queuedThreadMessages.id, id))
         .get();
-      if (!existing || existing.claimedAt !== null || existing.claimToken !== null) {
+      if (
+        !existing ||
+        existing.claimedAt !== null ||
+        existing.claimToken !== null
+      ) {
         return null;
       }
 
@@ -776,10 +894,33 @@ function claimQueuedThreadMessageIdsInTransaction(
   return claimedRows;
 }
 
+export type QueuedThreadMessageGroupEligibility = (
+  rows: readonly QueuedThreadMessageRow[],
+) => boolean;
+
+export type QueuedThreadMessageGroupClaimPolicy =
+  | {
+      kind: "automatic";
+      isGroupEligible: QueuedThreadMessageGroupEligibility;
+    }
+  | { kind: "explicit-send" };
+
+function isAutomaticQueuedThreadMessageGroupClaimAllowed(
+  rows: readonly QueuedThreadMessageRow[],
+  pauseOrdinaryMessages: boolean,
+): boolean {
+  return (
+    rows.every((row) => row.failureReason === null) &&
+    (!pauseOrdinaryMessages ||
+      rows.every((row) => !isOrdinaryTurnEndQueuedMessage(row)))
+  );
+}
+
 export function claimQueuedThreadMessageGroup(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
+  policy: QueuedThreadMessageGroupClaimPolicy,
 ): ClaimedQueuedThreadMessageRow[] | null {
   const claimedQueuedMessages = db.transaction(
     (tx) => {
@@ -788,12 +929,6 @@ export function claimQueuedThreadMessageGroup(
         return null;
       }
 
-      // A group is a batch that dispatches together, so claiming its head
-      // claims all of it — including members still carrying a wait, because
-      // an explicit claim of the head (send-now, a due schedule, a cleared
-      // plugin wait) is a claim on the batch. Claiming a member that is NOT
-      // its group's head takes that row alone and severs its edges: the user
-      // asked for that message, not for whatever happens to sit around it.
       const queuedMessages = listQueuedThreadMessages(tx, existing.threadId);
       const group =
         partitionQueuedMessageGroups(queuedMessages).find((rows) =>
@@ -802,7 +937,17 @@ export function claimQueuedThreadMessageGroup(
       if (group === null) {
         return null;
       }
-      if (group[0]?.id !== id) {
+      if (
+        (policy.kind === "automatic" &&
+          !isAutomaticQueuedThreadMessageGroupClaimAllowed(
+            group,
+            isThreadQueueAutoSendPaused(tx, existing.threadId),
+          )) ||
+        (policy.kind === "automatic" && !policy.isGroupEligible(group))
+      ) {
+        return null;
+      }
+      if (policy.kind === "explicit-send" && group[0]?.id !== id) {
         const now = Date.now();
         clearPreviousQueuedMessageGroupEdgeInTransaction(tx, existing, now);
         clearQueuedMessageGroupEdgeInTransaction(tx, existing, now);
@@ -828,6 +973,7 @@ export function claimNextQueuedThreadMessageGroup(
   db: DbConnection,
   notifier: DbNotifier,
   threadId: string,
+  isGroupEligible?: QueuedThreadMessageGroupEligibility,
 ): ClaimedQueuedThreadMessageRow[] | null {
   const claimedQueuedMessages = db.transaction(
     (tx) => {
@@ -837,10 +983,20 @@ export function claimNextQueuedThreadMessageGroup(
       // one prompt — and skipping it does not block the independent rows
       // behind it: the queue is a queue, not a pipeline.
       const queuedMessages = listQueuedThreadMessages(tx, threadId);
+      const pauseOrdinaryMessages = isThreadQueueAutoSendPaused(tx, threadId);
       const group =
-        partitionQueuedMessageGroups(queuedMessages).find((rows) =>
-          rows.every(isIdleDrainableQueuedMessage),
-        ) ?? null;
+        partitionQueuedMessageGroups(queuedMessages).find((rows) => {
+          const eligible = isGroupEligible
+            ? rows.some(isIdleDrainableQueuedMessage) && isGroupEligible(rows)
+            : rows.every(isIdleDrainableQueuedMessage);
+          return (
+            eligible &&
+            isAutomaticQueuedThreadMessageGroupClaimAllowed(
+              rows,
+              pauseOrdinaryMessages,
+            )
+          );
+        }) ?? null;
       if (group === null) {
         return null;
       }
@@ -903,10 +1059,7 @@ export function reorderQueuedThreadMessage({
           return { kind: "invalid_neighbor_order" };
         }
 
-        const currentQueuedMessages = listQueuedThreadMessages(
-          tx,
-          threadId,
-        );
+        const currentQueuedMessages = listQueuedThreadMessages(tx, threadId);
         const originalLeadGroupIds = collectLeadGroupIds(currentQueuedMessages);
         const currentIndex = currentQueuedMessages.findIndex(
           (queuedMessage) => queuedMessage.id === queuedMessageId,
@@ -1074,22 +1227,8 @@ export interface RequeueClaimedQueuedThreadMessagesArgs {
   sendAt: number | null;
 }
 
-/**
- * Hands a claimed group back to the queue and writes the lead row's wait, in
- * ONE transaction.
- *
- * Two statements would leave the rows unclaimed and with no wait in between, which
- * is a window where the idle drain can pick up a message that a gate has just
- * said must wait. Doing both under one immediate transaction closes it: from
- * every other reader's view the group goes straight from "being dispatched" to
- * "waiting on this reason".
- *
- * Returns the queued lead row, or null when the claim no longer holds (the row
- * was deleted, or a stale-claim sweep already reclaimed it) — in which case the
- * caller has nothing left to queue.
- */
 export function requeueClaimedQueuedThreadMessages(
-  db: DbConnection,
+  db: DbQueryConnection,
   notifier: DbNotifier,
   args: RequeueClaimedQueuedThreadMessagesArgs,
 ): QueuedThreadMessageRow | null {
@@ -1100,7 +1239,15 @@ export function requeueClaimedQueuedThreadMessages(
       const now = Date.now();
       for (const claim of args.claims) {
         tx.update(queuedThreadMessages)
-          .set({ claimedAt: null, claimToken: null, updatedAt: now })
+          .set({
+            claimedAt: null,
+            claimToken: null,
+            waitingOn: JSON.stringify(args.waitingOn),
+            waitHolder: waitHolderFor(args.waitingOn),
+            sendAt: args.sendAt,
+            failureReason: null,
+            updatedAt: now,
+          })
           .where(
             and(
               eq(queuedThreadMessages.id, claim.id),
@@ -1301,9 +1448,16 @@ function liveQueuedThreadMessage() {
   );
 }
 
+function automaticallyDrainableQueuedThreadMessage() {
+  return and(
+    liveQueuedThreadMessage(),
+    isNull(queuedThreadMessages.failureReason),
+  );
+}
+
 /**
  * Rows the IDLE drain may claim: a row with no wait at all, or one waiting
- * only on the thread being busy — which is exactly the wait an idle thread
+ * on the thread being busy or its turn starting — waits an idle thread
  * clears.
  *
  * Every other wait belongs to a different drain and must be invisible here, or
@@ -1317,10 +1471,13 @@ function liveQueuedThreadMessage() {
  */
 function drainableQueuedThreadMessage() {
   return and(
-    liveQueuedThreadMessage(),
+    automaticallyDrainableQueuedThreadMessage(),
     or(
       isNull(queuedThreadMessages.waitingOn),
-      sql`json_extract(${queuedThreadMessages.waitingOn}, '$.kind') = 'thread-busy'`,
+      inArray(
+        sql<string>`json_extract(${queuedThreadMessages.waitingOn}, '$.kind')`,
+        [...IDLE_DRAINABLE_WAIT_KINDS],
+      ),
     ),
   );
 }
@@ -1583,7 +1740,7 @@ export function listDueScheduledQueuedThreadMessages(
       and(
         isNotNull(queuedThreadMessages.sendAt),
         lte(queuedThreadMessages.sendAt, now),
-        liveQueuedThreadMessage(),
+        automaticallyDrainableQueuedThreadMessage(),
         exists(
           db
             .select({ live: sql`1` })
@@ -1623,7 +1780,7 @@ export function listQueuedThreadMessagesByWaitHolder(
     .where(
       and(
         eq(queuedThreadMessages.waitHolder, waitHolder),
-        liveQueuedThreadMessage(),
+        automaticallyDrainableQueuedThreadMessage(),
       ),
     )
     .orderBy(
@@ -1674,7 +1831,7 @@ export function listQueuedThreadMessagePluginWaitRefs(
     .where(
       and(
         isNotNull(queuedThreadMessages.waitHolder),
-        liveQueuedThreadMessage(),
+        automaticallyDrainableQueuedThreadMessage(),
       ),
     )
     .orderBy(
@@ -1705,7 +1862,7 @@ export function listQueuedThreadMessagesWaitingOnKind(
       and(
         eq(queuedThreadMessages.threadId, args.threadId),
         sql`json_extract(${queuedThreadMessages.waitingOn}, '$.kind') = ${args.kind}`,
-        liveQueuedThreadMessage(),
+        automaticallyDrainableQueuedThreadMessage(),
       ),
     )
     .orderBy(asc(queuedThreadMessages.sortKey), asc(queuedThreadMessages.id))
@@ -1732,7 +1889,10 @@ export function hasQueuedRetryOfTurnRequest(
       .where(
         and(
           eq(queuedThreadMessages.threadId, args.threadId),
-          eq(queuedThreadMessages.retryOfTurnRequestId, args.retryOfTurnRequestId),
+          eq(
+            queuedThreadMessages.retryOfTurnRequestId,
+            args.retryOfTurnRequestId,
+          ),
         ),
       )
       .limit(1)
@@ -1761,7 +1921,7 @@ export function listThreadIdsWithHostOfflineQueueWaits(
       and(
         eq(environments.hostId, hostId),
         sql`json_extract(${queuedThreadMessages.waitingOn}, '$.kind') = 'host-offline'`,
-        liveQueuedThreadMessage(),
+        automaticallyDrainableQueuedThreadMessage(),
       ),
     )
     .all()
@@ -1778,7 +1938,9 @@ export function deleteQueuedThreadMessage(
       const existing = getQueuedThreadMessageForMutation(tx, id);
       if (!existing) return null;
       clearPreviousQueuedMessageGroupEdgeInTransaction(tx, existing);
-      tx.delete(queuedThreadMessages).where(eq(queuedThreadMessages.id, id)).run();
+      tx.delete(queuedThreadMessages)
+        .where(eq(queuedThreadMessages.id, id))
+        .run();
       return existing;
     },
     { behavior: "immediate" },

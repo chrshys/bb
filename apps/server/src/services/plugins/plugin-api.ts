@@ -3,7 +3,6 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { CronExpressionParser } from "cron-parser";
-import { z } from "zod";
 import {
   deletePluginKvValue,
   getPluginKvValue,
@@ -93,8 +92,10 @@ import {
   providerAlreadyRegisteredMessage,
   providerIconRefusalMessage,
   undeclaredIconProblem,
+  validateSettingsUpdate,
   validatePluginAiServiceDeclaration,
   validatePluginProviderDeclaration,
+  zodSchemaToJsonSchema,
 } from "@get-bb/plugin-sdk/internal/host-policy";
 import type {
   AiServiceHostBinding,
@@ -105,7 +106,10 @@ import type { ServerLogger } from "../../types.js";
 import type { PluginInteractionResult } from "../interactions/pending-interactions.js";
 import { appendPluginLogLine } from "./plugin-log.js";
 import type { PluginHostArtifactSnapshot } from "./plugin-service-internal.js";
-import { readPluginSettingsValues } from "./plugin-settings.js";
+import {
+  readPluginSettingsValues,
+  writePluginSettingsUpdate,
+} from "./plugin-settings.js";
 
 const LEGACY_UNKNOWN_MIGRATION_HASH = "legacy-unknown";
 
@@ -402,6 +406,7 @@ export function createPluginApi(options: {
     action: BrowserControlAction,
     options: { signal?: AbortSignal; timeoutMs: number },
   ) => Promise<JsonValue>;
+  settingsChanged: () => void;
   /** Marks the plugin needs-configuration in the loader's status table. */
   reportNeedsConfiguration: (message: string) => void;
   isAgentToolNameTaken: (name: string) => string | undefined;
@@ -478,6 +483,7 @@ export function createPluginApi(options: {
       ),
     runBrowserControl = () =>
       Promise.reject(new Error("Browser control is unavailable in this host")),
+    settingsChanged,
     reportNeedsConfiguration,
     isAgentToolNameTaken,
     reportAgentToolProblem,
@@ -735,6 +741,45 @@ export function createPluginApi(options: {
       return {
         async get() {
           assertLive();
+          return (await readPluginSettingsValues({
+            db,
+            dataDir,
+            pluginId,
+            descriptors: validated,
+          })) as Values;
+        },
+        async experimental_set(values) {
+          assertLive();
+          const rawValues: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(values)) {
+            rawValues[key] = value;
+          }
+          const errors = validateSettingsUpdate(validated, rawValues);
+          if (errors.length > 0) {
+            throw new Error(errors.join("; "));
+          }
+          const storeArgs = {
+            db,
+            dataDir,
+            pluginId,
+            descriptors: settingsRecord.descriptors,
+          };
+          const prev = await readPluginSettingsValues(storeArgs);
+          await writePluginSettingsUpdate({ ...storeArgs, values: rawValues });
+          const next = await readPluginSettingsValues(storeArgs);
+          if (JSON.stringify(next) !== JSON.stringify(prev)) {
+            for (const listener of settingsRecord.listeners) {
+              try {
+                listener(next, prev);
+              } catch (error) {
+                emitLog(
+                  "warn",
+                  `settings onChange listener failed: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
+            }
+            if (activated) settingsChanged();
+          }
           return (await readPluginSettingsValues({
             db,
             dataDir,
@@ -1034,9 +1079,7 @@ export function createPluginApi(options: {
       let parse: PluginAgentToolRecord["parse"];
       if (isZodSchemaLike(parameters)) {
         try {
-          inputSchema = z.toJSONSchema(parameters as z.ZodType, {
-            io: "input",
-          });
+          inputSchema = zodSchemaToJsonSchema(parameters);
         } catch (error) {
           throw new Error(
             `tool "${name}" parameters look like a zod schema but could not be converted to JSON Schema (${
@@ -1045,7 +1088,7 @@ export function createPluginApi(options: {
           );
         }
         parse = (input) => {
-          const result = (parameters as z.ZodType).safeParse(input);
+          const result = parameters.safeParse(input);
           if (result.success) return { ok: true, value: result.data };
           return { ok: false, error: summarizeParseIssues(result.error) };
         };

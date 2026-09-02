@@ -17,6 +17,7 @@ import { isDispatchRequeuedRecently } from "./dispatch-hooks.js";
 import { clearQueuedMessageWait } from "./queue-waits.js";
 import { recordQueuedMessageDrainFailure } from "./queue-drain-failure.js";
 import {
+  createAutomaticQueuedMessageGroupEligibility,
   runQueuedMessageAutoSendForThread,
   sendQueuedMessage,
 } from "./queued-messages.js";
@@ -177,7 +178,7 @@ export async function runDueScheduledQueueSweep(
   now: number,
 ): Promise<void> {
   for (const row of listDueScheduledQueuedThreadMessages(deps.db, now)) {
-    await dispatchDueQueuedMessage(deps, row);
+    await dispatchDueQueuedMessage(deps, row, now);
   }
 }
 
@@ -190,6 +191,7 @@ interface QueuedMessageDispatchRef {
 async function dispatchDueQueuedMessage(
   deps: QueueDrainDeps,
   row: QueuedMessageDispatchRef,
+  now: number,
 ): Promise<void> {
   if (isDispatchRequeuedRecently(row.threadId)) {
     // This thread turned an attempt straight back into a queue moments ago.
@@ -205,7 +207,7 @@ async function dispatchDueQueuedMessage(
     // satisfied and every other wait is re-decided from scratch — including
     // the plugin pass, which is what makes a scheduled send still respect a
     // limiter at 9am rather than jumping it.
-    await clearDueWaitAndAttempt(deps, row);
+    await attemptEligibleQueuedMessage(deps, row, thread, now);
   } catch (error) {
     // A background attempt has no caller left to report to, so the row carries
     // the outcome itself — as a `host-offline` wait when the machine is simply
@@ -224,21 +226,21 @@ async function dispatchDueQueuedMessage(
   }
 }
 
-async function clearDueWaitAndAttempt(
+async function attemptEligibleQueuedMessage(
   deps: QueueDrainDeps,
   row: QueuedMessageDispatchRef,
+  thread: NonNullable<ReturnType<typeof getThread>>,
+  now: number,
 ): Promise<void> {
-  clearQueuedMessageWait(deps, {
-    queuedMessageId: row.id,
-    threadId: row.threadId,
+  const isGroupEligible = createAutomaticQueuedMessageGroupEligibility(deps, {
+    now,
+    thread,
   });
   await sendQueuedMessage(deps, {
+    claimPolicy: { kind: "automatic", isGroupEligible },
     mode: "auto",
     queuedMessageId: row.id,
     threadId: row.threadId,
-    // A due row is eligible, not overridden: the plugin pass runs. Send-now is
-    // the only thing that bypasses it, and a timer is not a user.
-    sendNow: false,
   });
 }
 
@@ -297,7 +299,7 @@ export async function runRequestedQueueDrain(
     const thread = getThread(deps.db, row.threadId);
     if (!thread || thread.deletedAt !== null) continue;
     try {
-      await clearDueWaitAndAttempt(deps, row);
+      await attemptEligibleQueuedMessage(deps, row, thread, Date.now());
     } catch (error) {
       // Same posture as the due sweep: nobody is listening, so the outcome
       // lands on the row rather than propagating and stopping the walk.
@@ -357,7 +359,8 @@ export async function clearQueueWaitsForUnregisteredPlugin(
   deps: QueueDrainDeps,
   pluginId: string,
 ): Promise<void> {
-  const holder = `${QUEUED_MESSAGE_PLUGIN_WAIT_HOLDER_PREFIX}${pluginId}` as const;
+  const holder =
+    `${QUEUED_MESSAGE_PLUGIN_WAIT_HOLDER_PREFIX}${pluginId}` as const;
   const threadIds = new Set<string>();
   for (const row of listQueuedThreadMessagesByWaitHolder(deps.db, holder)) {
     deps.logger.info(

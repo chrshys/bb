@@ -1,8 +1,16 @@
-import { getThread, listEvents } from "@bb/db";
+import {
+  getThread,
+  isThreadQueueAutoSendPaused,
+  listEvents,
+  listQueuedThreadMessages,
+} from "@bb/db";
 import { turnScope } from "@bb/domain";
+import { groupHostDaemonEvents } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import {
   listQueuedCommands,
+  listQueuedThreadCommands,
+  internalAuthHeaders,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -17,6 +25,10 @@ import {
   seedThreadFixture,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
+import {
+  runQueuedMessageAutoSendSweep,
+  sendQueuedMessage,
+} from "../../src/services/threads/queued-messages.js";
 import { stopThreadForCurrentState } from "../../src/services/threads/thread-lifecycle.js";
 
 describe("thread runtime stop", () => {
@@ -137,6 +149,133 @@ describe("thread runtime stop", () => {
           (event) => event.type === "system/thread/interrupted",
         ),
       ).toHaveLength(1);
+    });
+  });
+
+  it("keeps queued messages paused after a manual stop until explicitly sent", async () => {
+    await withTestHarness(async (harness) => {
+      const { session, thread } = seedThreadFixture(harness, {
+        thread: { status: "active", visibility: "hidden" },
+      });
+      const queueResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Wait in the queue" }],
+            mode: "queue-if-active",
+            model: "gpt-5",
+            permissionMode: "full",
+            reasoningLevel: "medium",
+            serviceTier: "default",
+          }),
+        },
+      );
+      expect(queueResponse.status).toBe(200);
+      expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(1);
+
+      const stopResponsePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/stop`,
+        { method: "POST" },
+      );
+      const stop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      await reportQueuedCommandSuccess(harness, stop, {
+        providerCheckpointId: null,
+      });
+      expect((await stopResponsePromise).status).toBe(200);
+
+      const queuedMessage = listQueuedThreadMessages(harness.db, thread.id)[0]!;
+      await sendQueuedMessage(harness.deps, {
+        claimPolicy: {
+          kind: "automatic",
+          isGroupEligible: () => true,
+        },
+        mode: "auto",
+        queuedMessageId: queuedMessage.id,
+        threadId: thread.id,
+      });
+      await runQueuedMessageAutoSendSweep(harness.deps);
+
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(1);
+      expect(
+        listQueuedThreadCommands(harness, "thread.start", thread.id),
+      ).toEqual([]);
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", thread.id),
+      ).toEqual([]);
+
+      const staleStart = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          eventGroups: groupHostDaemonEvents([
+            {
+              threadId: thread.id,
+              event: {
+                type: "turn/started",
+                threadId: thread.id,
+                providerThreadId: "provider-stopped-runtime",
+                scope: turnScope("turn-stopped-runtime"),
+              },
+            },
+          ]),
+        }),
+      });
+      expect(staleStart.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      expect(isThreadQueueAutoSendPaused(harness.db, thread.id)).toBe(true);
+
+      await runQueuedMessageAutoSendSweep(harness.deps);
+      expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(1);
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", thread.id),
+      ).toEqual([]);
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${queuedMessage.id}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mode: "auto" }),
+        },
+      );
+      expect(sendResponse.status).toBe(200);
+      expect(listQueuedThreadMessages(harness.db, thread.id)).toEqual([]);
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", thread.id),
+      ).toHaveLength(1);
+
+      const acceptedStart = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            eventGroups: groupHostDaemonEvents([
+              {
+                threadId: thread.id,
+                event: {
+                  type: "turn/started",
+                  threadId: thread.id,
+                  providerThreadId: "provider-stopped-runtime",
+                  scope: turnScope("turn-deliberate-resume"),
+                },
+              },
+            ]),
+          }),
+        },
+      );
+      expect(acceptedStart.status).toBe(200);
+      expect(isThreadQueueAutoSendPaused(harness.db, thread.id)).toBe(false);
     });
   });
 
