@@ -146,6 +146,7 @@ const signingEnvironmentKeys = [
   "APPLE_APP_SPECIFIC_PASSWORD",
   "APPLE_ID",
   "APPLE_TEAM_ID",
+  "BB_DESKTOP_ADHOC_SIGNING",
   "CSC_IDENTITY_AUTO_DISCOVERY",
   "CSC_KEY_PASSWORD",
   "CSC_LINK",
@@ -587,6 +588,27 @@ describe("electron-builder signing config", () => {
     expect(config.mac).not.toHaveProperty("identity");
     expect(config.mac.notarize).toBe(false);
     expect(config.dmg.sign).toBe(false);
+  });
+
+  it("ad-hoc signs explicitly requested local builds", async () => {
+    const { config } = await readResolvedConfig({
+      BB_DESKTOP_ADHOC_SIGNING: "true",
+    });
+
+    expect(config.mac.identity).toBe("-");
+    expect(config.mac.notarize).toBe(false);
+  });
+
+  it("rejects ad-hoc signing with release signing credentials", async () => {
+    const result = await runConfigScript({
+      BB_DESKTOP_ADHOC_SIGNING: "true",
+      CSC_LINK: "base64-p12",
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      "Ad-hoc macOS signing cannot be combined",
+    );
   });
 
   it("keeps builds unsigned when keychain auto-discovery is explicitly disabled", async () => {

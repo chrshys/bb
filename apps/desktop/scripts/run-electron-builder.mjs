@@ -82,6 +82,10 @@ function logSigningPlan(signingPlan) {
         "macOS code signing enabled; electron-builder will derive the identity from CSC_LINK.",
       );
     }
+  } else if (signingPlan.mode === "ad-hoc") {
+    console.log(
+      "macOS ad-hoc signing enabled for this local build; notarization skipped.",
+    );
   } else if (signingPlan.mode === "keychain") {
     console.log(
       "macOS code signing via keychain auto-discovery; artifacts stay unsigned if no identity is installed. Notarization skipped.",
@@ -91,7 +95,6 @@ function logSigningPlan(signingPlan) {
       "macOS signing skipped: CSC_IDENTITY_AUTO_DISCOVERY=false and no signing secrets found. Artifacts will be unsigned.",
     );
   }
-
   if (signingPlan.notarizationEnabled) {
     console.log("macOS notarization enabled.");
   }
@@ -104,11 +107,16 @@ function autoDiscoveryExplicitlyDisabled(env) {
   );
 }
 
+function adHocSigningRequested(env) {
+  return env.BB_DESKTOP_ADHOC_SIGNING === "true";
+}
+
 /**
- * Resolves one of three signing modes:
+ * Resolves one of four signing modes:
  *
  * - "environment": all CI signing/notarization secrets are set — sign with the
  *   provided certificate and notarize (the published-release path).
+ * - "ad-hoc": explicitly sign local builds without an Apple certificate.
  * - "keychain": no secrets — sign with an auto-discovered keychain identity and
  *   skip notarization. Locally built apps never get the quarantine xattr, so
  *   notarization is unnecessary, but a valid signature is not optional: an
@@ -130,6 +138,19 @@ function createSigningPlan(env) {
   );
   const hasAnySigningKeys = presentSigningKeys.length > 0;
   const hasAllSigningKeys = missingSigningKeys.length === 0;
+
+  if (adHocSigningRequested(env)) {
+    if (hasAnySigningKeys) {
+      throw new Error(
+        "Ad-hoc macOS signing cannot be combined with signing or notarization environment variables.",
+      );
+    }
+    return {
+      mode: "ad-hoc",
+      identityName: undefined,
+      notarizationEnabled: false,
+    };
+  }
 
   if (hasAnySigningKeys && !hasAllSigningKeys) {
     throw new Error(
@@ -171,6 +192,8 @@ function resolveElectronBuilderConfig(baseConfig, env) {
 
   if (signingPlan.mode === "disabled") {
     mac.identity = null;
+  } else if (signingPlan.mode === "ad-hoc") {
+    mac.identity = "-";
   } else if (signingPlan.identityName) {
     mac.identity = signingPlan.identityName;
   } else {
@@ -208,9 +231,7 @@ function createElectronBuilderEnv(signingPlan) {
   };
 
   childEnv.CSC_IDENTITY_AUTO_DISCOVERY =
-    signingPlan.mode !== "disabled" && !signingPlan.identityName
-      ? "true"
-      : "false";
+    signingPlan.mode === "keychain" ? "true" : "false";
 
   return childEnv;
 }
