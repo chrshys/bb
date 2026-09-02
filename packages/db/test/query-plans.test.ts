@@ -28,6 +28,7 @@ import {
 } from "../src/data/events.js";
 import {
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
+  MAX_COMPLETED_EVENT_OUTPUT_MIGRATION_EVENT_DATA_BYTES,
   migrateNextCompletedEventItemOutput,
   pruneClosedSessions,
   pruneDestroyedEnvironments,
@@ -784,9 +785,10 @@ describe("slow query index plans", () => {
       },
     ]);
     const eventId = db.$client
-      .prepare<[string, number], { id: string }>(
-        "SELECT id FROM events WHERE thread_id = ? AND sequence = ?",
-      )
+      .prepare<
+        [string, number],
+        { id: string }
+      >("SELECT id FROM events WHERE thread_id = ? AND sequence = ?")
       .get(thread.id, 1)?.id;
     if (!eventId) {
       throw new Error("Expected completed output migration event");
@@ -919,9 +921,10 @@ describe("slow query index plans", () => {
       },
     ]);
     const insertedEvent = db.$client
-      .prepare<[string, number], IdentifiedRow>(
-        "SELECT id FROM events WHERE thread_id = ? AND sequence = ?",
-      )
+      .prepare<
+        [string, number],
+        IdentifiedRow
+      >("SELECT id FROM events WHERE thread_id = ? AND sequence = ?")
       .get(thread.id, 1);
     if (!insertedEvent) {
       throw new Error("Expected completed output query-plan event");
@@ -938,9 +941,9 @@ describe("slow query index plans", () => {
     const cursorDebugLog = findOnlyDebugLog({
       logger,
       predicate: (fields) =>
-        fields.operation === "get" &&
+        fields.operation === "all" &&
         fields.sql.includes('from "maintenance_scan_cursors"') &&
-        fields.bindingArgumentCount === 1,
+        fields.bindingArgumentCount === 2,
     });
     assertEmittedQueryPlanUsesIndex({
       db,
@@ -948,6 +951,7 @@ describe("slow query index plans", () => {
       indexName: "sqlite_autoindex_maintenance_scan_cursors_1",
       params: [
         "legacy_completed_event_output_sidecar:v1:commandExecution:aggregatedOutput",
+        "legacy_completed_event_output_sidecar_window:v1:commandExecution:aggregatedOutput",
       ],
     });
 
@@ -973,7 +977,7 @@ describe("slow query index plans", () => {
         fields.sql.startsWith(
           "SELECT id, created_at, data, thread_id FROM events",
         ) &&
-        fields.bindingArgumentCount === 13,
+        fields.bindingArgumentCount === 14,
     });
     assertEmittedQueryPlanUsesIndex({
       db,
@@ -983,10 +987,11 @@ describe("slow query index plans", () => {
         "item/completed",
         "commandExecution",
         createdBefore,
+        0,
+        "",
         createdBefore - 10_000,
         insertedEvent.id,
-        createdBefore - 10_000,
-        insertedEvent.id,
+        MAX_COMPLETED_EVENT_OUTPUT_MIGRATION_EVENT_DATA_BYTES,
         "$.item.aggregatedOutput",
         "$.item.truncation.aggregatedOutput",
         "$.item.type",
@@ -1286,9 +1291,10 @@ describe("slow query index plans", () => {
   it("drops redundant events indexes after creating their consolidated replacement", () => {
     const { db } = setup();
     const indexRows = db.$client
-      .prepare<[], IndexNameRow>(
-        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'",
-      )
+      .prepare<
+        [],
+        IndexNameRow
+      >("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'")
       .all();
     const indexNames = indexRows.map((row) => row.name);
 
