@@ -154,7 +154,7 @@ export function PluginNavSidebarItems({
         pluginId: BUILTIN_NAV_ROW_PLUGIN_ID,
         id: "skills",
         title: "Skills",
-        icon: "Zap",
+        icon: "BookOpen",
         routePath: getSkillsRoutePath(),
       },
       ...pluginRows,
