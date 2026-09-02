@@ -1,6 +1,6 @@
 ---
 name: bb-cli
-description: Use this when controlling bb. The bb CLI inspects and manages threads, environments, projects, machines, providers, visible Browser tabs, skills, plugins, settings, terminals, and other BB services.
+description: Use this when controlling bb. The bb CLI inspects and manages threads, environments, projects, machines, providers, visible Browser tabs, notifications, skills, plugins, settings, terminals, and other BB services.
 ---
 
 # BB CLI

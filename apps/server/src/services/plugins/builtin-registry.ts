@@ -105,6 +105,11 @@ export const BUILTIN_PLUGINS = [
     defaultEnabled: true,
   },
   {
+    name: "push-notifications",
+    pluginId: "push-notifications",
+    defaultEnabled: true,
+  },
+  {
     name: "secrets",
     pluginId: "secrets",
     defaultEnabled: true,
