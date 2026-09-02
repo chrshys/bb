@@ -30,7 +30,9 @@ export type BuiltInSidebarNavigationProps = ComponentProps<
   };
 
 export function BuiltInSidebarNavigation({
+  compactCustomizeMode,
   newThreadSplit,
+  onCompactCustomizeModeChange,
   onNavigate,
   onNewChat,
   onSearchThreads,
@@ -141,8 +143,10 @@ export function BuiltInSidebarNavigation({
       <div className="contents" data-testid="app-sidebar-primary-actions">
         <PluginNavSidebarItems
           builtInEntries={builtInEntries}
+          compactCustomizeMode={compactCustomizeMode}
           entries={traditionalPluginNavPanels}
           leadingOrderKeys={DEFAULT_BUILT_IN_SIDEBAR_NAVIGATION_ORDER}
+          onCompactCustomizeModeChange={onCompactCustomizeModeChange}
           onNavigate={onNavigate}
           splitEnabled={splitEnabled}
         />

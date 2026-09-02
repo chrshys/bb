@@ -8,7 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { useEffect, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -124,16 +124,45 @@ function registerPanel(
   );
 }
 
-function renderSidebarItems(
-  options: {
-    builtInEntries?: readonly BuiltInSidebarNavEntry[];
-    storedOrder?: string[];
-    storedVisibleKeys?: string[] | null;
-    compactViewport?: boolean;
-    initialEntry?: string;
-    splitEnabled?: boolean;
-  } = {},
-) {
+interface RenderSidebarItemsOptions {
+  builtInEntries?: readonly BuiltInSidebarNavEntry[];
+  storedOrder?: string[];
+  storedVisibleKeys?: string[] | null;
+  compactViewport?: boolean;
+  compactCustomizeMode?: boolean;
+  initialEntry?: string;
+  onCompactCustomizeModeChange?: (isCustomizing: boolean) => void;
+  splitEnabled?: boolean;
+}
+
+function PluginNavSidebarItemsHarness({
+  options,
+}: {
+  options: RenderSidebarItemsOptions;
+}) {
+  const [compactCustomizeMode, setCompactCustomizeMode] = useState(
+    options.compactCustomizeMode ?? false,
+  );
+  const compactControlProps = options.compactViewport
+    ? {
+        compactCustomizeMode,
+        onCompactCustomizeModeChange: (isCustomizing: boolean) => {
+          setCompactCustomizeMode(isCustomizing);
+          options.onCompactCustomizeModeChange?.(isCustomizing);
+        },
+      }
+    : {};
+
+  return (
+    <PluginNavSidebarItems
+      builtInEntries={options.builtInEntries}
+      splitEnabled={options.splitEnabled ?? false}
+      {...compactControlProps}
+    />
+  );
+}
+
+function renderSidebarItems(options: RenderSidebarItemsOptions = {}) {
   const store = createStore();
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -155,10 +184,7 @@ function renderSidebarItems(
         <Provider store={store}>
           <MemoryRouter initialEntries={[options.initialEntry ?? "/"]}>
             <SidebarProvider>
-              <PluginNavSidebarItems
-                builtInEntries={options.builtInEntries}
-                splitEnabled={options.splitEnabled ?? false}
-              />
+              <PluginNavSidebarItemsHarness options={options} />
               <LocationProbe />
             </SidebarProvider>
           </MemoryRouter>
@@ -454,6 +480,111 @@ describe("PluginNavSidebarItems", () => {
     expect(mounts).toBe(0);
     expect(
       view.container.querySelector("[data-plugin-nav-sidebar-accessory]"),
+    ).toBeNull();
+  });
+
+  it("uses an in-place customization mode instead of a drawer on compact viewports", () => {
+    const onCompactCustomizeModeChange = vi.fn();
+    renderSidebarItems({
+      compactViewport: true,
+      builtInEntries: [
+        builtInEntry("new-thread", "New thread"),
+        builtInEntry("search-threads", "Search threads"),
+      ],
+      onCompactCustomizeModeChange,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Customize sidebar navigation" }),
+    );
+
+    expect(onCompactCustomizeModeChange).toHaveBeenCalledWith(true);
+    expect(
+      screen.getByTestId("sidebar-navigation-customize-inline"),
+    ).not.toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to sidebar" })).toBe(
+      document.activeElement,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Customize sidebar navigation" }),
+    ).toBeNull();
+    const firstCustomizeRow = customizeRows()[0];
+    const firstDragHandle = firstCustomizeRow?.querySelector<HTMLElement>(
+      "[data-plugin-nav-customize-drag-handle]",
+    );
+    const firstCheckbox = within(firstCustomizeRow as HTMLElement).getByRole(
+      "checkbox",
+    );
+    expect(
+      firstCustomizeRow?.classList.contains("max-md:pointer-coarse:h-9"),
+    ).toBe(true);
+    expect(
+      firstDragHandle?.classList.contains("max-md:pointer-coarse:h-9"),
+    ).toBe(true);
+    expect(
+      firstDragHandle?.classList.contains("max-md:pointer-coarse:w-9"),
+    ).toBe(true);
+    expect(
+      firstCheckbox
+        .closest("label")
+        ?.classList.contains("max-md:pointer-coarse:h-9"),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to sidebar" }));
+
+    expect(onCompactCustomizeModeChange).toHaveBeenLastCalledWith(false);
+    expect(
+      screen.queryByTestId("sidebar-navigation-customize-inline"),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "New thread" })).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Customize sidebar navigation" }),
+    ).toBe(document.activeElement);
+  });
+
+  it("keeps compact visibility changes in place and closes the mode when launching", () => {
+    const onActivate = vi.fn();
+    const { store } = renderSidebarItems({
+      compactViewport: true,
+      builtInEntries: [builtInEntry("new-thread", "New thread", onActivate)],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Customize sidebar navigation" }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Show New thread in sidebar" }),
+    );
+
+    expect(
+      screen.getByTestId("sidebar-navigation-customize-inline"),
+    ).not.toBeNull();
+    expect(store.get(pluginNavVisiblePanelKeysAtom)).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+
+    expect(onActivate).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByTestId("sidebar-navigation-customize-inline"),
+    ).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("keeps the desktop customization popover", () => {
+    renderSidebarItems({
+      builtInEntries: [builtInEntry("new-thread", "New thread")],
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Customize sidebar navigation" }),
+    );
+
+    expect(
+      screen.getByRole("list", { name: "Sidebar navigation" }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByTestId("sidebar-navigation-customize-inline"),
     ).toBeNull();
   });
 
