@@ -65,7 +65,7 @@ const AUTOMATIONS_PLUGIN = {
   hasSettings: false,
   provenance: "builtin",
   publisherKey: "builtin",
-  publisherLabel: "BB Official",
+  publisherLabel: "Built-in",
   isOrphanedBuiltin: false,
   sourceDisplay: "builtin · automations",
   updateState: {},
@@ -639,8 +639,8 @@ describe("PluginsOverview", () => {
       "plugin-row-inactive-local",
       "plugin-row-inactive-official",
     ]);
-    const officialPills = screen.getAllByText("BB Official");
-    expect(officialPills).toHaveLength(2);
+    const builtinPills = screen.getAllByText("Built-in");
+    expect(builtinPills).toHaveLength(2);
     expect(screen.getAllByText("BB Community")).toHaveLength(1);
 
     const sortTrigger = screen.getByRole("button", {
@@ -730,7 +730,7 @@ describe("PluginsOverview", () => {
     expect(screen.queryByRole("menuitemcheckbox", { name: "All" })).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("menuitemcheckbox", { name: "BB Official" }),
+      screen.getByRole("menuitemcheckbox", { name: "Built-in" }),
     );
     await waitFor(() => {
       expect(rowIds()).toEqual(["plugin-row-builtin-one"]);
@@ -748,7 +748,7 @@ describe("PluginsOverview", () => {
 
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "User" }));
     fireEvent.click(
-      screen.getByRole("menuitemcheckbox", { name: "BB Official" }),
+      screen.getByRole("menuitemcheckbox", { name: "Built-in" }),
     );
     fireEvent.click(
       screen.getByRole("menuitemcheckbox", { name: "BB Community" }),
@@ -877,7 +877,7 @@ describe("PluginsOverview", () => {
     expect(screen.getByText("Inactive Local Plugin")).toBeTruthy();
   });
 
-  it("badges a built-in plugin BB Official and a catalog install by its marketplace", async () => {
+  it("badges a built-in plugin Built-in and a catalog install by its marketplace", async () => {
     installFetch([
       AUTOMATIONS_PLUGIN,
       {
@@ -903,11 +903,11 @@ describe("PluginsOverview", () => {
       </MemoryRouter>,
     );
 
-    const official = await screen.findAllByText("BB Official");
-    expect(official).toHaveLength(1);
+    const builtin = await screen.findAllByText("Built-in");
+    expect(builtin).toHaveLength(1);
     const community = screen.getAllByText("BB Community");
     expect(community).toHaveLength(1);
-    expect(official[0]?.parentElement?.className).toBe(
+    expect(builtin[0]?.parentElement?.className).toBe(
       community[0]?.parentElement?.className,
     );
   });

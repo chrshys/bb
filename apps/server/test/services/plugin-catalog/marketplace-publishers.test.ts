@@ -128,7 +128,7 @@ describe("marketplace publisher labels", () => {
     ).toBe("acme");
   });
 
-  it("keeps a store-installed bundled plugin on BB Official", () => {
+  it("keeps a store-installed bundled plugin labeled Built-in", () => {
     const db = connect();
     register(
       db,
@@ -149,10 +149,10 @@ describe("marketplace publisher labels", () => {
         catalogMarketplaceName: "bb-community",
         labels,
       }),
-    ).toBe("BB Official");
+    ).toBe("Built-in");
   });
 
-  it("badges bundled plugins BB Official and user installs not at all", () => {
+  it("badges bundled plugins Built-in and user installs not at all", () => {
     const labels = marketplacePublisherLabels(connect());
 
     expect(
@@ -162,7 +162,7 @@ describe("marketplace publisher labels", () => {
         catalogMarketplaceName: null,
         labels,
       }),
-    ).toBe("BB Official");
+    ).toBe("Built-in");
     expect(
       pluginPublisherLabel({
         sourceKind: "git",

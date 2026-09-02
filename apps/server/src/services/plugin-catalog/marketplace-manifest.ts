@@ -21,7 +21,7 @@ const MARKETPLACE_SCHEMA_URL =
 
 export const CURATED_MARKETPLACE_NAME = CURATED_PLUGIN_MARKETPLACE_NAME;
 
-export const BUILTIN_PUBLISHER_LABEL = "BB Official";
+export const BUILTIN_PUBLISHER_LABEL = "Built-in";
 
 export const BUILTIN_PUBLISHER_KEY = "builtin";
 

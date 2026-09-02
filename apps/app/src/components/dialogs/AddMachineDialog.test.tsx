@@ -60,7 +60,7 @@ function connectPlugin(
     version: "0.1.0",
     provenance: "builtin",
     isOrphanedBuiltin: false,
-    publisherLabel: "BB Official",
+    publisherLabel: "Built-in",
     sourceDisplay: "builtin · connect",
     updateState: {},
     description: null,

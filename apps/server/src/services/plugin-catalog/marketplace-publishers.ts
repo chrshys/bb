@@ -5,10 +5,11 @@ import {
   parseMarketplaceManifestJson,
 } from "./marketplace-manifest.js";
 
-const RESERVED_PUBLISHER_LABELS: ReadonlySet<string> = new Set([
-  BUILTIN_PUBLISHER_LABEL,
-  "BB Community",
-]);
+const RESERVED_PUBLISHER_LABELS: Record<string, true> = {
+  [BUILTIN_PUBLISHER_LABEL]: true,
+  "BB Official": true,
+  "BB Community": true,
+};
 
 export function marketplacePublisherLabel(args: {
   marketplaceName: string;
@@ -16,7 +17,7 @@ export function marketplacePublisherLabel(args: {
 }): string {
   if (args.marketplaceName === CURATED_MARKETPLACE_NAME)
     return args.displayName;
-  return RESERVED_PUBLISHER_LABELS.has(args.displayName)
+  return args.displayName in RESERVED_PUBLISHER_LABELS
     ? args.marketplaceName
     : args.displayName;
 }
