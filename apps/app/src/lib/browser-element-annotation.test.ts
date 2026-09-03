@@ -163,7 +163,7 @@ Ancestors: main > body`);
 - Monthly billing`);
   });
 
-  it("withholds credential-bearing fields from copied and attached context", () => {
+  it("allows credential-bearing fields to be annotated without exposing their value", () => {
     const annotation = redactBrowserElementAnnotation(
       capture({
         accessibility: {
@@ -188,7 +188,9 @@ Ancestors: main > body`);
       sensitive: true,
       text: "",
     });
-    expect(browserElementAnnotationAgentText(annotation!)).toBeNull();
+    const agentText = browserElementAnnotationAgentText(annotation!);
+    expect(agentText).toContain("Sensitive form values were redacted.");
+    expect(agentText).not.toContain("should never leave the page");
   });
 
   it("formats multiple notes with each annotation's intent and feedback", () => {
@@ -217,6 +219,26 @@ Ancestors: main > body`);
           screenshotUrl: null,
           priority: "important",
         },
+        {
+          annotation: annotation!,
+          comment: "The primary action remains broken.",
+          createdAt: "2026-08-31T00:02:00.000Z",
+          id: "three",
+          intent: "fix",
+          pageId: "browser:7",
+          screenshotUrl: null,
+          priority: "blocking",
+        },
+        {
+          annotation: annotation!,
+          comment: "Keep this design.",
+          createdAt: "2026-08-31T00:03:00.000Z",
+          id: "four",
+          intent: "approve",
+          pageId: "browser:7",
+          screenshotUrl: null,
+          priority: "suggestion",
+        },
       ],
       "browser:7",
     );
@@ -226,6 +248,18 @@ Ancestors: main > body`);
     );
     expect(annotations).toContain(
       "**Feedback:** Move this CTA above the fold.",
+    );
+    expect(annotations).toContain(
+      "**Requested outcome:** Make this deliberate change to the selected element. Preserve behavior that the feedback does not change.",
+    );
+    expect(annotations).toContain(
+      "**Requested outcome:** Answer this question about the selected element before making changes. This note does not request an implementation change.",
+    );
+    expect(annotations).toContain(
+      "**Requested outcome:** Implement this feedback as a defect fix for the selected element. Verify that the reported problem is resolved.",
+    );
+    expect(annotations).toContain(
+      "**Requested outcome:** Treat the selected element as approved. Do not change it unless another annotation explicitly requires a change.",
     );
     expect(annotations).toContain("## Design Feedback: /pricing");
     expect(annotations).toContain("**URL:** https://example.test/pricing");

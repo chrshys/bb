@@ -211,6 +211,15 @@ const electronMock = vi.hoisted(() => {
     validatedURL: string;
   }
 
+  type FakeCertificateErrorListener = (
+    event: FakePreventableEvent,
+    webContents: { id: number },
+    url: string,
+    error: string,
+    certificate: object,
+    callback: (trusted: boolean) => void,
+  ) => void;
+
   type FakeWebContentsListeners = {
     [TEventName in keyof FakeWebContentsEventMap]: Array<
       FakeWebContentsEventMap[TEventName]
@@ -668,6 +677,9 @@ const electronMock = vi.hoisted(() => {
     public readonly willDownloadListeners: FakeSessionListener[] = [];
     public permissionCheckHandler: FakePermissionCheckHandler | null = null;
     public permissionRequestHandler: FakePermissionRequestHandler | null = null;
+    public certificateVerifyProc:
+      | ((request: { hostname: string }, callback: (result: number) => void) => void)
+      | null = null;
     on(eventName: "will-download", listener: FakeSessionListener): void {
       this.willDownloadListeners.push(listener);
     }
@@ -679,13 +691,24 @@ const electronMock = vi.hoisted(() => {
     setPermissionRequestHandler(handler: FakePermissionRequestHandler): void {
       this.permissionRequestHandler = handler;
     }
+
+    setCertificateVerifyProc(
+      handler: (
+        request: { hostname: string },
+        callback: (result: number) => void,
+      ) => void,
+    ): void {
+      this.certificateVerifyProc = handler;
+    }
   }
 
   const fakeSessions: FakeSession[] = [];
   const fakeViews: FakeWebContentsView[] = [];
+  const certificateErrorListeners: FakeCertificateErrorListener[] = [];
 
   return {
     fakeCapturedImage,
+    certificateErrorListeners,
     fakeSessions,
     fakeViews,
     FakeWebContentsView: class extends FakeWebContentsView {
@@ -701,11 +724,17 @@ const electronMock = vi.hoisted(() => {
         return fakeSession;
       },
     },
+    app: {
+      on(_eventName: "certificate-error", listener: FakeCertificateErrorListener): void {
+        certificateErrorListeners.push(listener);
+      },
+    },
   };
 });
 
 vi.mock("electron", () => ({
   WebContentsView: electronMock.FakeWebContentsView,
+  app: electronMock.app,
   session: electronMock.session,
 }));
 
@@ -774,6 +803,7 @@ class FakeHostWindow implements DesktopBrowserHostWindow {
 
 beforeEach(() => {
   vi.useRealTimers();
+  electronMock.certificateErrorListeners.length = 0;
   electronMock.fakeSessions.length = 0;
   electronMock.fakeViews.length = 0;
 });
@@ -909,6 +939,38 @@ describe("DesktopBrowserViewManager", () => {
     expect(hostWindow.contentView.addCalls).toEqual([
       { index: 0, view: requireFakeView(0) },
     ]);
+  });
+
+  it("removes hidden native views from the host input tree and restores them on show", () => {
+    const manager = createDesktopBrowserViewManager();
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 49,
+    });
+
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://example.com",
+    });
+    const view = requireFakeView(0);
+
+    manager.setVisible({
+      hostWindow,
+      request: { tabId: "browser:a", visible: false },
+    });
+    expect(hostWindow.contentView.removedViews).toEqual([view]);
+
+    manager.setVisible({
+      hostWindow,
+      request: { tabId: "browser:a", visible: true },
+    });
+    expect(hostWindow.contentView.addCalls).toEqual([
+      { index: 0, view },
+      { index: 0, view },
+    ]);
+    expect(view.visible).toBe(true);
   });
 
   it("replaces the global Browser session and reloads every live tab", async () => {
@@ -2613,5 +2675,58 @@ describe("DesktopBrowserViewManager", () => {
       requestGrants.push(granted);
     });
     expect(requestGrants).toEqual([true, false, false]);
+  });
+  it("trusts only the current loopback HTTPS certificate for this Browser session", () => {
+    const manager = createDesktopBrowserViewManager();
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { height: 700, width: 900 },
+      webContentsId: 75,
+    });
+    attachBrowserTab({
+      manager,
+      hostWindow,
+      tabId: "browser:a",
+      url: "https://localhost:8443/",
+    });
+
+    manager.trustLocalhostCertificate({ hostWindow, tabId: "browser:a" });
+
+    const verifyProc = requireFakeSession(0).certificateVerifyProc;
+    expect(verifyProc).not.toBeNull();
+    if (verifyProc === null) {
+      throw new Error("Expected a certificate verification handler.");
+    }
+    const certificateErrorListener =
+      electronMock.certificateErrorListeners.at(-1);
+    expect(certificateErrorListener).toBeDefined();
+    if (certificateErrorListener === undefined) {
+      throw new Error("Expected a certificate error listener.");
+    }
+    const certificateEvent: FakePreventableEvent = {
+      defaultPrevented: false,
+      preventDefault(): void {
+        this.defaultPrevented = true;
+      },
+    };
+    let certificateAccepted = false;
+    certificateErrorListener(
+      certificateEvent,
+      requireFakeView(0).webContents,
+      "https://localhost:8443/",
+      "ERR_CERT_AUTHORITY_INVALID",
+      {},
+      (trusted) => {
+        certificateAccepted = trusted;
+      },
+    );
+
+    expect(certificateEvent.defaultPrevented).toBe(true);
+    expect(certificateAccepted).toBe(true);
+    const results: number[] = [];
+    verifyProc({ hostname: "localhost" }, (result) => results.push(result));
+    verifyProc({ hostname: "example.com" }, (result) => results.push(result));
+
+    expect(results).toEqual([0, -3]);
+    expect(requireFakeView(0).webContents.reloadCalls).toBe(1);
   });
 });

@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Menu, WebContentsView, session, type Cookie, type Session } from "electron";
+import {
+  app,
+  Menu,
+  WebContentsView,
+  session,
+  type Cookie,
+  type Session,
+} from "electron";
 import {
   BB_DESKTOP_BROWSER_MAX_TITLE_LENGTH,
   BB_DESKTOP_BROWSER_MAX_URL_LENGTH,
@@ -260,6 +267,7 @@ interface BrowserViewEntry {
   rendererRecoveryState: "healthy" | "pending" | "blocked";
   rendererRecoveryTimer: ReturnType<typeof setTimeout> | null;
   suppressNextFocusNotification: boolean;
+  attached: boolean;
   visible: boolean;
   frameRegistry: Map<string, BrowserFrameRecord>;
   frameRecordsByDebuggerId: Map<string, BrowserFrameRecord>;
@@ -370,6 +378,7 @@ export interface DesktopBrowserViewManager {
   setVisibleWithoutFocus(
     args: HostScopedRequestArgs<BbDesktopBrowserSetVisibleRequest>,
   ): void;
+  trustLocalhostCertificate(args: HostScopedTabArgs): void;
   findInPage(
     args: HostScopedRequestArgs<BbDesktopBrowserFindInPageRequest>,
   ): void;
@@ -515,6 +524,37 @@ export function isAllowedBrowserPermission(permission: string): boolean {
   return permission === "clipboard-sanitized-write";
 }
 
+function getLoopbackCertificateHost(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:") return null;
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/gu, "");
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname === "::1"
+  ) {
+    return parsed.hostname;
+  }
+  const octets = hostname.split(".");
+  if (
+    octets.length !== 4 ||
+    octets[0] !== "127" ||
+    !octets.every((octet) => {
+      if (!/^\d+$/u.test(octet)) return false;
+      const value = Number(octet);
+      return value >= 0 && value <= 255 && String(value) === octet;
+    })
+  ) {
+    return null;
+  }
+  return parsed.hostname;
+}
+
 export function createDesktopBrowserViewManager(
   args: CreateDesktopBrowserViewManagerArgs,
 ): DesktopBrowserViewManager {
@@ -525,6 +565,7 @@ export function createDesktopBrowserViewManager(
   let hardenedSession: Session | null = null;
   let viewportProfileGeneration = 0;
   let nextBrowserSessionMutation: Promise<void> = Promise.resolve();
+  const trustedCertificateHosts = new Set<string>();
   function mutateBrowserSession<T>(operation: () => Promise<T>): Promise<T> {
     const result = nextBrowserSessionMutation.then(operation, operation);
     nextBrowserSessionMutation = result.then(
@@ -552,11 +593,23 @@ export function createDesktopBrowserViewManager(
     if (entry.view.webContents.isDestroyed()) {
       return;
     }
-    entry.view.setVisible(
+    const shouldBeVisible =
       entry.visible &&
-        entry.rendererRecoveryState === "healthy" &&
-        !isHostResizing(hostWindow),
-    );
+      entry.rendererRecoveryState === "healthy" &&
+      !isHostResizing(hostWindow);
+    if (!shouldBeVisible) {
+      entry.view.setVisible(false);
+      if (entry.attached && !hostWindow.isDestroyed()) {
+        hostWindow.contentView.removeChildView(entry.view);
+        entry.attached = false;
+      }
+      return;
+    }
+    if (!entry.attached) {
+      hostWindow.contentView.addChildView(entry.view, 0);
+      entry.attached = true;
+    }
+    entry.view.setVisible(true);
   }
 
   function clearEntryRendererRecoveryTimer(entry: BrowserViewEntry): void {
@@ -713,6 +766,20 @@ export function createDesktopBrowserViewManager(
         callback(allowed);
       },
     );
+    app.on(
+      "certificate-error",
+      (event, webContents, url, _error, _certificate, callback) => {
+        if (!entriesByWebContentsId.has(webContents.id)) {
+          return;
+        }
+        const host = getLoopbackCertificateHost(url);
+        if (host === null || !trustedCertificateHosts.has(host)) {
+          return;
+        }
+        event.preventDefault();
+        callback(true);
+      },
+    );
     browserSession.setPermissionCheckHandler((webContents, permission) => {
       const entry =
         webContents === null
@@ -722,6 +789,9 @@ export function createDesktopBrowserViewManager(
         ? false
         : isAllowedBrowserPermission(permission) ||
             entry?.allowedPermissions.has(permission) === true;
+    });
+    browserSession.setCertificateVerifyProc((request, callback) => {
+      callback(trustedCertificateHosts.has(request.hostname) ? 0 : -3);
     });
     browserSession.on("will-download", (event, item, webContents) => {
       event.preventDefault();
@@ -1539,6 +1609,7 @@ function rejectBrowserEventWaiters(
       rendererRecoveryTimer: null,
       suppressNextFocusNotification: false,
       visible: false,
+      attached: true,
       frameRegistry: new Map(),
       loadState: "none",
       inFlightRequests: 0,
@@ -1596,8 +1667,9 @@ function rejectBrowserEventWaiters(
     }
     entry.eventWaiters.clear();
     clearEntryViewportProfile(entry);
-    if (!hostWindow.isDestroyed()) {
+    if (!hostWindow.isDestroyed() && entry.attached) {
       hostWindow.contentView.removeChildView(entry.view);
+      entry.attached = false;
     }
     if (!entry.view.webContents.isDestroyed()) {
       entry.view.webContents.close();
@@ -1765,6 +1837,19 @@ function rejectBrowserEventWaiters(
     },
     setVisibleWithoutFocus({ hostWindow, request }) {
       setEntryVisibility({ hostWindow, request }, false);
+    },
+    trustLocalhostCertificate({ hostWindow, tabId }) {
+      withEntry({ hostWindow, tabId }, (entry) => {
+        const host = getLoopbackCertificateHost(entry.view.webContents.getURL());
+        if (host === null) {
+          throw new Error(
+            "Only the current localhost HTTPS page can be trusted",
+          );
+        }
+        trustedCertificateHosts.add(host);
+        entry.lastErrorText = null;
+        entry.view.webContents.reload();
+      });
     },
     async listFrames({ hostWindow, request }) {
       const entry = entries.get(browserViewKey(hostWindow, request.tabId));

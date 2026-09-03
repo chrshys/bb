@@ -51,6 +51,8 @@ interface PendingNativeHide {
   timeout: number;
 }
 
+const HIDDEN_BROWSER_VIEW_BOUNDS = { height: 0, width: 0, x: 0, y: 0 };
+
 export function createBrowserViewVisibilityCoordinator(
   desktopBrowser: BbDesktopBrowserApi,
 ): BrowserViewVisibilityCoordinator {
@@ -77,6 +79,10 @@ export function createBrowserViewVisibilityCoordinator(
     if (pendingHide === null) return;
     const tabId = pendingHide.tabId;
     cancelPendingHide();
+    desktopBrowser.setBounds({
+      bounds: HIDDEN_BROWSER_VIEW_BOUNDS,
+      tabId,
+    });
     desktopBrowser.setVisible({ tabId, visible: false });
   };
   const scheduleHideAfterPaint = (tabId: string) => {
@@ -132,6 +138,10 @@ export function createBrowserViewVisibilityCoordinator(
       if (pendingHide?.tabId === tabId) cancelPendingHide();
       if (visibleTabId === tabId) visibleTabId = null;
       deactivateDesktopBrowserViewAperture(tabId);
+      desktopBrowser.setBounds({
+        bounds: HIDDEN_BROWSER_VIEW_BOUNDS,
+        tabId,
+      });
       desktopBrowser.setVisible({ tabId, visible: false });
     },
     release(tabId) {
