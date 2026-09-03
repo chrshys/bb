@@ -16,8 +16,9 @@ Apple Silicon Mac releases are published at:
 <https://github.com/chrshys/bb/releases/tag/desktop-sf-bb>
 
 Download the `.dmg`, drag **sf-bb** to Applications, and launch it. Releases
-built without Apple Developer signing require Control-clicking the app and
-choosing **Open** on first launch.
+built without Apple Developer signing require opening **System Settings >
+Privacy & Security** and choosing **Open Anyway** on first launch. You can also
+run `xattr -dr com.apple.quarantine /Applications/sf-bb.app` in Terminal.
 
 Each installation has its own projects, threads, messages, credentials,
 browser data, and machine-specific settings. Only application source and
@@ -26,14 +27,16 @@ with a file synchronization service.
 
 ## Team release channel
 
-A push to the `sf-bb` branch runs
-[Release sf-bb](.github/workflows/release-sf-bb.yml). The workflow:
+A push to the `sf-bb` branch runs and publishes
+[Release sf-bb](.github/workflows/release-sf-bb.yml). A manual dispatch must use
+the `sf-bb` ref. It uploads an installable workflow artifact but publishes only
+when its `publish` input is `true`. The workflow:
 
-1. validates the desktop packages;
-2. derives a monotonically increasing custom version;
-3. builds Apple Silicon `.dmg` and `.zip` artifacts;
-4. publishes an immutable `sf-bb-v<version>` release; and
-5. refreshes the moving `desktop-sf-bb` release and update feed.
+1. validates the desktop packages and confirms the runner is Apple Silicon;
+2. derives a version newer than the live feed and rejects unrelated history;
+3. builds and launches the packaged app with the desktop smoke test;
+4. publishes a versioned `sf-bb-v<version>` prerelease; and
+5. refreshes the moving `desktop-sf-bb` release, then verifies its feed and zip.
 
 Without signing secrets, the workflow publishes an ad-hoc-signed build for
 manual installation. With the complete signing secret set, it signs and

@@ -5,6 +5,12 @@ on:
     branches:
       - sf-bb
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the versioned and moving releases
+        required: true
+        type: boolean
+        default: false
 
 env:
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -25,10 +31,16 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Require sf-bb branch
+        run: test "$GITHUB_REF" = "refs/heads/sf-bb"
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+
+      - name: Verify Apple Silicon runner
+        run: test "$(uname -m)" = arm64
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
@@ -43,7 +55,17 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile --prefer-offline; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::pnpm install failed on attempt $attempt; retrying"
+            sleep $((attempt * 5))
+          done
 
       - name: Validate desktop code
         run: |
@@ -56,7 +78,23 @@ jobs:
           set -euo pipefail
           BASE_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
           NEXT_PATCH="$(node --input-type=module -e 'import { resolveVersionArgument } from "./scripts/lib/semver.mjs"; process.stdout.write(resolveVersionArgument({ argument: "--patch", currentVersion: process.argv[1], usage: "" }));' "$BASE_VERSION")"
-          VERSION="${NEXT_PATCH}-sf.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          VERSION="${NEXT_PATCH}-sf.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          FEED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/desktop-version.json"
+          PUBLISHED_FEED="$RUNNER_TEMP/published-desktop-version.json"
+          HTTP_STATUS="$(curl --silent --show-error --location --retry 5 --retry-all-errors --output "$PUBLISHED_FEED" --write-out '%{http_code}' "$FEED_URL")"
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            PUBLISHED_VERSION="$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (typeof value.version !== "string") { throw new Error("Published feed has no version"); } process.stdout.write(value.version);' "$PUBLISHED_FEED")"
+            node --input-type=module -e 'import { compareSemver } from "./scripts/lib/semver.mjs"; if (compareSemver(process.argv[1], process.argv[2]) <= 0) { console.error(`Release version ${process.argv[1]} must be newer than published version ${process.argv[2]}.`); process.exit(1); }' "$VERSION" "$PUBLISHED_VERSION"
+            git fetch --force origin refs/tags/desktop-sf-bb:refs/tags/desktop-sf-bb
+            PUBLISHED_SHA="$(git rev-parse 'refs/tags/desktop-sf-bb^{commit}')"
+            if ! git merge-base --is-ancestor "$PUBLISHED_SHA" "$GITHUB_SHA"; then
+              echo "Published commit $PUBLISHED_SHA is not an ancestor of $GITHUB_SHA." >&2
+              exit 1
+            fi
+          elif [[ "$HTTP_STATUS" != "404" ]]; then
+            echo "Could not read the published feed: HTTP $HTTP_STATUS" >&2
+            exit 1
+          fi
           node scripts/bump-version.mjs "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -113,6 +151,11 @@ jobs:
           BB_DESKTOP_RELEASE_CHANNEL: custom
         run: pnpm exec turbo run desktop:build --filter=@bb/desktop --force --output-logs=new-only
 
+      - name: Smoke test packaged app
+        env:
+          BB_DESKTOP_RELEASE_CHANNEL: custom
+        run: pnpm exec turbo run smoke:packaged --filter=@bb/desktop --force --output-logs=new-only
+
       - name: Generate version feed
         env:
           BB_DESKTOP_RELEASE_CHANNEL: custom
@@ -122,6 +165,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: sf-bb-${{ steps.version.outputs.version }}-macos-arm64
+          retention-days: 14
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
@@ -131,6 +175,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish releases
+        if: github.event_name == 'push' || inputs.publish == true
         env:
           GH_TOKEN: ${{ github.token }}
           SIGNED: ${{ steps.signing.outputs.signed }}
@@ -138,13 +183,16 @@ jobs:
         run: |
           set -euo pipefail
           cd apps/desktop/release
-          ASSETS=(
+          BINARY_ASSETS=(
             ./*.dmg
             ./*.zip
             ./*.blockmap
+          )
+          FEED_ASSETS=(
             ./custom-mac.yml
             ./desktop-version.json
           )
+          ASSETS=("${BINARY_ASSETS[@]}" "${FEED_ASSETS[@]}")
           for asset in "${ASSETS[@]}"; do
             if [[ ! -e "$asset" ]]; then
               echo "Missing release asset: $asset" >&2
@@ -158,32 +206,43 @@ jobs:
             exit 1
           fi
           if [[ "$SIGNED" == "true" ]]; then
-            RELEASE_NOTES="Signed and notarized sf-bb ${VERSION} for Apple Silicon Macs. Automatic updates are enabled."
+            RELEASE_NOTES="Signed and notarized sf-bb ${VERSION} for Apple Silicon Macs. Launch it normally from Applications. Automatic updates are enabled."
           else
-            RELEASE_NOTES="Ad-hoc signed sf-bb ${VERSION} for Apple Silicon Macs. Open the app with Control-click → Open on first launch. Automatic installation is disabled until Developer ID signing is configured."
+            RELEASE_NOTES="Ad-hoc signed sf-bb ${VERSION} for Apple Silicon Macs. On first launch, use System Settings > Privacy & Security > Open Anyway, or run xattr -dr com.apple.quarantine /Applications/sf-bb.app. Automatic installation is disabled until Developer ID signing is configured."
           fi
           gh release create "$VERSION_TAG" "${ASSETS[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "sf-bb ${VERSION}" \
             --notes "$RELEASE_NOTES" \
+            --prerelease \
             --latest=false
-          git tag -f "$MOVING_TAG" "$GITHUB_SHA"
-          git push --force origin "refs/tags/${MOVING_TAG}"
           if gh release view "$MOVING_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release view "$MOVING_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | while IFS= read -r asset_name; do
-              if [[ -n "$asset_name" ]]; then
-                gh release delete-asset "$MOVING_TAG" "$asset_name" --repo "$GITHUB_REPOSITORY" --yes
-              fi
-            done
+            gh release upload "$MOVING_TAG" "${BINARY_ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            git tag -f "$MOVING_TAG" "$GITHUB_SHA"
+            git push --force origin "refs/tags/${MOVING_TAG}"
             gh release edit "$MOVING_TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "sf-bb latest" \
               --notes "$RELEASE_NOTES" \
               --latest=false
-            gh release upload "$MOVING_TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY"
+            gh release upload "$MOVING_TAG" "${FEED_ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            while IFS= read -r asset_name; do
+              KEEP_ASSET=false
+              for expected_asset in "${ASSETS[@]}"; do
+                if [[ "$asset_name" == "${expected_asset#./}" ]]; then
+                  KEEP_ASSET=true
+                  break
+                fi
+              done
+              if [[ -n "$asset_name" && "$KEEP_ASSET" == "false" ]]; then
+                gh release delete-asset "$MOVING_TAG" "$asset_name" --repo "$GITHUB_REPOSITORY" --yes
+              fi
+            done < <(gh release view "$MOVING_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
           else
+            git tag -f "$MOVING_TAG" "$GITHUB_SHA"
+            git push --force origin "refs/tags/${MOVING_TAG}"
             gh release create "$MOVING_TAG" "${ASSETS[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
@@ -191,6 +250,18 @@ jobs:
               --notes "$RELEASE_NOTES" \
               --latest=false
           fi
+
+      - name: Verify published release
+        if: github.event_name == 'push' || inputs.publish == true
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          FEED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/desktop-version.json"
+          FEED_FILE="$RUNNER_TEMP/published-desktop-version.json"
+          curl -fsSL --retry 5 --retry-all-errors --header 'Cache-Control: no-cache' "$FEED_URL" --output "$FEED_FILE"
+          ZIP_PATH="$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (value.version !== process.argv[2]) { throw new Error(`Published feed version ${value.version} does not match ${process.argv[2]}`); } if (typeof value.path !== "string" || value.path.length === 0) { throw new Error("Published feed has no zip path"); } process.stdout.write(value.path);' "$FEED_FILE" "$VERSION")"
+          curl -fsIL --retry 5 --retry-all-errors "https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/${ZIP_PATH}"
 
       - name: Summarize
         env:
