@@ -58,6 +58,21 @@ The custom updater reads:
 - `https://github.com/chrshys/bb/releases/download/desktop-sf-bb/desktop-version.json`
 - `https://github.com/chrshys/bb/releases/download/desktop-sf-bb/custom-mac.yml`
 
+## Fork workflow hygiene
+
+The fork keeps only `release-sf-bb.yml` enabled. The inherited `ci.yml`,
+`version-lockstep.yml`, `publish-bb-app.yml`, `build-desktop.yml`,
+`deploy-web.yml`, `deploy-connect.yml`, `deploy-demo-server.yml`,
+`mobile-e2e.yml`, `mobile-ios-eas.yml`, `mobile-runner-probe.yml`, and
+`marketplace-v2-live.yml` workflows are disabled in GitHub Actions settings.
+After each upstream sync, list active workflows and disable any newly inherited
+workflow that should not run on the fork:
+
+```bash
+gh api repos/chrshys/bb/actions/workflows \
+  --jq '.workflows[] | select(.state=="active") | .path'
+```
+
 ## Keep official bb improvements
 
 `origin` is the public team fork and `upstream` is the official bb repository.
@@ -106,6 +121,26 @@ pnpm sf-bb:switch
 
 The installed app is `/Applications/sf-bb.app`. Keep stock bb installed as a
 fallback. To switch back, quit sf-bb and open `/Applications/bb.app`.
+
+## Local tooling
+
+`scripts/sf-bb status`, `scripts/sf-bb switch`, and `scripts/sf-bb version` do
+not require Node. `version` compares the installed bundle and public release
+feed, then reports the server listening on port 38886 when one is running. Use
+`scripts/sf-bb version --json` for machine-readable output. It exits 0 when no
+update is needed, 1 when the feed is newer, and 2 when the feed or a version
+cannot be read.
+
+Build commands need the Node version in `.nvmrc`. The script checks
+`BB_CUSTOM_NODE_BIN` first, then asks Volta for the `.nvmrc` version, then uses
+a compatible Node already on `PATH`. `BB_CUSTOM_NODE_BIN` must name the bin
+directory, not the `node` executable itself.
+
+`scripts/sf-bb install` refuses to replace a running sf-bb app. Run
+`scripts/sf-bb switch` from a normal Terminal after a manual install because
+switching apps stops the server that hosts bb agent threads. `deploy` waits 20
+seconds by default; set `BB_SF_BB_DEPLOY_DELAY_SECONDS` to change the delay.
+Its output is written to `~/Library/Logs/sf-bb-deploy.log`.
 
 The custom desktop app has its own Electron profile. If browser session cookies
 do not survive an application-identity rename, use **Import** in the Browser

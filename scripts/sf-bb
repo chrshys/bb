@@ -3,11 +3,11 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(dirname -- "${script_dir}")"
-node_runtime_default="${HOME}/.cache/bb-node-22.19.0/node_modules/.bin"
 install_path="/Applications/sf-bb.app"
 legacy_install_path="/Applications/bb Custom.app"
 built_app="${repo_root}/apps/desktop/release/mac-arm64/sf-bb.app"
 deploy_log="${HOME}/Library/Logs/sf-bb-deploy.log"
+release_feed_url="https://github.com/chrshys/bb/releases/download/desktop-sf-bb/desktop-version.json"
 
 usage() {
   cat <<'EOF'
@@ -20,6 +20,7 @@ Usage: scripts/sf-bb <command>
   deploy    Build, then safely replace/relaunch sf-bb after a short delay.
   switch    Quit stock/legacy BB and launch the installed sf-bb app.
   status    Show development and installed-app status.
+  version   Compare the installed bundle, release feed, and running server.
 
 The packaged sf-bb app uses the normal ~/.bb data directory and ports. Do not
 run stock bb, legacy bb Custom, and sf-bb simultaneously. Local ad-hoc builds
@@ -27,30 +28,248 @@ check the public sf-bb release feed but install updates manually.
 EOF
 }
 
-prepare_runtime() {
-  if [[ -d "${BB_CUSTOM_NODE_BIN:-}" ]]; then
+node_is_compatible() {
+  "$1" -e '
+    const [major, minor] = process.versions.node.split(".").map(Number);
+    process.exit(major === 22 && minor >= 19 ? 0 : 1);
+  '
+}
+
+require_build_runtime() {
+  local required_node_version
+  required_node_version="$(tr -d '[:space:]' < "${repo_root}/.nvmrc")"
+
+  if [[ -n "${BB_CUSTOM_NODE_BIN:-}" ]]; then
+    if [[ ! -x "${BB_CUSTOM_NODE_BIN}/node" ]]; then
+      echo "BB_CUSTOM_NODE_BIN must contain an executable node binary: ${BB_CUSTOM_NODE_BIN}" >&2
+      exit 1
+    fi
     PATH="${BB_CUSTOM_NODE_BIN}:${PATH}"
-  elif [[ -d "${node_runtime_default}" ]]; then
-    PATH="${node_runtime_default}:${PATH}"
+  elif command -v volta >/dev/null 2>&1; then
+    local volta_node
+    volta_node="$(volta run --node "${required_node_version}" -- node -p process.execPath 2>/dev/null || true)"
+    if [[ -n "${volta_node}" && -x "${volta_node}" ]]; then
+      PATH="$(dirname -- "${volta_node}"):${PATH}"
+    fi
   fi
   export PATH
 
-  command -v node >/dev/null 2>&1 || {
-    echo "Node is required." >&2
-    exit 1
-  }
-  if ! node -e '
-    const [major, minor] = process.versions.node.split(".").map(Number);
-    process.exit(major === 22 && minor >= 19 ? 0 : 1);
-  '; then
+  if ! command -v node >/dev/null 2>&1 || ! node_is_compatible "$(command -v node)"; then
     echo "bb desktop builds require Node 22.19 or newer in the Node 22 line." >&2
-    echo "Set BB_CUSTOM_NODE_BIN to a directory containing a compatible node binary." >&2
+    if [[ -n "${BB_CUSTOM_NODE_BIN:-}" ]]; then
+      echo "BB_CUSTOM_NODE_BIN does not contain a compatible Node version." >&2
+    elif command -v volta >/dev/null 2>&1; then
+      echo "Run: volta install node@${required_node_version}" >&2
+    else
+      echo "Install Node ${required_node_version}, or set BB_CUSTOM_NODE_BIN to its bin directory." >&2
+    fi
     exit 1
   fi
   command -v pnpm >/dev/null 2>&1 || {
     echo "pnpm is required." >&2
     exit 1
   }
+}
+
+compare_semver() {
+  local left="${1:?left version is required}"
+  local right="${2:?right version is required}"
+  local pattern='^([0-9]+)\.([0-9]+)\.([0-9]+)(-([0-9A-Za-z.-]+))?(\+[0-9A-Za-z.-]+)?$'
+  local left_major left_minor left_patch left_prerelease
+  local right_major right_minor right_patch right_prerelease
+
+  if [[ ! "${left}" =~ ${pattern} ]]; then
+    return 2
+  fi
+  left_major="${BASH_REMATCH[1]}"
+  left_minor="${BASH_REMATCH[2]}"
+  left_patch="${BASH_REMATCH[3]}"
+  left_prerelease="${BASH_REMATCH[5]}"
+
+  if [[ ! "${right}" =~ ${pattern} ]]; then
+    return 2
+  fi
+  right_major="${BASH_REMATCH[1]}"
+  right_minor="${BASH_REMATCH[2]}"
+  right_patch="${BASH_REMATCH[3]}"
+  right_prerelease="${BASH_REMATCH[5]}"
+
+  local index
+  local left_number right_number
+  for index in 0 1 2; do
+    case "${index}" in
+      0)
+        left_number="${left_major}"
+        right_number="${right_major}"
+        ;;
+      1)
+        left_number="${left_minor}"
+        right_number="${right_minor}"
+        ;;
+      *)
+        left_number="${left_patch}"
+        right_number="${right_patch}"
+        ;;
+    esac
+    if (( 10#${left_number} < 10#${right_number} )); then
+      printf '%s' -1
+      return
+    fi
+    if (( 10#${left_number} > 10#${right_number} )); then
+      printf '%s' 1
+      return
+    fi
+  done
+
+  if [[ -z "${left_prerelease}" && -z "${right_prerelease}" ]]; then
+    printf '%s' 0
+    return
+  fi
+  if [[ -z "${left_prerelease}" ]]; then
+    printf '%s' 1
+    return
+  fi
+  if [[ -z "${right_prerelease}" ]]; then
+    printf '%s' -1
+    return
+  fi
+
+  local -a left_identifiers right_identifiers
+  local left_identifier right_identifier
+  IFS='.' read -r -a left_identifiers <<< "${left_prerelease}"
+  IFS='.' read -r -a right_identifiers <<< "${right_prerelease}"
+  index=0
+  while (( index < ${#left_identifiers[@]} || index < ${#right_identifiers[@]} )); do
+    if (( index >= ${#left_identifiers[@]} )); then
+      printf '%s' -1
+      return
+    fi
+    if (( index >= ${#right_identifiers[@]} )); then
+      printf '%s' 1
+      return
+    fi
+    left_identifier="${left_identifiers[${index}]}"
+    right_identifier="${right_identifiers[${index}]}"
+    if [[ "${left_identifier}" == "${right_identifier}" ]]; then
+      index=$((index + 1))
+      continue
+    fi
+    if [[ "${left_identifier}" =~ ^[0-9]+$ && "${right_identifier}" =~ ^[0-9]+$ ]]; then
+      if (( 10#${left_identifier} < 10#${right_identifier} )); then
+        printf '%s' -1
+      else
+        printf '%s' 1
+      fi
+      return
+    fi
+    if [[ "${left_identifier}" =~ ^[0-9]+$ ]]; then
+      printf '%s' -1
+      return
+    fi
+    if [[ "${right_identifier}" =~ ^[0-9]+$ ]]; then
+      printf '%s' 1
+      return
+    fi
+    if [[ "${left_identifier}" < "${right_identifier}" ]]; then
+      printf '%s' -1
+    else
+      printf '%s' 1
+    fi
+    return
+  done
+  printf '%s' 0
+}
+
+read_json_string() {
+  local json="${1:?JSON input is required}"
+  local key="${2:?JSON key is required}"
+  printf '%s' "${json}" | /usr/bin/plutil -extract "${key}" raw -o - - 2>/dev/null
+}
+
+print_json_string_or_null() {
+  local value="${1:-}"
+  if [[ -n "${value}" ]]; then
+    printf '"%s"' "${value}"
+  else
+    printf 'null'
+  fi
+}
+
+show_version() {
+  local output_json=false
+  if [[ "${1:-}" == "--json" ]]; then
+    output_json=true
+  elif [[ -n "${1:-}" ]]; then
+    echo "Usage: scripts/sf-bb version [--json]" >&2
+    return 2
+  fi
+
+  local installed_version=""
+  local feed_json feed_version
+  local running_json="" running_version=""
+  local update_available=true
+  local comparison
+
+  if [[ -f "${install_path}/Contents/Info.plist" ]]; then
+    installed_version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "${install_path}/Contents/Info.plist" 2>/dev/null || true)"
+    if [[ -z "${installed_version}" ]] || ! compare_semver "${installed_version}" "${installed_version}" >/dev/null; then
+      echo "Could not parse the installed sf-bb version." >&2
+      return 2
+    fi
+  fi
+
+  if ! feed_json="$(curl -fsSL --retry 5 --retry-all-errors "${release_feed_url}")"; then
+    echo "Could not fetch the sf-bb release feed." >&2
+    return 2
+  fi
+  if ! feed_version="$(read_json_string "${feed_json}" version)" || ! compare_semver "${feed_version}" "${feed_version}" >/dev/null; then
+    echo "Could not parse the sf-bb release feed version." >&2
+    return 2
+  fi
+
+  if lsof -nP -iTCP:38886 -sTCP:LISTEN >/dev/null 2>&1; then
+    if ! running_json="$(curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:38886/api/v1/system/version)"; then
+      echo "Port 38886 is in use, but the running server version could not be fetched." >&2
+      return 2
+    fi
+    if ! running_version="$(read_json_string "${running_json}" currentVersion)" || ! compare_semver "${running_version}" "${running_version}" >/dev/null; then
+      echo "Could not parse the running server version." >&2
+      return 2
+    fi
+  fi
+
+  if [[ -n "${installed_version}" ]]; then
+    if ! comparison="$(compare_semver "${feed_version}" "${installed_version}")"; then
+      echo "Could not compare the installed and released versions." >&2
+      return 2
+    fi
+    if [[ "${comparison}" != "1" ]]; then
+      update_available=false
+    fi
+  fi
+
+  if [[ "${output_json}" == "true" ]]; then
+    printf '{"installedVersion":'
+    print_json_string_or_null "${installed_version}"
+    printf ',"feedVersion":'
+    print_json_string_or_null "${feed_version}"
+    printf ',"runningVersion":'
+    print_json_string_or_null "${running_version}"
+    printf ',"updateAvailable":%s}\n' "${update_available}"
+  else
+    printf 'Installed bundle: %s\n' "$(if [[ -n "${installed_version}" ]]; then printf 'sf-bb %s' "${installed_version}"; else printf 'not installed'; fi)"
+    printf 'Release feed: sf-bb %s\n' "${feed_version}"
+    printf 'Running server: %s\n' "$(if [[ -n "${running_version}" ]]; then printf '%s' "${running_version}"; else printf 'not running'; fi)"
+    if [[ -n "${running_version}" && "${running_version}" != "${installed_version}" ]]; then
+      echo "Running server differs from the installed sf-bb bundle."
+    fi
+    printf 'Update available: %s\n' "${update_available}"
+  fi
+
+  if [[ "${update_available}" == "true" ]]; then
+    return 1
+  fi
+  return 0
 }
 
 sf_bb_is_running() {
@@ -90,7 +309,7 @@ wait_for_default_port() {
 }
 
 build_sf_bb() {
-  prepare_runtime
+  require_build_runtime
   cd "${repo_root}"
   pnpm install --frozen-lockfile
   BB_DESKTOP_RELEASE_CHANNEL=custom \
@@ -171,9 +390,7 @@ switch_to_sf_bb() {
 }
 
 status() {
-  prepare_runtime
-  cd "${repo_root}"
-  scripts/bb-dev-app status
+  show_version || true
   printf 'Installed sf-bb: %s\n' "$( [[ -d "${install_path}" ]] && echo yes || echo no )"
   printf 'Stock bb running: %s\n' "$( stock_is_running && echo yes || echo no )"
   printf 'Legacy bb Custom running: %s\n' "$( legacy_custom_is_running && echo yes || echo no )"
@@ -183,12 +400,12 @@ status() {
 command="${1:-}"
 case "${command}" in
   dev)
-    prepare_runtime
+    require_build_runtime
     cd "${repo_root}"
     exec scripts/bb-dev-app current --desktop
     ;;
   stop)
-    prepare_runtime
+    require_build_runtime
     cd "${repo_root}"
     exec scripts/bb-dev-app stop
     ;;
@@ -206,6 +423,9 @@ case "${command}" in
     ;;
   status)
     status
+    ;;
+  version)
+    show_version "${2:-}"
     ;;
   activate-staged)
     activate_staged_app "${2:-}" "${3:-0}"

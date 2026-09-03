@@ -72,6 +72,9 @@ jobs:
           pnpm exec turbo run typecheck --filter=@bb/desktop --filter=bb-app --output-logs=new-only
           pnpm exec turbo run test --filter=@bb/desktop --filter=bb-app --force --output-logs=new-only
 
+      - name: Verify package version lockstep
+        run: node .github/workflows/check-version-lockstep.mjs
+
       - name: Derive release version
         id: version
         run: |

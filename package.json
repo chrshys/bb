@@ -28,6 +28,7 @@
     "sf-bb:deploy": "scripts/sf-bb deploy",
     "sf-bb:switch": "scripts/sf-bb switch",
     "sf-bb:status": "scripts/sf-bb status",
+    "sf-bb:version": "scripts/sf-bb version",
     "dev:host-daemon": "cross-env NODE_ENV=development dotenv -c development -- node --conditions=source --import tsx packages/scripts/src/commands/run-host-daemon.ts",
     "build": "turbo run build --filter=@bb/scripts --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli --filter=bb-app",
     "bb-app:prepare": "turbo run build --filter=bb-app --output-logs=none --log-prefix=none --summarize=false",
