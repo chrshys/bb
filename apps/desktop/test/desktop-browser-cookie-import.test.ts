@@ -10,11 +10,9 @@ vi.mock("node:child_process", () => ({
   execFileSync: vi.fn(() => "test-secret\n"),
 }));
 
-describe("desktop browser cookie import", () => {
-  it("imports Chromium expiration timestamps beyond JavaScript's safe integer range", () => {
-    const previousHome = process.env.HOME;
-    const home = mkdtempSync(join(tmpdir(), "bb-cookie-import-home-"));
-    const profile = join(
+function chromiumProfile(home: string): string {
+  if (process.platform === "darwin") {
+    return join(
       home,
       "Library",
       "Application Support",
@@ -22,6 +20,42 @@ describe("desktop browser cookie import", () => {
       "Chrome",
       "Default",
     );
+  }
+  if (process.platform === "linux") {
+    return join(home, ".config", "google-chrome", "Default");
+  }
+  throw new Error(`Unsupported test platform: ${process.platform}`);
+}
+
+function firefoxProfile(home: string): string {
+  if (process.platform === "darwin") {
+    return join(
+      home,
+      "Library",
+      "Application Support",
+      "Firefox",
+      "Profiles",
+      "test.default",
+    );
+  }
+  if (process.platform === "linux") {
+    return join(home, ".mozilla", "firefox", "test.default");
+  }
+  throw new Error(`Unsupported test platform: ${process.platform}`);
+}
+
+function chromiumTestKey(): Buffer {
+  return process.platform === "linux"
+    ? pbkdf2Sync("peanuts", "saltysalt", 1, 16, "sha1")
+    : pbkdf2Sync("test-secret", "saltysalt", 1003, 16, "sha1");
+}
+
+describe("desktop browser cookie import", () => {
+  it("imports Chromium expiration timestamps beyond JavaScript's safe integer range", () => {
+    const previousHome = process.env.HOME;
+    const previousConfigHome = process.env.XDG_CONFIG_HOME;
+    const home = mkdtempSync(join(tmpdir(), "bb-cookie-import-home-"));
+    const profile = chromiumProfile(home);
     mkdirSync(profile, { recursive: true });
     const database = new DatabaseSync(join(profile, "Cookies"));
     database.exec(`
@@ -72,7 +106,7 @@ describe("desktop browser cookie import", () => {
         X''
       );
     `);
-    const key = pbkdf2Sync("test-secret", "saltysalt", 1003, 16, "sha1");
+    const key = chromiumTestKey();
     const cipher = createCipheriv("aes-128-cbc", key, Buffer.alloc(16, 0x20));
     const encryptedValue = Buffer.concat([
       Buffer.from("v10"),
@@ -89,7 +123,9 @@ describe("desktop browser cookie import", () => {
       .run(".encrypted.test", "encrypted", "", "/", 0, 0, 0, 1, encryptedValue);
     database.close();
     process.env.HOME = home;
-
+    if (process.platform === "linux") {
+      process.env.XDG_CONFIG_HOME = join(home, ".config");
+    }
     try {
       expect(
         importCookiesFromBrowserSource({
@@ -131,21 +167,17 @@ describe("desktop browser cookie import", () => {
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
+      if (previousConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previousConfigHome;
       rmSync(home, { force: true, recursive: true });
     }
   });
 
   it("skips Chromium partitioned cookies the Electron API cannot represent", () => {
     const previousHome = process.env.HOME;
+    const previousConfigHome = process.env.XDG_CONFIG_HOME;
     const home = mkdtempSync(join(tmpdir(), "bb-cookie-import-home-"));
-    const profile = join(
-      home,
-      "Library",
-      "Application Support",
-      "Google",
-      "Chrome",
-      "Default",
-    );
+    const profile = chromiumProfile(home);
     mkdirSync(profile, { recursive: true });
     const database = new DatabaseSync(join(profile, "Cookies"));
     database.exec(`
@@ -170,7 +202,9 @@ describe("desktop browser cookie import", () => {
     `);
     database.close();
     process.env.HOME = home;
-
+    if (process.platform === "linux") {
+      process.env.XDG_CONFIG_HOME = join(home, ".config");
+    }
     try {
       expect(
         importCookiesFromBrowserSource({
@@ -192,6 +226,8 @@ describe("desktop browser cookie import", () => {
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;
+      if (previousConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previousConfigHome;
       rmSync(home, { force: true, recursive: true });
     }
   });
@@ -199,14 +235,7 @@ describe("desktop browser cookie import", () => {
   it("skips Firefox partitioned cookies the Electron API cannot represent", () => {
     const previousHome = process.env.HOME;
     const home = mkdtempSync(join(tmpdir(), "bb-cookie-import-home-"));
-    const profile = join(
-      home,
-      "Library",
-      "Application Support",
-      "Firefox",
-      "Profiles",
-      "test.default",
-    );
+    const profile = firefoxProfile(home);
     mkdirSync(profile, { recursive: true });
     const database = new DatabaseSync(join(profile, "cookies.sqlite"));
     database.exec(`
@@ -238,7 +267,6 @@ describe("desktop browser cookie import", () => {
     `);
     database.close();
     process.env.HOME = home;
-
     try {
       expect(
         importCookiesFromBrowserSource({

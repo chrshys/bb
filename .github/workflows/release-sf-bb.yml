@@ -63,7 +63,7 @@ jobs:
           set +e
           pnpm exec turbo run typecheck --output-logs=new-only > "$RUNNER_TEMP/typecheck.txt" 2>&1
           TYPECHECK_EXIT=$?
-          pnpm exec turbo run test --filter=@bb/app --filter=@bb/server --filter=@bb/plugin-api-map --filter=@get-bb/plugin-sdk --filter=@bb/desktop --output-logs=new-only > "$RUNNER_TEMP/test.txt" 2>&1
+          xvfb-run -a pnpm exec turbo run test --filter=@bb/app --filter=@bb/server --filter=@bb/plugin-api-map --filter=@get-bb/plugin-sdk --filter=@bb/desktop --output-logs=new-only > "$RUNNER_TEMP/test.txt" 2>&1
           TEST_EXIT=$?
           set -e
           if [[ "$TYPECHECK_EXIT" -ne 0 ]]; then

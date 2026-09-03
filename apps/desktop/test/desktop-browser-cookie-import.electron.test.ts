@@ -5,6 +5,7 @@ import { join } from "node:path";
 const electronPath: string = require("electron");
 import { build } from "esbuild";
 import { expect, it } from "vitest";
+import { createPackagedAppLaunchArguments } from "../scripts/packaged-app-launch.mjs";
 
 it("imports an HttpOnly cookie into a real Electron session", async () => {
   const directory = mkdtempSync(join(tmpdir(), "bb-electron-cookie-test-"));
@@ -22,15 +23,23 @@ it("imports an HttpOnly cookie into a real Electron session", async () => {
       target: "node24",
     });
     const result = JSON.parse(
-      execFileSync(electronPath, [output], {
-        cwd: __dirname,
-        encoding: "utf8",
-      }),
+      execFileSync(
+        electronPath,
+        [
+          ...createPackagedAppLaunchArguments({
+            platform: process.platform,
+            userDataDir: join(directory, "user-data"),
+          }),
+          output,
+        ],
+        {
+          cwd: __dirname,
+          encoding: "utf8",
+        },
+      ),
     );
     expect(result).toEqual({
-      finalCookies: [
-        { httpOnly: true, name: "session", value: "imported" },
-      ],
+      finalCookies: [{ httpOnly: true, name: "session", value: "imported" }],
       importedCount: 1,
     });
   } finally {
