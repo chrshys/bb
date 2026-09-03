@@ -1,3 +1,7 @@
+> This is `chrshys/bb`, a personal fork of
+> [`get-bb/bb`](https://github.com/get-bb/bb). See [SF-BB.md](SF-BB.md) for the
+> fork's app and release channel.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/e40bda56-54a4-47f8-a417-6bbadf2e5b40">

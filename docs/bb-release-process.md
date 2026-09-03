@@ -1,5 +1,9 @@
 # Releasing bb-app
 
+> This is the upstream stable release process. The `sf-bb` fork is released by
+> `.github/workflows/release-sf-bb.yml`; use
+> [sf-bb-release-process.md](sf-bb-release-process.md) for that channel.
+
 This runbook is for agents preparing and publishing the `bb-app` npm package.
 Official plugins bundle into the app during packaging and ship with this same
 release; see

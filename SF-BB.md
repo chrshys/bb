@@ -1,214 +1,72 @@
 # sf-bb
 
-This fork produces a team build named **sf-bb**. Each computer runs an
-independent local bb server, host daemon, database, and Electron profile while
-sharing the application code and bundled customizations from the `sf-bb`
-branch.
+This repository is `chrshys/bb`, a personal fork of `get-bb/bb`. The `sf-bb`
+branch produces an Apple Silicon desktop app named **sf-bb** with the fork's
+browser automation and customizations.
 
-The installed app uses the normal `~/.bb` data directory and default ports
-(`38886` and `38887`). Stock bb and sf-bb must not run simultaneously on one
-computer because they share that runtime state.
+Each Mac runs its own server, host daemon, database, and Electron profile. The
+packaged runtime still uses the normal `~/.bb` data directory and ports 38886
+and 38887. Do not run stock bb and sf-bb against that shared state at the same
+time. See [the sf-bb release runbook](docs/sf-bb-release-process.md) for release,
+rollback, signing, coexistence, and upstream-sync procedures.
 
-## Install a team release
+## Install on a new Mac
 
-From a checkout, install the newest verified release with:
+Download the Apple Silicon DMG from the
+[`desktop-sf-bb` release](https://github.com/chrshys/bb/releases/tag/desktop-sf-bb),
+then drag **sf-bb** to Applications. An ad-hoc-signed release may require
+**System Settings > Privacy & Security > Open Anyway** on first launch. The
+Terminal alternative is:
 
 ```bash
+xattr -dr com.apple.quarantine /Applications/sf-bb.app
+```
+
+Choose **Always Allow** if macOS asks for access to `sf-bb Safe Storage`.
+
+## Check and update
+
+From a checkout:
+
+```bash
+pnpm sf-bb:version
 pnpm sf-bb:update -- --when now
+pnpm sf-bb:schedule -- install
 ```
 
 The updater needs no Node toolchain when invoked directly. A Mac without a
 checkout can keep a standalone copy:
 
 ```bash
-mkdir -p ~/bin
-curl -fsSL https://raw.githubusercontent.com/chrshys/bb/sf-bb/scripts/sf-bb -o ~/bin/sf-bb
-chmod +x ~/bin/sf-bb
-~/bin/sf-bb update --when now
+mkdir -p "$HOME/bin"
+curl -fsSL https://raw.githubusercontent.com/chrshys/bb/sf-bb/scripts/sf-bb -o "$HOME/bin/sf-bb"
+chmod +x "$HOME/bin/sf-bb"
+"$HOME/bin/sf-bb" update --when now
+"$HOME/bin/sf-bb" schedule install
 ```
 
-The updater verifies the release feed, download size, SHA-512 digest, code
-signature, bundle structure, and version before replacing the installed app.
-It retains the previous app until the replacement move succeeds.
-
-The manual fallback is the Apple Silicon Mac release at:
-
-<https://github.com/chrshys/bb/releases/tag/desktop-sf-bb>
-
-Download the `.dmg`, drag **sf-bb** to Applications, and launch it. Releases
-built without Apple Developer signing require opening **System Settings >
-Privacy & Security** and choosing **Open Anyway** on first launch. You can also
-run `xattr -dr com.apple.quarantine /Applications/sf-bb.app` in Terminal.
-
-Each installation has its own projects, threads, messages, credentials,
-browser data, and machine-specific settings. Only application source and
-customizations committed to the fork are shared. Never synchronize `~/.bb`
-with a file synchronization service.
-
-## Team release channel
-
-A push to the `sf-bb` branch runs and publishes
-[Release sf-bb](.github/workflows/release-sf-bb.yml). A manual dispatch must use
-the `sf-bb` ref. It uploads an installable workflow artifact but publishes only
-when its `publish` input is `true`. The workflow:
-
-1. validates the desktop packages and confirms the runner is Apple Silicon;
-2. derives a version newer than the live feed and rejects unrelated history;
-3. builds and launches the packaged app with the desktop smoke test;
-4. publishes a versioned `sf-bb-v<version>` prerelease; and
-5. refreshes the moving `desktop-sf-bb` release, then verifies its feed and zip.
-
-Without signing secrets, the workflow publishes an ad-hoc-signed build for
-manual installation. With the complete signing secret set, it signs and
-notarizes the app and bakes automatic updates into the build.
-
-Configure these GitHub Actions secrets to enable automatic installation:
-
-| Secret                       | Value                                           |
-| ---------------------------- | ----------------------------------------------- |
-| `MACOS_CERTIFICATE_P12`      | Base64-encoded Developer ID Application `.p12`  |
-| `MACOS_CERTIFICATE_PASSWORD` | Password used when exporting the `.p12`         |
-| `MACOS_CERTIFICATE_NAME`     | Optional certificate common name                |
-| `APPLE_ID`                   | Apple Developer Program account email           |
-| `APPLE_APP_PASSWORD`         | App-specific password from the Apple ID account |
-| `APPLE_TEAM_ID`              | Apple Developer Team ID                         |
-
-The custom updater reads:
-
-- `https://github.com/chrshys/bb/releases/download/desktop-sf-bb/desktop-version.json`
-- `https://github.com/chrshys/bb/releases/download/desktop-sf-bb/custom-mac.yml`
-
-## Fork workflow hygiene
-
-The fork keeps only `release-sf-bb.yml` enabled. The inherited `ci.yml`,
-`version-lockstep.yml`, `publish-bb-app.yml`, `build-desktop.yml`,
-`deploy-web.yml`, `deploy-connect.yml`, `deploy-demo-server.yml`,
-`mobile-e2e.yml`, `mobile-ios-eas.yml`, `mobile-runner-probe.yml`, and
-`marketplace-v2-live.yml` workflows are disabled in GitHub Actions settings.
-After each upstream sync, list active workflows and disable any newly inherited
-workflow that should not run on the fork:
+Scheduled updates check immediately and hourly, stage while sf-bb is busy, and
+restart after 24 hours if the app never becomes idle. Inspect them with:
 
 ```bash
-gh api repos/chrshys/bb/actions/workflows \
-  --jq '.workflows[] | select(.state=="active") | .path'
+pnpm sf-bb:schedule -- status
+tail -f "$HOME/Library/Logs/sf-bb-update.log"
 ```
 
-## Keep official bb improvements
-
-`origin` is the public team fork and `upstream` is the official bb repository.
-Keep `main` aligned with upstream and merge it into the custom branch:
-
-```bash
-git fetch upstream
-git switch main
-git merge --ff-only upstream/main
-git push origin main
-git switch sf-bb
-git merge main
-git push origin sf-bb
-```
-
-Resolve and test any conflict before pushing `sf-bb`. Prefer plugins, themes,
-and small isolated commits over broad core changes to reduce future conflicts.
-
-## Development loop
+## Develop and package locally
 
 ```bash
 pnpm sf-bb:dev
 pnpm sf-bb:stop
-```
-
-The development instance is checkout-isolated and supports frontend HMR. Its
-data is intentionally separate from `~/.bb`.
-
-## Promote a local checkout
-
-```bash
+pnpm sf-bb:build
 pnpm sf-bb:deploy
 ```
 
-This builds and stages an ad-hoc-signed application, then safely quits,
-replaces, and relaunches sf-bb after a short delay. A thread running the
-deployment should send its final response before the delayed restart. The
-thread reconnects after the packaged runtime returns. Local bundles use a
-`-local.<timestamp>.<commit>` version, with `-dirty` added when the checkout has
-changes. They intentionally always show the team release as available and are
-never replaced by `update` without `--force`.
+The development app is checkout-isolated and supports HMR; it is not the
+packaged custom release channel. A local package uses a protected
+`-local.<timestamp>.<commit>` version. `deploy` builds it, waits briefly, then
+replaces and relaunches sf-bb. A released build will not replace a local build
+unless `sf-bb update --force` is used.
 
-For a manual installation without the delayed self-restart:
-
-```bash
-pnpm sf-bb:install
-pnpm sf-bb:switch
-```
-
-The installed app is `/Applications/sf-bb.app`. Keep stock bb installed as a
-fallback. To switch back, quit sf-bb and open `/Applications/bb.app`.
-
-## Local tooling
-
-`scripts/sf-bb status`, `scripts/sf-bb switch`, and `scripts/sf-bb version` do
-not require Node. Neither does `scripts/sf-bb update`. `version` compares the
-installed bundle and public release feed, then reports the server listening on
-port 38886 when one is running. Use `scripts/sf-bb version --json` for
-machine-readable output. It exits 0 when no update is needed, 1 when the feed
-is newer, and 2 when the feed or a version cannot be read.
-
-`scripts/sf-bb update` defaults to `--when now` in a Terminal and `--when idle`
-without a TTY. Idle updates download and verify immediately, then stage the app
-until sf-bb is no longer running. Use `--version <v>` for a specific immutable
-release. A version containing `-local.` is protected from replacement unless
-`--force` is present. Update activity is appended with UTC timestamps to
-`~/Library/Logs/sf-bb-update.log`.
-
-Install the per-user update schedule with:
-
-```bash
-pnpm sf-bb:schedule -- install
-```
-
-It checks immediately and every hour. A newer release is staged while sf-bb is
-busy, applied on the next idle run, or applied with a restart after 24 hours.
-Use `--interval <seconds>` or `--max-age <hours>` to change those defaults;
-`--max-age 0` disables forced restarts. Inspect it with
-`pnpm sf-bb:schedule -- status` or `tail -f ~/Library/Logs/sf-bb-update.log`,
-and uninstall it with `pnpm sf-bb:schedule -- remove`. Reinstall the schedule
-after moving the checkout or standalone script because launchd stores its
-absolute path.
-
-## Versions and build identity
-
-Team releases use `<next-patch>-sf.<workflow-run-id>.<attempt>`. Local packages
-use `<next-patch>-local.<UTC-timestamp>.<commit>` and add `-dirty` when the
-checkout has changes. SemVer sorts `-local.` below `-sf.` for the same patch,
-while the updater's local-build guard prevents that ordering from replacing a
-development build without `--force`.
-
-Each release publishes `build-info.json` beside the desktop feed with its
-version, full commit, UTC build date, workflow URL, and channel. The same commit
-and build date are embedded as `BbDesktopCommit` and `BbDesktopBuildDate` in the
-application's `Info.plist`; `scripts/sf-bb version` shows both the installed and
-released identities. Immutable tag `sf-bb-v<version>` points at that commit, so
-`gh release view sf-bb-v<version>` and `git rev-list -n 1 sf-bb-v<version>` are
-the corresponding remote and local lookups.
-
-Build commands need the Node version in `.nvmrc`. The script checks
-`BB_CUSTOM_NODE_BIN` first, then asks Volta for the `.nvmrc` version, then uses
-a compatible Node already on `PATH`. `BB_CUSTOM_NODE_BIN` must name the bin
-directory, not the `node` executable itself.
-
-`scripts/sf-bb install` refuses to replace a running sf-bb app. Run
-`scripts/sf-bb switch` from a normal Terminal after a manual install because
-switching apps stops the server that hosts bb agent threads. `deploy` waits 20
-seconds by default; set `BB_SF_BB_DEPLOY_DELAY_SECONDS` to change the delay.
-Its output is appended with UTC timestamps to
-`~/Library/Logs/sf-bb-deploy.log`.
-
-Ad-hoc releases have a new macOS code identity on each build. The first launch
-after an update can prompt again for `sf-bb Safe Storage`; choose **Always
-Allow**. Scheduled updates are not fully hands-off until stable signing is
-completed because each build can prompt again.
-
-The custom desktop app has its own Electron profile. If browser session cookies
-do not survive an application-identity rename, use **Import** in the Browser
-panel once more.
+Full operating procedures live in
+[docs/sf-bb-release-process.md](docs/sf-bb-release-process.md).

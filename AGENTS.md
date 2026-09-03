@@ -30,6 +30,7 @@
 
 - When you add or change a `bb` CLI command, flag, or a user-facing configuration knob (env var, `.bb/` workspace file, settings field), update its discoverable surfaces in the same change. See [docs/cli-guide-and-skill.md](docs/cli-guide-and-skill.md) for which surfaces to update.
 - Every end-user feature must also be usable by agents through both the SDK and the `bb` CLI; ship and document those surfaces in the same change as the UI.
+- sf-bb release and sync procedures live in [docs/sf-bb-release-process.md](docs/sf-bb-release-process.md). Keep it current when changing `scripts/sf-bb` or `.github/workflows/release-sf-bb.yml`.
 
 ## Plugin API
 

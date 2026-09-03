@@ -241,10 +241,12 @@ application. Custom builds read the moving `desktop-sf-bb` release in
 `chrshys/bb`. Version checks are enabled for every packaged custom build.
 Automatic installation is baked in only when
 `BB_DESKTOP_CUSTOM_AUTO_UPDATE=1`; the team workflow sets it for Developer ID
-signed and notarized releases and leaves it off for ad-hoc builds.
+signed and notarized releases. Ad-hoc packages set
+`BB_DESKTOP_ADHOC_SIGNING=true` and leave automatic installation off.
 
-See [`SF-BB.md`](../../SF-BB.md) for team installation, release, signing, and
-upstream synchronization instructions.
+See [`SF-BB.md`](../../SF-BB.md) for installation and
+[`docs/sf-bb-release-process.md`](../../docs/sf-bb-release-process.md) for
+release, signing, recovery, and upstream synchronization procedures.
 
 ## About panel
 
