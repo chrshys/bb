@@ -130,7 +130,10 @@ pnpm sf-bb:deploy
 This builds and stages an ad-hoc-signed application, then safely quits,
 replaces, and relaunches sf-bb after a short delay. A thread running the
 deployment should send its final response before the delayed restart. The
-thread reconnects after the packaged runtime returns.
+thread reconnects after the packaged runtime returns. Local bundles use a
+`-local.<timestamp>.<commit>` version, with `-dirty` added when the checkout has
+changes. They intentionally always show the team release as available and are
+never replaced by `update` without `--force`.
 
 For a manual installation without the delayed self-restart:
 

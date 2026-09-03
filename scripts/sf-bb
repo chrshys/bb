@@ -17,6 +17,7 @@ cleanup_staging_path=""
 cleanup_extract_path=""
 cleanup_download_dir=""
 cleanup_lock_path=""
+cleanup_version_backup_dir=""
 
 usage() {
   cat <<'EOF'
@@ -63,6 +64,12 @@ report_error() {
 }
 
 cleanup_operation_paths() {
+  if [[ -n "${cleanup_version_backup_dir}" ]]; then
+    cp -p "${cleanup_version_backup_dir}/desktop-package.json" "${repo_root}/apps/desktop/package.json"
+    cp -p "${cleanup_version_backup_dir}/bb-app-package.json" "${repo_root}/packages/bb-app/package.json"
+    rm -rf -- "${cleanup_version_backup_dir}"
+    cleanup_version_backup_dir=""
+  fi
   if [[ -n "${cleanup_extract_path}" ]]; then
     rm -rf -- "${cleanup_extract_path}"
   fi
@@ -75,6 +82,15 @@ cleanup_operation_paths() {
   if [[ -n "${cleanup_lock_path}" ]]; then
     rm -f -- "${cleanup_lock_path}/pid"
     rmdir "${cleanup_lock_path}" 2>/dev/null || true
+  fi
+}
+
+describe_version() {
+  local version="${1:?version is required}"
+  if [[ "${version}" == *-local.* ]]; then
+    printf '%s (local build)' "${version}"
+  else
+    printf '%s' "${version}"
   fi
 }
 
@@ -107,7 +123,7 @@ node_is_compatible() {
 }
 
 require_build_runtime() {
-  local required_node_version
+  local node_bin_dir required_node_version required_pnpm_version pnpm_candidate pnpm_version
   required_node_version="$(tr -d '[:space:]' < "${repo_root}/.nvmrc")"
 
   if [[ -n "${BB_CUSTOM_NODE_BIN:-}" ]]; then
@@ -136,10 +152,25 @@ require_build_runtime() {
     fi
     exit 1
   fi
-  command -v pnpm >/dev/null 2>&1 || {
-    echo "pnpm is required." >&2
-    exit 1
-  }
+  node_bin_dir="$(dirname -- "$(command -v node)")"
+  required_pnpm_version="$(node -p 'require(process.argv[1]).packageManager.replace(/^pnpm@/, "")' "${repo_root}/package.json")"
+  pnpm_candidate=""
+  while IFS= read -r pnpm_candidate; do
+    [[ -x "${pnpm_candidate}" ]] || continue
+    pnpm_version="$("${pnpm_candidate}" --version 2>/dev/null || true)"
+    if [[ "${pnpm_version}" == "${required_pnpm_version}" ]]; then
+      PATH="${node_bin_dir}:$(dirname -- "${pnpm_candidate}"):${PATH}"
+      export PATH
+      return
+    fi
+  done < <(type -a -p pnpm 2>/dev/null || true)
+  echo "bb desktop builds require pnpm ${required_pnpm_version}." >&2
+  if command -v corepack >/dev/null 2>&1; then
+    echo "Run: corepack prepare pnpm@${required_pnpm_version} --activate" >&2
+  else
+    echo "Install pnpm ${required_pnpm_version}." >&2
+  fi
+  return 1
 }
 
 compare_semver() {
@@ -346,9 +377,9 @@ show_version() {
     print_json_string_or_null "${running_version}"
     printf ',"updateAvailable":%s}\n' "${update_available}"
   else
-    printf 'Installed bundle: %s\n' "$(if [[ -n "${installed_version}" ]]; then printf 'sf-bb %s' "${installed_version}"; else printf 'not installed'; fi)"
+    printf 'Installed bundle: %s\n' "$(if [[ -n "${installed_version}" ]]; then printf 'sf-bb %s' "$(describe_version "${installed_version}")"; else printf 'not installed'; fi)"
     printf 'Release feed: sf-bb %s\n' "${feed_version}"
-    printf 'Running server: %s\n' "$(if [[ -n "${running_version}" ]]; then printf '%s' "${running_version}"; else printf 'not running'; fi)"
+    printf 'Running server: %s\n' "$(if [[ -n "${running_version}" ]]; then describe_version "${running_version}"; else printf 'not running'; fi)"
     if [[ -n "${running_version}" && "${running_version}" != "${installed_version}" ]]; then
       echo "Running server differs from the installed sf-bb bundle."
     fi
@@ -733,12 +764,28 @@ update_sf_bb() {
 }
 
 build_sf_bb() {
+  local base_version next_patch local_version short_sha
   require_build_runtime
   cd "${repo_root}"
   pnpm install --frozen-lockfile
+
+  base_version="$(node -p "require('./apps/desktop/package.json').version")"
+  next_patch="$(node --input-type=module -e 'import { resolveVersionArgument } from "./scripts/lib/semver.mjs"; process.stdout.write(resolveVersionArgument({ argument: "--patch", currentVersion: process.argv[1], usage: "" }));' "${base_version}")"
+  short_sha="$(git rev-parse --short=12 HEAD)"
+  if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+    short_sha="${short_sha}-dirty"
+  fi
+  local_version="${next_patch}-local.$(date -u '+%Y%m%d%H%M%S').${short_sha}"
+  cleanup_version_backup_dir="$(mktemp -d "${TMPDIR:-/tmp}/sf-bb-version.XXXXXX")"
+  cp -p apps/desktop/package.json "${cleanup_version_backup_dir}/desktop-package.json"
+  cp -p packages/bb-app/package.json "${cleanup_version_backup_dir}/bb-app-package.json"
+  trap cleanup_operation_paths EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  node scripts/bump-version.mjs "${local_version}"
   BB_DESKTOP_RELEASE_CHANNEL=custom \
     BB_DESKTOP_ADHOC_SIGNING=true \
-    pnpm --filter @bb/desktop run package
+    pnpm exec turbo run package --filter=@bb/desktop --output-logs=new-only
   [[ -d "${built_app}" ]] || {
     echo "Expected build output was not created: ${built_app}" >&2
     exit 1

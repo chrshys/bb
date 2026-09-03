@@ -180,6 +180,11 @@
       "outputs": ["release/**"],
       "passThroughEnv": ["*"]
     },
+    "@bb/desktop#package": {
+      "cache": false,
+      "outputs": ["release/**"],
+      "passThroughEnv": ["*"]
+    },
     "@bb/desktop#desktop:build:linux": {
       "dependsOn": ["bb-app#build", "@bb/desktop#build"],
       "cache": false,
