@@ -161,6 +161,21 @@ release. A version containing `-local.` is protected from replacement unless
 `--force` is present. Update activity is appended with UTC timestamps to
 `~/Library/Logs/sf-bb-update.log`.
 
+Install the per-user update schedule with:
+
+```bash
+pnpm sf-bb:schedule -- install
+```
+
+It checks immediately and every hour. A newer release is staged while sf-bb is
+busy, applied on the next idle run, or applied with a restart after 24 hours.
+Use `--interval <seconds>` or `--max-age <hours>` to change those defaults;
+`--max-age 0` disables forced restarts. Inspect it with
+`pnpm sf-bb:schedule -- status` or `tail -f ~/Library/Logs/sf-bb-update.log`,
+and uninstall it with `pnpm sf-bb:schedule -- remove`. Reinstall the schedule
+after moving the checkout or standalone script because launchd stores its
+absolute path.
+
 Build commands need the Node version in `.nvmrc`. The script checks
 `BB_CUSTOM_NODE_BIN` first, then asks Volta for the `.nvmrc` version, then uses
 a compatible Node already on `PATH`. `BB_CUSTOM_NODE_BIN` must name the bin
@@ -175,7 +190,8 @@ Its output is appended with UTC timestamps to
 
 Ad-hoc releases have a new macOS code identity on each build. The first launch
 after an update can prompt again for `sf-bb Safe Storage`; choose **Always
-Allow**. Stable identity is deferred until the signing task is completed.
+Allow**. Scheduled updates are not fully hands-off until stable signing is
+completed because each build can prompt again.
 
 The custom desktop app has its own Electron profile. If browser session cookies
 do not survive an application-identity rename, use **Import** in the Browser

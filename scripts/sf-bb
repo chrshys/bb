@@ -2,6 +2,7 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+script_path="${script_dir}/$(basename -- "${BASH_SOURCE[0]}")"
 repo_root="$(dirname -- "${script_dir}")"
 install_path="/Applications/sf-bb.app"
 legacy_install_path="/Applications/bb Custom.app"
@@ -12,12 +13,15 @@ support_dir="${HOME}/Library/Application Support/sf-bb"
 pending_update_file="${support_dir}/pending-update"
 update_lock_dir="${support_dir}/update.lock"
 update_log="${HOME}/Library/Logs/sf-bb-update.log"
+launch_agent_label="dev.bb.desktop.sf-bb.update"
+launch_agent_plist="${HOME}/Library/LaunchAgents/${launch_agent_label}.plist"
 event_log_path=""
 cleanup_staging_path=""
 cleanup_extract_path=""
 cleanup_download_dir=""
 cleanup_lock_path=""
 cleanup_version_backup_dir=""
+cleanup_plist_temp=""
 
 usage() {
   cat <<'EOF'
@@ -29,6 +33,7 @@ Usage: scripts/sf-bb <command>
   install   Build and atomically install /Applications/sf-bb.app.
   deploy    Build, then safely replace/relaunch sf-bb after a short delay.
   update    Download, verify, and install the released sf-bb app.
+  schedule  Install, remove, or inspect the periodic update agent.
   switch    Quit stock/legacy BB and launch the installed sf-bb app.
   status    Show development and installed-app status.
   version   Compare the installed bundle, release feed, and running server.
@@ -37,6 +42,12 @@ Update options:
   --force          Replace a current, newer, or local build.
   --when idle|now  Stage while running, or replace and relaunch immediately.
   --version <v>    Install a specific sf-bb release version.
+  --max-age <hours>  Force an idle update after this age; 0 disables it.
+
+Schedule usage:
+  scripts/sf-bb schedule install [--interval <seconds>] [--max-age <hours>]
+  scripts/sf-bb schedule remove
+  scripts/sf-bb schedule status
 
 The packaged sf-bb app uses the normal ~/.bb data directory and ports. Do not
 run stock bb, legacy bb Custom, and sf-bb simultaneously. Local ad-hoc builds
@@ -53,14 +64,22 @@ append_event_log() {
 
 announce() {
   local message="${1:?message is required}"
-  printf '%s\n' "${message}"
-  append_event_log "${message}"
+  if [[ "${BB_SF_BB_STDIO_IS_EVENT_LOG:-}" == "1" ]]; then
+    printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "${message}"
+  else
+    printf '%s\n' "${message}"
+    append_event_log "${message}"
+  fi
 }
 
 report_error() {
   local message="${1:?error message is required}"
-  printf '%s\n' "${message}" >&2
-  append_event_log "ERROR: ${message}"
+  if [[ "${BB_SF_BB_STDIO_IS_EVENT_LOG:-}" == "1" ]]; then
+    printf '[%s] ERROR: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "${message}" >&2
+  else
+    printf '%s\n' "${message}" >&2
+    append_event_log "ERROR: ${message}"
+  fi
 }
 
 cleanup_operation_paths() {
@@ -82,6 +101,9 @@ cleanup_operation_paths() {
   if [[ -n "${cleanup_lock_path}" ]]; then
     rm -f -- "${cleanup_lock_path}/pid"
     rmdir "${cleanup_lock_path}" 2>/dev/null || true
+  fi
+  if [[ -n "${cleanup_plist_temp}" ]]; then
+    rm -f -- "${cleanup_plist_temp}"
   fi
 }
 
@@ -513,6 +535,23 @@ write_pending_update() {
   printf '%s\n' "${staging_path}" > "${pending_update_file}"
 }
 
+max_age_seconds() {
+  local hours="${1:?maximum age is required}"
+  [[ "${hours}" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 1
+  awk -v hours="${hours}" 'BEGIN { printf "%d", int((hours * 3600) + 0.999999) }'
+}
+
+pending_update_is_expired() {
+  local maximum_seconds="${1:?maximum age in seconds is required}"
+  local modified_at now
+  [[ "${maximum_seconds}" =~ ^[0-9]+$ ]] || return 1
+  (( 10#${maximum_seconds} > 0 )) || return 1
+  [[ -f "${pending_update_file}" ]] || return 1
+  modified_at="$(stat -f '%m' "${pending_update_file}")" || return 1
+  now="$(date +%s)"
+  (( 10#${now} - 10#${modified_at} >= 10#${maximum_seconds} ))
+}
+
 cleanup_stale_app_paths() {
   local pending_path=""
   local candidate recovery_path=""
@@ -619,6 +658,7 @@ update_sf_bb() {
   local force=false
   local when=""
   local requested_version=""
+  local maximum_age_hours="24" maximum_age_seconds
   local feed_url="${release_feed_url}"
   local feed_json feed_values feed_version feed_path feed_sha512 feed_size
   local installed_version="" pending_path="" pending_version=""
@@ -651,6 +691,14 @@ update_sf_bb() {
         requested_version="$2"
         shift 2
         ;;
+      --max-age)
+        [[ $# -ge 2 ]] || {
+          report_error "--max-age requires a number of hours."
+          return 2
+        }
+        maximum_age_hours="$2"
+        shift 2
+        ;;
       *)
         report_error "Unknown update option: $1"
         return 2
@@ -667,6 +715,10 @@ update_sf_bb() {
   fi
   if [[ "${when}" != "idle" && "${when}" != "now" ]]; then
     report_error "--when must be idle or now."
+    return 2
+  fi
+  if ! maximum_age_seconds="$(max_age_seconds "${maximum_age_hours}")"; then
+    report_error "--max-age must be a non-negative number of hours."
     return 2
   fi
   if [[ -n "${requested_version}" ]]; then
@@ -698,19 +750,36 @@ update_sf_bb() {
     report_error "Refusing to replace local build ${installed_version}; re-run with --force."
     return 1
   fi
+  pending_path="$(read_pending_update_path 2>/dev/null || true)"
+  if [[ -n "${pending_path}" ]]; then
+    pending_version="$(read_bundle_version "${pending_path}" 2>/dev/null || true)"
+  fi
   if [[ -n "${installed_version}" && "${force}" != "true" ]]; then
     comparison="$(compare_semver "${feed_version}" "${installed_version}")"
     if [[ "${comparison}" != "1" ]]; then
+      if [[ -n "${pending_path}" ]]; then
+        rm -rf -- "${pending_path}"
+        rm -f -- "${pending_update_file}"
+      fi
       announce "sf-bb ${installed_version} is already current."
       return 0
     fi
   fi
 
-  pending_path="$(read_pending_update_path 2>/dev/null || true)"
   if [[ -n "${pending_path}" ]]; then
-    pending_version="$(read_bundle_version "${pending_path}" 2>/dev/null || true)"
+    if [[ "${when}" == "idle" ]] && sf_bb_is_running && pending_update_is_expired "${maximum_age_seconds}"; then
+      when="now"
+      announce "WARNING: The staged sf-bb update exceeded ${maximum_age_hours} hours; restarting sf-bb now."
+    fi
     if [[ "${pending_version}" == "${feed_version}" && "${force}" != "true" ]]; then
-      announce "sf-bb ${feed_version} is already staged for the next idle update."
+      if [[ "${when}" == "idle" ]]; then
+        announce "sf-bb ${feed_version} is already staged, waiting for idle."
+        return 0
+      fi
+      announce "Installing the already staged sf-bb ${feed_version}."
+      cleanup_staging_path="${pending_path}"
+      activate_staged_app "${pending_path}" 0 "${update_log}"
+      cleanup_staging_path=""
       return 0
     fi
     rm -rf -- "${pending_path}"
@@ -722,7 +791,7 @@ update_sf_bb() {
   download_path="${download_dir}/${feed_path}"
   download_url="${feed_url%/desktop-version.json}/${feed_path}"
   announce "Downloading sf-bb ${feed_version}."
-  if ! curl -fL --retry 5 --retry-all-errors -C - --output "${download_path}" "${download_url}"; then
+  if ! curl -fL --silent --show-error --retry 5 --retry-all-errors -C - --output "${download_path}" "${download_url}"; then
     report_error "Could not download ${feed_path}."
     return 2
   fi
@@ -755,7 +824,7 @@ update_sf_bb() {
   if [[ "${when}" == "idle" ]] && sf_bb_is_running; then
     write_pending_update "${staging_path}"
     cleanup_staging_path=""
-    announce "Staged sf-bb ${feed_version}; it will be installed when sf-bb is idle."
+    announce "Staged sf-bb ${feed_version}, waiting for idle."
     return 0
   fi
 
@@ -888,6 +957,141 @@ switch_to_sf_bb() {
   echo "Launched ${install_path}"
 }
 
+install_update_schedule() {
+  local interval_seconds="3600"
+  local maximum_age_hours="24"
+  local plist_temp user_domain
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --interval)
+        [[ $# -ge 2 ]] || {
+          report_error "--interval requires a number of seconds."
+          return 2
+        }
+        interval_seconds="$2"
+        shift 2
+        ;;
+      --max-age)
+        [[ $# -ge 2 ]] || {
+          report_error "--max-age requires a number of hours."
+          return 2
+        }
+        maximum_age_hours="$2"
+        shift 2
+        ;;
+      *)
+        report_error "Unknown schedule install option: $1"
+        return 2
+        ;;
+    esac
+  done
+
+  if [[ ! "${interval_seconds}" =~ ^[1-9][0-9]*$ ]]; then
+    report_error "--interval must be a positive integer number of seconds."
+    return 2
+  fi
+  if ! max_age_seconds "${maximum_age_hours}" >/dev/null; then
+    report_error "--max-age must be a non-negative number of hours."
+    return 2
+  fi
+
+  mkdir -p "$(dirname -- "${launch_agent_plist}")" "$(dirname -- "${update_log}")"
+  plist_temp="$(mktemp "${launch_agent_plist}.tmp.XXXXXX")"
+  cleanup_plist_temp="${plist_temp}"
+  trap cleanup_operation_paths EXIT
+  plutil -create xml1 "${plist_temp}"
+  /usr/libexec/PlistBuddy -c "Add :Label string ${launch_agent_label}" "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :ProgramArguments array' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c "Add :ProgramArguments:0 string ${script_path}" "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :ProgramArguments:1 string update' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :ProgramArguments:2 string --when' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :ProgramArguments:3 string idle' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :ProgramArguments:4 string --max-age' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c "Add :ProgramArguments:5 string ${maximum_age_hours}" "${plist_temp}"
+  /usr/libexec/PlistBuddy -c "Add :StartInterval integer ${interval_seconds}" "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :RunAtLoad bool true' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :AbandonProcessGroup bool true' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :EnvironmentVariables dict' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :EnvironmentVariables:PATH string /usr/bin:/bin:/usr/sbin:/sbin' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c 'Add :EnvironmentVariables:BB_SF_BB_STDIO_IS_EVENT_LOG string 1' "${plist_temp}"
+  /usr/libexec/PlistBuddy -c "Add :StandardOutPath string ${update_log}" "${plist_temp}"
+  /usr/libexec/PlistBuddy -c "Add :StandardErrorPath string ${update_log}" "${plist_temp}"
+  chmod 600 "${plist_temp}"
+  mv "${plist_temp}" "${launch_agent_plist}"
+  cleanup_plist_temp=""
+
+  user_domain="gui/$(id -u)"
+  launchctl bootout "${user_domain}/${launch_agent_label}" >/dev/null 2>&1 || launchctl unload "${launch_agent_plist}" >/dev/null 2>&1 || true
+  if ! launchctl bootstrap "${user_domain}" "${launch_agent_plist}"; then
+    launchctl load "${launch_agent_plist}"
+  fi
+  launchctl kickstart -k "${user_domain}/${launch_agent_label}"
+  printf 'Installed scheduled sf-bb updates from %s.\n' "${script_path}"
+  printf 'Interval: %s seconds; forced restart after: %s hours.\n' "${interval_seconds}" "${maximum_age_hours}"
+  printf 'Re-run schedule install if this script moves. Log: %s\n' "${update_log}"
+}
+
+remove_update_schedule() {
+  local user_domain="gui/$(id -u)"
+  launchctl bootout "${user_domain}/${launch_agent_label}" >/dev/null 2>&1 || launchctl unload "${launch_agent_plist}" >/dev/null 2>&1 || true
+  rm -f -- "${launch_agent_plist}"
+  printf 'Removed the sf-bb update schedule.\n'
+}
+
+show_update_schedule() {
+  local pending_path="" pending_version=""
+  if launchctl print "gui/$(id -u)/${launch_agent_label}" >/dev/null 2>&1; then
+    printf 'Update agent loaded: yes\n'
+  else
+    printf 'Update agent loaded: no\n'
+  fi
+  printf 'Launch agent: %s (%s)\n' "${launch_agent_plist}" "$(if [[ -f "${launch_agent_plist}" ]]; then printf present; else printf missing; fi)"
+  if pending_path="$(read_pending_update_path 2>/dev/null)"; then
+    pending_version="$(read_bundle_version "${pending_path}" 2>/dev/null || true)"
+    printf 'Pending update: %s%s\n' "${pending_path}" "$(if [[ -n "${pending_version}" ]]; then printf ' (%s)' "${pending_version}"; fi)"
+  else
+    printf 'Pending update: none\n'
+  fi
+  if [[ -f "${update_log}" ]]; then
+    printf 'Recent log: %s\n' "${update_log}"
+    tail -n 20 "${update_log}"
+  else
+    printf 'Recent log: none\n'
+  fi
+}
+
+manage_update_schedule() {
+  local action="${1:-}"
+  if [[ "${action}" == "--" ]]; then
+    shift
+    action="${1:-}"
+  fi
+  case "${action}" in
+    install)
+      install_update_schedule "${@:2}"
+      ;;
+    remove)
+      [[ $# -eq 1 ]] || {
+        report_error "Usage: scripts/sf-bb schedule remove"
+        return 2
+      }
+      remove_update_schedule
+      ;;
+    status)
+      [[ $# -eq 1 ]] || {
+        report_error "Usage: scripts/sf-bb schedule status"
+        return 2
+      }
+      show_update_schedule
+      ;;
+    *)
+      report_error "Usage: scripts/sf-bb schedule install|remove|status"
+      return 2
+      ;;
+  esac
+}
+
 status() {
   show_version || true
   printf 'Installed sf-bb: %s\n' "$( [[ -d "${install_path}" ]] && echo yes || echo no )"
@@ -919,6 +1123,9 @@ case "${command}" in
     ;;
   update)
     update_sf_bb "${@:2}"
+    ;;
+  schedule)
+    manage_update_schedule "${@:2}"
     ;;
   switch)
     switch_to_sf_bb
