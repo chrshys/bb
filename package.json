@@ -26,6 +26,7 @@
     "sf-bb:build": "scripts/sf-bb build",
     "sf-bb:install": "scripts/sf-bb install",
     "sf-bb:deploy": "scripts/sf-bb deploy",
+    "sf-bb:update": "scripts/sf-bb update",
     "sf-bb:switch": "scripts/sf-bb switch",
     "sf-bb:status": "scripts/sf-bb status",
     "sf-bb:version": "scripts/sf-bb version",

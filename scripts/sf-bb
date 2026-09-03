@@ -8,6 +8,15 @@ legacy_install_path="/Applications/bb Custom.app"
 built_app="${repo_root}/apps/desktop/release/mac-arm64/sf-bb.app"
 deploy_log="${HOME}/Library/Logs/sf-bb-deploy.log"
 release_feed_url="https://github.com/chrshys/bb/releases/download/desktop-sf-bb/desktop-version.json"
+support_dir="${HOME}/Library/Application Support/sf-bb"
+pending_update_file="${support_dir}/pending-update"
+update_lock_dir="${support_dir}/update.lock"
+update_log="${HOME}/Library/Logs/sf-bb-update.log"
+event_log_path=""
+cleanup_staging_path=""
+cleanup_extract_path=""
+cleanup_download_dir=""
+cleanup_lock_path=""
 
 usage() {
   cat <<'EOF'
@@ -18,14 +27,76 @@ Usage: scripts/sf-bb <command>
   build     Build an ad-hoc-signed, unpacked sf-bb.app.
   install   Build and atomically install /Applications/sf-bb.app.
   deploy    Build, then safely replace/relaunch sf-bb after a short delay.
+  update    Download, verify, and install the released sf-bb app.
   switch    Quit stock/legacy BB and launch the installed sf-bb app.
   status    Show development and installed-app status.
   version   Compare the installed bundle, release feed, and running server.
+
+Update options:
+  --force          Replace a current, newer, or local build.
+  --when idle|now  Stage while running, or replace and relaunch immediately.
+  --version <v>    Install a specific sf-bb release version.
 
 The packaged sf-bb app uses the normal ~/.bb data directory and ports. Do not
 run stock bb, legacy bb Custom, and sf-bb simultaneously. Local ad-hoc builds
 check the public sf-bb release feed but install updates manually.
 EOF
+}
+
+append_event_log() {
+  local message="${1:?log message is required}"
+  [[ -n "${event_log_path}" ]] || return 0
+  mkdir -p "$(dirname -- "${event_log_path}")"
+  printf '[%s] %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "${message}" >> "${event_log_path}"
+}
+
+announce() {
+  local message="${1:?message is required}"
+  printf '%s\n' "${message}"
+  append_event_log "${message}"
+}
+
+report_error() {
+  local message="${1:?error message is required}"
+  printf '%s\n' "${message}" >&2
+  append_event_log "ERROR: ${message}"
+}
+
+cleanup_operation_paths() {
+  if [[ -n "${cleanup_extract_path}" ]]; then
+    rm -rf -- "${cleanup_extract_path}"
+  fi
+  if [[ -n "${cleanup_staging_path}" ]]; then
+    rm -rf -- "${cleanup_staging_path}"
+  fi
+  if [[ -n "${cleanup_download_dir}" ]]; then
+    rm -rf -- "${cleanup_download_dir}"
+  fi
+  if [[ -n "${cleanup_lock_path}" ]]; then
+    rm -f -- "${cleanup_lock_path}/pid"
+    rmdir "${cleanup_lock_path}" 2>/dev/null || true
+  fi
+}
+
+acquire_update_lock() {
+  local lock_pid=""
+  mkdir -p "${support_dir}"
+  if ! mkdir "${update_lock_dir}" 2>/dev/null; then
+    if [[ -f "${update_lock_dir}/pid" ]]; then
+      IFS= read -r lock_pid < "${update_lock_dir}/pid" || true
+    fi
+    if [[ "${lock_pid}" =~ ^[0-9]+$ ]] && kill -0 "${lock_pid}" 2>/dev/null; then
+      report_error "Another sf-bb update is already running."
+      return 1
+    fi
+    rm -f -- "${update_lock_dir}/pid"
+    if ! rmdir "${update_lock_dir}" 2>/dev/null || ! mkdir "${update_lock_dir}" 2>/dev/null; then
+      report_error "Another sf-bb update is already running."
+      return 1
+    fi
+  fi
+  printf '%s\n' "$$" > "${update_lock_dir}/pid"
+  cleanup_lock_path="${update_lock_dir}"
 }
 
 node_is_compatible() {
@@ -186,6 +257,24 @@ read_json_string() {
   printf '%s' "${json}" | /usr/bin/plutil -extract "${key}" raw -o - - 2>/dev/null
 }
 
+read_json_number() {
+  local json="${1:?JSON input is required}"
+  local key="${2:?JSON key is required}"
+  local value
+  value="$(printf '%s' "${json}" | /usr/bin/plutil -extract "${key}" raw -o - - 2>/dev/null)" || return 1
+  [[ "${value}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s' "${value}"
+}
+
+read_bundle_version() {
+  local bundle_path="${1:?bundle path is required}"
+  local version
+  [[ -f "${bundle_path}/Contents/Info.plist" ]] || return 1
+  version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "${bundle_path}/Contents/Info.plist" 2>/dev/null)" || return 1
+  compare_semver "${version}" "${version}" >/dev/null || return 1
+  printf '%s' "${version}"
+}
+
 print_json_string_or_null() {
   local value="${1:-}"
   if [[ -n "${value}" ]]; then
@@ -218,7 +307,7 @@ show_version() {
     fi
   fi
 
-  if ! feed_json="$(curl -fsSL --retry 5 --retry-all-errors "${release_feed_url}")"; then
+  if ! feed_json="$(curl -fsSL --retry 5 --retry-all-errors "${release_feed_url}?cache-bust=$(date +%s)")"; then
     echo "Could not fetch the sf-bb release feed." >&2
     return 2
   fi
@@ -273,15 +362,63 @@ show_version() {
 }
 
 sf_bb_is_running() {
-  pgrep -f '/Applications/sf-bb\.app/Contents/MacOS/' >/dev/null 2>&1
+  if pgrep -x sf-bb >/dev/null 2>&1; then
+    return 0
+  fi
+  port_has_owner 38886 sf-bb || port_has_owner 38887 sf-bb
 }
 
 legacy_custom_is_running() {
-  pgrep -f '/Applications/bb Custom\.app/Contents/MacOS/' >/dev/null 2>&1
+  pgrep -x 'bb Custom' >/dev/null 2>&1
 }
 
 stock_is_running() {
-  pgrep -f '/Applications/bb\.app/Contents/MacOS/' >/dev/null 2>&1
+  pgrep -x bb >/dev/null 2>&1
+}
+
+port_listener_records() {
+  local port="${1:?port is required}"
+  local field pid=""
+  while IFS= read -r field; do
+    case "${field}" in
+      p*) pid="${field#p}" ;;
+      c*) printf '%s\t%s\n' "${pid}" "${field#c}" ;;
+    esac
+  done < <(lsof -nP -Fpc -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)
+}
+
+port_has_owner() {
+  local port="${1:?port is required}"
+  local expected_owner="${2:?expected owner is required}"
+  local pid owner
+  while IFS=$'\t' read -r pid owner; do
+    if [[ "${owner}" == "${expected_owner}" ]]; then
+      return 0
+    fi
+  done < <(port_listener_records "${port}")
+  return 1
+}
+
+port_is_in_use() {
+  local port="${1:?port is required}"
+  lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+runtime_ports_are_in_use() {
+  port_is_in_use 38886 || port_is_in_use 38887
+}
+
+ensure_runtime_ports_are_compatible() {
+  local port pid owner
+  for port in 38886 38887; do
+    while IFS=$'\t' read -r pid owner; do
+      [[ -n "${owner}" ]] || continue
+      if [[ "${owner}" != "sf-bb" ]]; then
+        report_error "Port ${port} is held by ${owner} (pid ${pid}); quit it and re-run."
+        return 3
+      fi
+    done < <(port_listener_records "${port}")
+  done
 }
 
 quit_other_bb_apps() {
@@ -296,16 +433,303 @@ quit_other_bb_apps() {
   fi
 }
 
-wait_for_default_port() {
+quit_sf_bb() {
+  if sf_bb_is_running; then
+    osascript -e 'tell application id "dev.bb.desktop.sf-bb" to quit' >/dev/null 2>&1 || true
+  fi
+}
+
+wait_for_runtime_ports() {
+  local allow_other_apps="${1:-false}"
   local elapsed=0
-  while lsof -nP -iTCP:38886 -sTCP:LISTEN >/dev/null 2>&1; do
+  while runtime_ports_are_in_use; do
+    if [[ "${allow_other_apps}" != "true" ]]; then
+      ensure_runtime_ports_are_compatible || return $?
+    fi
     if (( elapsed >= 30 )); then
-      echo "Timed out waiting for BB to release port 38886." >&2
-      exit 1
+      report_error "Timed out waiting for BB to release ports 38886 and 38887."
+      return 1
     fi
     sleep 1
     elapsed=$((elapsed + 1))
   done
+}
+
+read_pending_update_path() {
+  local pending_path=""
+  [[ -f "${pending_update_file}" ]] || return 1
+  IFS= read -r pending_path < "${pending_update_file}" || true
+  if [[ ! "${pending_path}" =~ ^/Applications/\.sf-bb\.app\.update-[0-9]+-[0-9]+$ ]] || [[ ! -d "${pending_path}" ]]; then
+    report_error "Discarding an invalid sf-bb pending-update record."
+    rm -f -- "${pending_update_file}"
+    return 1
+  fi
+  printf '%s' "${pending_path}"
+}
+
+clear_pending_update() {
+  local expected_path="${1:?expected pending path is required}"
+  local pending_path=""
+  if pending_path="$(read_pending_update_path 2>/dev/null || true)" && [[ "${pending_path}" == "${expected_path}" ]]; then
+    rm -f -- "${pending_update_file}"
+  fi
+}
+
+write_pending_update() {
+  local staging_path="${1:?staging path is required}"
+  mkdir -p "${support_dir}"
+  umask 077
+  printf '%s\n' "${staging_path}" > "${pending_update_file}"
+}
+
+cleanup_stale_app_paths() {
+  local pending_path=""
+  local candidate recovery_path=""
+  pending_path="$(read_pending_update_path 2>/dev/null || true)"
+  shopt -s nullglob
+  if [[ ! -e "${install_path}" ]]; then
+    for candidate in /Applications/.sf-bb.app.old-*; do
+      recovery_path="${candidate}"
+      break
+    done
+  fi
+  if [[ -n "${recovery_path}" ]]; then
+    mv "${recovery_path}" "${install_path}"
+    announce "Recovered ${install_path} from an interrupted replacement."
+  fi
+
+  for candidate in /Applications/.sf-bb.app.install-* /Applications/.sf-bb.app.deploy-* /Applications/.sf-bb.app.update-*; do
+    if [[ "${candidate}" != "${pending_path}" ]]; then
+      rm -rf -- "${candidate}"
+    fi
+  done
+  if [[ -e "${install_path}" ]]; then
+    for candidate in /Applications/.sf-bb.app.old-*; do
+      rm -rf -- "${candidate}"
+    done
+  fi
+  shopt -u nullglob
+}
+
+replace_installed_app() {
+  local staging_path="${1:?staging app path is required}"
+  local backup_path="$(dirname -- "${install_path}")/.sf-bb.app.old-$(date +%s)-$$"
+  local has_backup=false
+
+  if [[ -e "${install_path}" ]]; then
+    mv "${install_path}" "${backup_path}"
+    has_backup=true
+  fi
+  if ! mv "${staging_path}" "${install_path}"; then
+    if [[ "${has_backup}" == "true" && -e "${backup_path}" ]]; then
+      mv "${backup_path}" "${install_path}"
+    fi
+    report_error "Could not replace ${install_path}; the previous app was restored."
+    return 1
+  fi
+  if [[ "${has_backup}" == "true" ]]; then
+    rm -rf -- "${backup_path}"
+  fi
+}
+
+apply_pending_update_if_idle() {
+  local pending_path=""
+  if ! pending_path="$(read_pending_update_path 2>/dev/null)"; then
+    return 0
+  fi
+  if sf_bb_is_running; then
+    return 0
+  fi
+  cleanup_staging_path="${pending_path}"
+  announce "Applying the staged sf-bb update."
+  activate_staged_app "${pending_path}" 0 "${event_log_path}"
+  cleanup_staging_path=""
+}
+
+validate_release_feed() {
+  local feed_json="${1:?release feed JSON is required}"
+  local expected_version="${2:-}"
+  local version path sha512 size file_path file_sha512
+
+  version="$(read_json_string "${feed_json}" version)" || return 1
+  path="$(read_json_string "${feed_json}" path)" || return 1
+  sha512="$(read_json_string "${feed_json}" sha512)" || return 1
+  file_path="$(read_json_string "${feed_json}" files.0.url)" || return 1
+  file_sha512="$(read_json_string "${feed_json}" files.0.sha512)" || return 1
+  size="$(read_json_number "${feed_json}" files.0.size)" || return 1
+  compare_semver "${version}" "${version}" >/dev/null || return 1
+  [[ -z "${expected_version}" || "${version}" == "${expected_version}" ]] || return 1
+  [[ "${path}" =~ ^sf-bb-[0-9A-Za-z.+-]+-arm64\.zip$ ]] || return 1
+  [[ "${sha512}" =~ ^[0-9A-Za-z+/]{86}==$ ]] || return 1
+  [[ "${file_path}" == "${path}" && "${file_sha512}" == "${sha512}" ]] || return 1
+  (( 10#${size} > 0 )) || return 1
+  printf '%s\t%s\t%s\t%s\n' "${version}" "${path}" "${sha512}" "${size}"
+}
+
+verify_release_download() {
+  local download_path="${1:?download path is required}"
+  local expected_size="${2:?expected size is required}"
+  local expected_sha512="${3:?expected SHA-512 is required}"
+  local actual_size actual_sha512
+
+  actual_size="$(stat -f '%z' "${download_path}")"
+  if [[ "${actual_size}" != "${expected_size}" ]]; then
+    report_error "Downloaded size ${actual_size} does not match expected size ${expected_size}."
+    return 1
+  fi
+  actual_sha512="$(openssl dgst -sha512 -binary "${download_path}" | base64 | tr -d '[:space:]')"
+  if [[ "${actual_sha512}" != "${expected_sha512}" ]]; then
+    report_error "Downloaded SHA-512 does not match the release feed."
+    return 1
+  fi
+}
+
+update_sf_bb() {
+  local force=false
+  local when=""
+  local requested_version=""
+  local feed_url="${release_feed_url}"
+  local feed_json feed_values feed_version feed_path feed_sha512 feed_size
+  local installed_version="" pending_path="" pending_version=""
+  local comparison download_url download_path
+  local staging_path extract_path download_dir
+  local -a extracted_entries
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --)
+        shift
+        ;;
+      --force)
+        force=true
+        shift
+        ;;
+      --when)
+        [[ $# -ge 2 ]] || {
+          report_error "--when requires idle or now."
+          return 2
+        }
+        when="$2"
+        shift 2
+        ;;
+      --version)
+        [[ $# -ge 2 ]] || {
+          report_error "--version requires a semantic version."
+          return 2
+        }
+        requested_version="$2"
+        shift 2
+        ;;
+      *)
+        report_error "Unknown update option: $1"
+        return 2
+        ;;
+    esac
+  done
+
+  if [[ -z "${when}" ]]; then
+    if [[ -t 0 ]]; then
+      when="now"
+    else
+      when="idle"
+    fi
+  fi
+  if [[ "${when}" != "idle" && "${when}" != "now" ]]; then
+    report_error "--when must be idle or now."
+    return 2
+  fi
+  if [[ -n "${requested_version}" ]]; then
+    if ! compare_semver "${requested_version}" "${requested_version}" >/dev/null; then
+      report_error "--version must be a semantic version."
+      return 2
+    fi
+    feed_url="https://github.com/chrshys/bb/releases/download/sf-bb-v${requested_version}/desktop-version.json"
+  fi
+
+  event_log_path="${update_log}"
+  trap cleanup_operation_paths EXIT
+  acquire_update_lock
+  cleanup_stale_app_paths
+  apply_pending_update_if_idle
+
+  if ! feed_json="$(curl -fsSL --retry 5 --retry-all-errors "${feed_url}?cache-bust=$(date +%s)")"; then
+    report_error "Could not fetch the sf-bb release feed."
+    return 2
+  fi
+  if ! feed_values="$(validate_release_feed "${feed_json}" "${requested_version}")"; then
+    report_error "The sf-bb release feed is invalid."
+    return 2
+  fi
+  IFS=$'\t' read -r feed_version feed_path feed_sha512 feed_size <<< "${feed_values}"
+
+  installed_version="$(read_bundle_version "${install_path}" 2>/dev/null || true)"
+  if [[ "${installed_version}" == *-local.* && "${force}" != "true" ]]; then
+    report_error "Refusing to replace local build ${installed_version}; re-run with --force."
+    return 1
+  fi
+  if [[ -n "${installed_version}" && "${force}" != "true" ]]; then
+    comparison="$(compare_semver "${feed_version}" "${installed_version}")"
+    if [[ "${comparison}" != "1" ]]; then
+      announce "sf-bb ${installed_version} is already current."
+      return 0
+    fi
+  fi
+
+  pending_path="$(read_pending_update_path 2>/dev/null || true)"
+  if [[ -n "${pending_path}" ]]; then
+    pending_version="$(read_bundle_version "${pending_path}" 2>/dev/null || true)"
+    if [[ "${pending_version}" == "${feed_version}" && "${force}" != "true" ]]; then
+      announce "sf-bb ${feed_version} is already staged for the next idle update."
+      return 0
+    fi
+    rm -rf -- "${pending_path}"
+    rm -f -- "${pending_update_file}"
+  fi
+
+  download_dir="$(mktemp -d "${TMPDIR:-/tmp}/sf-bb-update.XXXXXX")"
+  cleanup_download_dir="${download_dir}"
+  download_path="${download_dir}/${feed_path}"
+  download_url="${feed_url%/desktop-version.json}/${feed_path}"
+  announce "Downloading sf-bb ${feed_version}."
+  if ! curl -fL --retry 5 --retry-all-errors -C - --output "${download_path}" "${download_url}"; then
+    report_error "Could not download ${feed_path}."
+    return 2
+  fi
+
+  verify_release_download "${download_path}" "${feed_size}" "${feed_sha512}"
+
+  staging_path="/Applications/.sf-bb.app.update-$(date +%s)-$$"
+  extract_path="${staging_path}.extract"
+  cleanup_staging_path="${staging_path}"
+  cleanup_extract_path="${extract_path}"
+  mkdir "${extract_path}"
+  ditto -x -k "${download_path}" "${extract_path}"
+  shopt -s nullglob dotglob
+  extracted_entries=("${extract_path}"/*)
+  shopt -u nullglob dotglob
+  if [[ ${#extracted_entries[@]} -ne 1 || "${extracted_entries[0]}" != "${extract_path}/sf-bb.app" || ! -d "${extracted_entries[0]}" ]]; then
+    report_error "The release zip must contain only sf-bb.app at its root."
+    return 1
+  fi
+  mv "${extract_path}/sf-bb.app" "${staging_path}"
+  rmdir "${extract_path}"
+  cleanup_extract_path=""
+  codesign --verify --deep --strict "${staging_path}"
+  if [[ "$(read_bundle_version "${staging_path}")" != "${feed_version}" ]]; then
+    report_error "The staged app version does not match the release feed."
+    return 1
+  fi
+  xattr -dr com.apple.quarantine "${staging_path}" 2>/dev/null || true
+
+  if [[ "${when}" == "idle" ]] && sf_bb_is_running; then
+    write_pending_update "${staging_path}"
+    cleanup_staging_path=""
+    announce "Staged sf-bb ${feed_version}; it will be installed when sf-bb is idle."
+    return 0
+  fi
+
+  activate_staged_app "${staging_path}" 0 "${update_log}"
+  cleanup_staging_path=""
 }
 
 build_sf_bb() {
@@ -330,6 +754,7 @@ copy_built_app() {
 }
 
 install_sf_bb() {
+  cleanup_stale_app_paths
   if sf_bb_is_running; then
     echo "Quit sf-bb before reinstalling it, or use the deploy command." >&2
     exit 1
@@ -337,11 +762,16 @@ install_sf_bb() {
   build_sf_bb
 
   local staging_path="/Applications/.sf-bb.app.install-$$"
-  trap 'rm -rf -- "${staging_path}"' EXIT
+  cleanup_staging_path="${staging_path}"
+  trap cleanup_operation_paths EXIT
   copy_built_app "${staging_path}"
-  rm -rf -- "${install_path}"
-  mv "${staging_path}" "${install_path}"
-  trap - EXIT
+  if sf_bb_is_running; then
+    report_error "sf-bb started while the replacement was building; quit it and re-run."
+    return 1
+  fi
+  ensure_runtime_ports_are_compatible
+  replace_installed_app "${staging_path}"
+  cleanup_staging_path=""
   echo "Installed ${install_path}"
   echo "Run 'scripts/sf-bb switch' from a normal Terminal to make it active."
 }
@@ -349,30 +779,52 @@ install_sf_bb() {
 activate_staged_app() {
   local staging_path="${1:?staging app path is required}"
   local delay_seconds="${2:-0}"
+  event_log_path="${3:-${event_log_path}}"
+  if [[ ! "${staging_path}" =~ ^/Applications/\.sf-bb\.app\.(install|deploy|update)-[0-9]+(-[0-9]+)?$ ]] || [[ ! -d "${staging_path}" ]]; then
+    report_error "Refusing to activate an invalid sf-bb staging path."
+    return 1
+  fi
+  cleanup_staging_path="${staging_path}"
+  trap cleanup_operation_paths EXIT
+  announce "Preparing to activate ${staging_path}."
   sleep "${delay_seconds}"
-  quit_other_bb_apps
-  wait_for_default_port
-  rm -rf -- "${install_path}"
-  mv "${staging_path}" "${install_path}"
+  ensure_runtime_ports_are_compatible
+  quit_sf_bb
+  wait_for_runtime_ports
+  replace_installed_app "${staging_path}"
+  cleanup_staging_path=""
+  clear_pending_update "${staging_path}"
   rm -rf -- "${legacy_install_path}"
   xattr -dr com.apple.quarantine "${install_path}" 2>/dev/null || true
   open "${install_path}"
-  echo "Deployed and launched ${install_path}"
+  announce "Deployed and launched ${install_path}."
 }
 
 deploy_sf_bb() {
+  cleanup_stale_app_paths
   build_sf_bb
   local staging_path="/Applications/.sf-bb.app.deploy-$(date +%s)-$$"
+  cleanup_staging_path="${staging_path}"
+  trap cleanup_operation_paths EXIT
   copy_built_app "${staging_path}"
   mkdir -p "$(dirname -- "${deploy_log}")"
   local delay_seconds="${BB_SF_BB_DEPLOY_DELAY_SECONDS:-20}"
-  nohup "${BASH_SOURCE[0]}" activate-staged "${staging_path}" "${delay_seconds}" \
-    >"${deploy_log}" 2>&1 </dev/null &
+  event_log_path="${deploy_log}"
+  append_event_log "Deployment scheduled for ${staging_path} in ${delay_seconds}s."
+  nohup "${BASH_SOURCE[0]}" activate-staged "${staging_path}" "${delay_seconds}" "${deploy_log}" \
+    >/dev/null 2>&1 </dev/null &
+  cleanup_staging_path=""
   echo "sf-bb deployment scheduled in ${delay_seconds}s (pid $!)."
   echo "The app will restart; log: ${deploy_log}"
 }
 
 switch_to_sf_bb() {
+  local pending_path=""
+  if pending_path="$(read_pending_update_path 2>/dev/null)"; then
+    event_log_path="${update_log}"
+    activate_staged_app "${pending_path}" 0 "${update_log}"
+    return
+  fi
   [[ -d "${install_path}" ]] || {
     echo "${install_path} is not installed; run the install command first." >&2
     exit 1
@@ -383,7 +835,7 @@ switch_to_sf_bb() {
     return
   fi
   quit_other_bb_apps
-  wait_for_default_port
+  wait_for_runtime_ports true
   rm -rf -- "${legacy_install_path}"
   open "${install_path}"
   echo "Launched ${install_path}"
@@ -418,6 +870,9 @@ case "${command}" in
   deploy)
     deploy_sf_bb
     ;;
+  update)
+    update_sf_bb "${@:2}"
+    ;;
   switch)
     switch_to_sf_bb
     ;;
@@ -428,7 +883,7 @@ case "${command}" in
     show_version "${2:-}"
     ;;
   activate-staged)
-    activate_staged_app "${2:-}" "${3:-0}"
+    activate_staged_app "${2:-}" "${3:-0}" "${4:-}"
     ;;
   help|-h|--help|"")
     usage

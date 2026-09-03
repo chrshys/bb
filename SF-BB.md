@@ -11,7 +11,27 @@ computer because they share that runtime state.
 
 ## Install a team release
 
-Apple Silicon Mac releases are published at:
+From a checkout, install the newest verified release with:
+
+```bash
+pnpm sf-bb:update -- --when now
+```
+
+The updater needs no Node toolchain when invoked directly. A Mac without a
+checkout can keep a standalone copy:
+
+```bash
+mkdir -p ~/bin
+curl -fsSL https://raw.githubusercontent.com/chrshys/bb/sf-bb/scripts/sf-bb -o ~/bin/sf-bb
+chmod +x ~/bin/sf-bb
+~/bin/sf-bb update --when now
+```
+
+The updater verifies the release feed, download size, SHA-512 digest, code
+signature, bundle structure, and version before replacing the installed app.
+It retains the previous app until the replacement move succeeds.
+
+The manual fallback is the Apple Silicon Mac release at:
 
 <https://github.com/chrshys/bb/releases/tag/desktop-sf-bb>
 
@@ -125,11 +145,18 @@ fallback. To switch back, quit sf-bb and open `/Applications/bb.app`.
 ## Local tooling
 
 `scripts/sf-bb status`, `scripts/sf-bb switch`, and `scripts/sf-bb version` do
-not require Node. `version` compares the installed bundle and public release
-feed, then reports the server listening on port 38886 when one is running. Use
-`scripts/sf-bb version --json` for machine-readable output. It exits 0 when no
-update is needed, 1 when the feed is newer, and 2 when the feed or a version
-cannot be read.
+not require Node. Neither does `scripts/sf-bb update`. `version` compares the
+installed bundle and public release feed, then reports the server listening on
+port 38886 when one is running. Use `scripts/sf-bb version --json` for
+machine-readable output. It exits 0 when no update is needed, 1 when the feed
+is newer, and 2 when the feed or a version cannot be read.
+
+`scripts/sf-bb update` defaults to `--when now` in a Terminal and `--when idle`
+without a TTY. Idle updates download and verify immediately, then stage the app
+until sf-bb is no longer running. Use `--version <v>` for a specific immutable
+release. A version containing `-local.` is protected from replacement unless
+`--force` is present. Update activity is appended with UTC timestamps to
+`~/Library/Logs/sf-bb-update.log`.
 
 Build commands need the Node version in `.nvmrc`. The script checks
 `BB_CUSTOM_NODE_BIN` first, then asks Volta for the `.nvmrc` version, then uses
@@ -140,7 +167,12 @@ directory, not the `node` executable itself.
 `scripts/sf-bb switch` from a normal Terminal after a manual install because
 switching apps stops the server that hosts bb agent threads. `deploy` waits 20
 seconds by default; set `BB_SF_BB_DEPLOY_DELAY_SECONDS` to change the delay.
-Its output is written to `~/Library/Logs/sf-bb-deploy.log`.
+Its output is appended with UTC timestamps to
+`~/Library/Logs/sf-bb-deploy.log`.
+
+Ad-hoc releases have a new macOS code identity on each build. The first launch
+after an update can prompt again for `sf-bb Safe Storage`; choose **Always
+Allow**. Stable identity is deferred until the signing task is completed.
 
 The custom desktop app has its own Electron profile. If browser session cookies
 do not survive an application-identity rename, use **Import** in the Browser
