@@ -35,6 +35,19 @@ const nativeModulesScript: {
     electronVersion: string;
     platform: string;
   }): string[];
+  runPrebuildInstall(
+    packageDirectory: string,
+    prebuildArguments: string[],
+    options?: {
+      maxAttempts?: number;
+      onRetry?: (message: string) => void;
+      retryDelayMs?: number;
+      runAttempt?: (
+        packageDirectory: string,
+        prebuildArguments: string[],
+      ) => Promise<number | null>;
+    },
+  ): Promise<void>;
 } = require("./scripts/prepare-native-modules.cjs");
 
 const macConfigSchema = z
@@ -362,6 +375,62 @@ describe("electron-builder signing config", () => {
       "--arch=arm64",
       "--platform=darwin",
     ]);
+  });
+
+  it("retries transient better-sqlite3 prebuild download failures", async () => {
+    const exitCodes = [1, 1, 0];
+    const attempts: Array<{
+      packageDirectory: string;
+      prebuildArguments: string[];
+    }> = [];
+    const retries: string[] = [];
+
+    await nativeModulesScript.runPrebuildInstall(
+      "/tmp/packaged-better-sqlite3",
+      ["--runtime=electron", "--target=41.7.0"],
+      {
+        onRetry: (message) => retries.push(message),
+        retryDelayMs: 0,
+        runAttempt: async (packageDirectory, prebuildArguments) => {
+          attempts.push({ packageDirectory, prebuildArguments });
+          return exitCodes.shift() ?? 1;
+        },
+      },
+    );
+
+    expect(attempts).toHaveLength(3);
+    expect(attempts).toEqual(
+      Array.from({ length: 3 }, () => ({
+        packageDirectory: "/tmp/packaged-better-sqlite3",
+        prebuildArguments: ["--runtime=electron", "--target=41.7.0"],
+      })),
+    );
+    expect(retries).toEqual([
+      "prebuild-install for better-sqlite3 failed on attempt 1 of 3; retrying",
+      "prebuild-install for better-sqlite3 failed on attempt 2 of 3; retrying",
+    ]);
+  });
+
+  it("refuses to package a mismatched better-sqlite3 binary after retries", async () => {
+    const attempts: number[] = [];
+
+    await expect(
+      nativeModulesScript.runPrebuildInstall(
+        "/tmp/packaged-better-sqlite3",
+        ["--runtime=electron", "--target=41.7.0"],
+        {
+          onRetry: () => undefined,
+          retryDelayMs: 0,
+          runAttempt: async () => {
+            attempts.push(1);
+            return 1;
+          },
+        },
+      ),
+    ).rejects.toThrow(
+      "prebuild-install for better-sqlite3 exited with code 1 after 3 attempts",
+    );
+    expect(attempts).toHaveLength(3);
   });
 
   it("installs native plugin build packages for arm64 and x64", async () => {

@@ -8,6 +8,8 @@ const desktopPackageRoot = path.resolve(__dirname, "..");
 const NODE_MODULES_DIRECTORY = "node_modules";
 const NODE_PTY_PACKAGE_NAME = "node-pty";
 const BETTER_SQLITE3_PACKAGE_NAME = "better-sqlite3";
+const PREBUILD_INSTALL_MAX_ATTEMPTS = 3;
+const PREBUILD_INSTALL_RETRY_DELAY_MS = 2_000;
 const PACKAGED_NATIVE_PACKAGE_NAMES = [
   NODE_PTY_PACKAGE_NAME,
   BETTER_SQLITE3_PACKAGE_NAME,
@@ -162,7 +164,7 @@ function resolveBetterSqlite3PrebuildArguments({
   ];
 }
 
-async function runPrebuildInstall(packageDirectory, prebuildArguments) {
+async function runPrebuildInstallAttempt(packageDirectory, prebuildArguments) {
   const requireFromPackage = createRequire(
     path.join(packageDirectory, "package.json"),
   );
@@ -170,7 +172,7 @@ async function runPrebuildInstall(packageDirectory, prebuildArguments) {
     "prebuild-install/bin.js",
   );
 
-  const exitCode = await new Promise((resolveExitCode) => {
+  return new Promise((resolveExitCode) => {
     const child = spawn(
       process.execPath,
       [prebuildInstallBinPath, ...prebuildArguments],
@@ -182,15 +184,42 @@ async function runPrebuildInstall(packageDirectory, prebuildArguments) {
     child.on("error", () => resolveExitCode(1));
     child.on("close", resolveExitCode);
   });
+}
 
-  if (exitCode !== 0) {
-    throw new Error(
-      `prebuild-install for ${BETTER_SQLITE3_PACKAGE_NAME} exited with code ${
-        exitCode ?? "null"
-      } (arguments: ${prebuildArguments.join(" ")}). The packaged app needs the ` +
-        "Electron-ABI binary; refusing to ship a mismatched build.",
-    );
+async function waitForRetry(delayMs) {
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, delayMs));
+}
+
+async function runPrebuildInstall(
+  packageDirectory,
+  prebuildArguments,
+  options = {},
+) {
+  const maxAttempts = options.maxAttempts ?? PREBUILD_INSTALL_MAX_ATTEMPTS;
+  const retryDelayMs = options.retryDelayMs ?? PREBUILD_INSTALL_RETRY_DELAY_MS;
+  const runAttempt = options.runAttempt ?? runPrebuildInstallAttempt;
+  const onRetry = options.onRetry ?? console.warn;
+  let exitCode = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    exitCode = await runAttempt(packageDirectory, prebuildArguments);
+    if (exitCode === 0) {
+      return;
+    }
+    if (attempt < maxAttempts) {
+      onRetry(
+        `prebuild-install for ${BETTER_SQLITE3_PACKAGE_NAME} failed on attempt ${attempt} of ${maxAttempts}; retrying`,
+      );
+      await waitForRetry(retryDelayMs);
+    }
   }
+
+  throw new Error(
+    `prebuild-install for ${BETTER_SQLITE3_PACKAGE_NAME} exited with code ${
+      exitCode ?? "null"
+    } after ${maxAttempts} attempts (arguments: ${prebuildArguments.join(" ")}). The packaged app needs the ` +
+      "Electron-ABI binary; refusing to ship a mismatched build.",
+  );
 }
 
 async function prepareBetterSqlite3PackageDirectory(packageDirectory, options) {
@@ -329,6 +358,7 @@ module.exports.preparePackagedNativeModules = preparePackagedNativeModules;
 module.exports.parseStandaloneArguments = parseStandaloneArguments;
 module.exports.resolveBetterSqlite3PrebuildArguments =
   resolveBetterSqlite3PrebuildArguments;
+module.exports.runPrebuildInstall = runPrebuildInstall;
 
 if (require.main === module) {
   main().catch((error) => {
