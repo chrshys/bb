@@ -14,6 +14,11 @@ export const DESKTOP_UPDATE_ACTIVE_MIN_INTERVAL_MS = 15 * 60 * 1000;
 
 type DesktopUpdateIntervalHandle = ReturnType<typeof setInterval>;
 
+type DesktopInfoIdentity = Pick<
+  BbDesktopInfo,
+  "applicationName" | "channel" | "releaseUrl" | "selfUpdateEnabled"
+>;
+
 interface DesktopUpdateLogger {
   warn(message: string): void;
 }
@@ -22,6 +27,7 @@ interface ParseDesktopVersionFeedArgs {
   channel: BbDesktopVersionFeed["channel"];
   checkedAt: string;
   currentVersion: string;
+  identity: DesktopInfoIdentity;
   payloadText: string;
   platform: BbDesktopInfo["platform"];
 }
@@ -47,6 +53,7 @@ interface CreateDesktopUpdateServiceArgs {
   enabled: boolean;
   feedUrl: string;
   fetchImpl?: typeof fetch;
+  identity: DesktopInfoIdentity;
   logger?: DesktopUpdateLogger;
   now?: () => number;
   platform: BbDesktopInfo["platform"];
@@ -73,9 +80,11 @@ interface ApplyFailureArgs {
 
 function createBaseInfo(
   currentVersion: string,
+  identity: DesktopInfoIdentity,
   platform: BbDesktopInfo["platform"],
 ): BbDesktopInfo {
   return {
+    ...identity,
     lastCheckedAt: null,
     latestVersion: null,
     pendingVersion: null,
@@ -95,10 +104,14 @@ function areDesktopInfoValuesEqual(
   right: BbDesktopInfo,
 ): boolean {
   return (
+    left.applicationName === right.applicationName &&
+    left.channel === right.channel &&
     left.lastCheckedAt === right.lastCheckedAt &&
     left.latestVersion === right.latestVersion &&
     left.pendingVersion === right.pendingVersion &&
     left.platform === right.platform &&
+    left.releaseUrl === right.releaseUrl &&
+    left.selfUpdateEnabled === right.selfUpdateEnabled &&
     left.updateAvailable === right.updateAvailable &&
     left.updateDownloaded === right.updateDownloaded &&
     left.version === right.version
@@ -157,6 +170,7 @@ export function parseDesktopVersionFeed(
   return {
     feed: parsedFeed.data,
     info: {
+      ...args.identity,
       lastCheckedAt: args.checkedAt,
       latestVersion: parsedFeed.data.version,
       pendingVersion: null,
@@ -199,7 +213,11 @@ export function createDesktopUpdateService(
   const logger = args.logger ?? console;
   const now = args.now ?? (() => Date.now());
 
-  let currentInfo = createBaseInfo(args.currentVersion, args.platform);
+  let currentInfo = createBaseInfo(
+    args.currentVersion,
+    args.identity,
+    args.platform,
+  );
   let inflight: Promise<BbDesktopInfo> | null = null;
   let intervalHandle: DesktopUpdateIntervalHandle | null = null;
   let lastAttemptedAt: number | null = null;
@@ -255,6 +273,7 @@ export function createDesktopUpdateService(
         channel: args.channel,
         checkedAt,
         currentVersion: args.currentVersion,
+        identity: args.identity,
         payloadText,
         platform: args.platform,
       });

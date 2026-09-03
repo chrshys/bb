@@ -16,8 +16,21 @@ describe("desktop update feed url", () => {
   });
 
   it("points custom builds at the sf-bb fork release", () => {
-    expect(createDesktopReleaseInfo("custom").updateReleaseBaseUrl).toBe(
+    const release = createDesktopReleaseInfo("custom");
+    expect(release.updateReleaseBaseUrl).toBe(
       "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+    );
+    expect(release.releaseUrl).toBe(
+      "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb",
+    );
+  });
+
+  it("gives every stock channel a public release page", () => {
+    expect(createDesktopReleaseInfo("latest").releaseUrl).toBe(
+      "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+    );
+    expect(createDesktopReleaseInfo("nightly").releaseUrl).toBe(
+      "https://github.com/get-bb/bb/releases/tag/desktop-nightly",
     );
   });
 });

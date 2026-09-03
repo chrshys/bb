@@ -52,10 +52,14 @@ vi.mock("@/hooks/queries/system-queries", () => ({
 }));
 
 const desktopInfo = {
+  applicationName: "bb",
+  channel: "latest" as const,
   lastCheckedAt: null,
   latestVersion: null,
   pendingVersion: null,
   platform: "macos" as const,
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
   updateAvailable: false,
   updateDownloaded: false,
   version: "0.0.0-test",

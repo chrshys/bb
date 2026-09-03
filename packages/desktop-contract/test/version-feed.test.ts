@@ -13,10 +13,14 @@ describe("desktop info schema", () => {
   it("accepts the desktop update info payload", () => {
     expect(
       bbDesktopInfoSchema.safeParse({
+        applicationName: "sf-bb",
+        channel: "custom",
         lastCheckedAt: checkedAt,
         latestVersion: "0.0.2",
         pendingVersion: null,
         platform: "macos",
+        releaseUrl: "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb",
+        selfUpdateEnabled: false,
         updateAvailable: true,
         updateDownloaded: false,
         version: "0.0.1",

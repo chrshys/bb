@@ -59,6 +59,10 @@ interface CreateDesktopAutoUpdateServiceArgs {
   currentVersion: string;
   enabled: boolean;
   forceDevUpdateConfig: boolean;
+  identity: Pick<
+    BbDesktopInfo,
+    "applicationName" | "channel" | "releaseUrl" | "selfUpdateEnabled"
+  >;
   logger?: DesktopAutoUpdateLogger;
   now?: () => number;
   platform: BbDesktopInfo["platform"];
@@ -93,9 +97,11 @@ export interface DesktopAutoUpdateService extends DesktopUpdateService {
 
 function createBaseInfo(
   currentVersion: string,
+  identity: CreateDesktopAutoUpdateServiceArgs["identity"],
   platform: BbDesktopInfo["platform"],
 ): BbDesktopInfo {
   return {
+    ...identity,
     downloadState: "idle",
     lastCheckedAt: null,
     latestVersion: null,
@@ -132,11 +138,15 @@ function areDesktopInfoValuesEqual(
   right: BbDesktopInfo,
 ): boolean {
   return (
+    left.applicationName === right.applicationName &&
+    left.channel === right.channel &&
     left.lastCheckedAt === right.lastCheckedAt &&
     left.downloadState === right.downloadState &&
     left.latestVersion === right.latestVersion &&
     left.pendingVersion === right.pendingVersion &&
     left.platform === right.platform &&
+    left.releaseUrl === right.releaseUrl &&
+    left.selfUpdateEnabled === right.selfUpdateEnabled &&
     left.updateAvailable === right.updateAvailable &&
     left.updateDownloaded === right.updateDownloaded &&
     left.version === right.version
@@ -204,7 +214,11 @@ export function createDesktopAutoUpdateService(
   const logger = args.logger ?? createDefaultLogger();
   const now = args.now ?? (() => Date.now());
 
-  let currentInfo = createBaseInfo(args.currentVersion, args.platform);
+  let currentInfo = createBaseInfo(
+    args.currentVersion,
+    args.identity,
+    args.platform,
+  );
   let inflight: Promise<BbDesktopInfo> | null = null;
   let intervalHandle: DesktopUpdateIntervalHandle | null = null;
   let lastAttemptedAt: number | null = null;

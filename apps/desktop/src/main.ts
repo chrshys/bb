@@ -2161,6 +2161,18 @@ async function runDesktopApp(): Promise<void> {
     env: process.env,
     platform: desktopPlatform,
   });
+  const desktopAutoUpdateEnabled =
+    desktopUpdateSupport.autoUpdate &&
+    shouldEnableDesktopAutoUpdate({
+      env: process.env,
+      isPackaged: app.isPackaged,
+    });
+  const desktopInfoIdentity = {
+    applicationName: DESKTOP_RELEASE_INFO.applicationName,
+    channel: DESKTOP_RELEASE_INFO.channel,
+    releaseUrl: DESKTOP_RELEASE_INFO.releaseUrl,
+    selfUpdateEnabled: desktopAutoUpdateEnabled,
+  };
   desktopUpdateService = createDesktopUpdateService({
     channel: DESKTOP_RELEASE_CHANNEL,
     currentVersion: desktopVersion,
@@ -2168,19 +2180,16 @@ async function runDesktopApp(): Promise<void> {
       desktopUpdateSupport.versionCheck &&
       (app.isPackaged || process.env.BB_DESKTOP_VERSION_CHECK === "1"),
     feedUrl: desktopUpdateFeedUrl,
+    identity: desktopInfoIdentity,
     logger: createDesktopLogger(),
     platform: desktopPlatform,
   });
   desktopAutoUpdateService = createDesktopAutoUpdateService({
     currentVersion: desktopVersion,
-    enabled:
-      desktopUpdateSupport.autoUpdate &&
-      shouldEnableDesktopAutoUpdate({
-        env: process.env,
-        isPackaged: app.isPackaged,
-      }),
+    enabled: desktopAutoUpdateEnabled,
     forceDevUpdateConfig:
       !app.isPackaged && process.env.BB_DESKTOP_AUTO_UPDATE === "1",
+    identity: desktopInfoIdentity,
     logger: createDesktopLogger(),
     platform: desktopPlatform,
     updater: createElectronAutoUpdaterAdapter(autoUpdater),

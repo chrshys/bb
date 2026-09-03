@@ -4,10 +4,14 @@ import { mergeDesktopUpdateInfo } from "../src/desktop-update-info.js";
 
 function info(overrides: Partial<BbDesktopInfo> = {}): BbDesktopInfo {
   return {
+    applicationName: "bb",
+    channel: "latest",
     lastCheckedAt: "2026-07-19T00:00:00.000Z",
     latestVersion: "0.0.32",
     pendingVersion: null,
     platform: "macos",
+    releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+    selfUpdateEnabled: true,
     updateAvailable: true,
     updateDownloaded: false,
     version: "0.0.31",

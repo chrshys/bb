@@ -250,7 +250,7 @@ function makeInventory(overrides: Partial<UpdateInventory>): UpdateInventory {
     },
     desktopInfo: null,
     appUpdateAvailable: false,
-    desktopUpdateReady: false,
+    desktopUpdateActionable: false,
     machines: [
       makeMachine({
         host: makeHost({ id: "host_primary", name: "workstation" }),
@@ -1355,11 +1355,15 @@ The canonical release summary.
 
   it("checks for desktop updates through the desktop bridge", async () => {
     const desktopInfo: BbDesktopInfo = {
+      applicationName: "bb",
+      channel: "latest",
       downloadState: "downloaded",
       lastCheckedAt: null,
       latestVersion: "0.0.6",
       pendingVersion: "0.0.6",
       platform: "macos",
+      releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+      selfUpdateEnabled: true,
       updateAvailable: true,
       updateDownloaded: true,
       version: "0.0.5",
@@ -1374,7 +1378,7 @@ The canonical release summary.
     useUpdateInventoryMock.mockReturnValue(
       makeInventory({
         desktopInfo,
-        desktopUpdateReady: true,
+        desktopUpdateActionable: true,
         actionableCount: 1,
         hasAttention: true,
       }),
@@ -1395,12 +1399,16 @@ The canonical release summary.
     expect(sdk.system.version).not.toHaveBeenCalled();
   });
 
-  it("does not claim a legacy desktop shell is downloading an available update", () => {
+  it("keeps the self-updating available state non-interactive", () => {
     const desktopInfo: BbDesktopInfo = {
+      applicationName: "bb",
+      channel: "latest",
       lastCheckedAt: null,
       latestVersion: "0.0.6",
       pendingVersion: null,
       platform: "macos",
+      releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+      selfUpdateEnabled: true,
       updateAvailable: true,
       updateDownloaded: false,
       version: "0.0.5",
@@ -1416,15 +1424,66 @@ The canonical release summary.
 
     expect(screen.getByText("Update available")).toBeDefined();
     expect(screen.queryByText("Downloading in the background…")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Update available · Open the release page in your browser",
+      }),
+    ).toBeNull();
+  });
+
+  it("opens the sf-bb release for a non-self-updating desktop build", () => {
+    const releaseUrl =
+      "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb";
+    const desktopInfo: BbDesktopInfo = {
+      applicationName: "sf-bb",
+      channel: "custom",
+      lastCheckedAt: null,
+      latestVersion: "0.41.1-sf.2.1",
+      pendingVersion: null,
+      platform: "macos",
+      releaseUrl,
+      selfUpdateEnabled: false,
+      updateAvailable: true,
+      updateDownloaded: false,
+      version: "0.41.1-sf.1.1",
+    };
+    useDesktopUpdateInfoMock.mockReturnValue({
+      desktopApi: {} as BbDesktopApi,
+      desktopInfo,
+      isDesktop: true,
+    });
+    useUpdateInventoryMock.mockReturnValue(
+      makeInventory({
+        desktopInfo,
+        desktopUpdateActionable: true,
+        actionableCount: 1,
+        hasAttention: true,
+      }),
+    );
+
+    renderSection();
+
+    expect(screen.getByText("sf-bb")).toBeDefined();
+    expect(screen.getByText("pnpm sf-bb:update")).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Update available · Open the release page in your browser",
+      }),
+    );
+    expect(openUrlInExternalBrowserMock).toHaveBeenCalledWith(releaseUrl);
   });
 
   it("retries a failed desktop download through the desktop bridge", async () => {
     const desktopInfo: BbDesktopInfo = {
+      applicationName: "bb",
+      channel: "latest",
       downloadState: "failed",
       lastCheckedAt: null,
       latestVersion: "0.0.6",
       pendingVersion: null,
       platform: "macos",
+      releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+      selfUpdateEnabled: true,
       updateAvailable: true,
       updateDownloaded: false,
       version: "0.0.5",

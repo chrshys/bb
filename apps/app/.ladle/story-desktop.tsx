@@ -7,10 +7,14 @@ import type {
 } from "@bb/desktop-contract";
 
 const STORY_DESKTOP_INFO: BbDesktopInfo = {
+  applicationName: "bb",
+  channel: "latest",
   lastCheckedAt: null,
   latestVersion: null,
   pendingVersion: null,
   platform: "macos",
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
   updateAvailable: false,
   updateDownloaded: false,
   version: "0.0.0-story",

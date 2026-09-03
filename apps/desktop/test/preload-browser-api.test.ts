@@ -67,10 +67,14 @@ const electronMock = vi.hoisted(() => {
   ) => void;
 
   const desktopInfo: BbDesktopInfo = {
+    applicationName: "bb",
+    channel: "latest",
     lastCheckedAt: null,
     latestVersion: null,
     pendingVersion: null,
     platform: "macos",
+    releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+    selfUpdateEnabled: true,
     updateAvailable: false,
     updateDownloaded: false,
     version: "0.0.0-test",
@@ -314,7 +318,9 @@ describe("desktop preload browser API", () => {
     api.browser.setVisibleWithoutFocus?.(visibleRequest);
     api.browser.findInPage?.(findRequest);
     api.browser.stopFindInPage?.(stopFindRequest);
-    api.browser.experimental_trustLocalhostCertificate?.({ tabId: "browser:a" });
+    api.browser.experimental_trustLocalhostCertificate?.({
+      tabId: "browser:a",
+    });
     await expect(
       api.browser.experimental_listCookieImportSources?.({
         tabId: "browser:a",
@@ -392,7 +398,8 @@ describe("desktop preload browser API", () => {
         payload: stopFindRequest,
       },
       {
-        channel: BB_DESKTOP_BROWSER_EXPERIMENTAL_TRUST_LOCALHOST_CERTIFICATE_CHANNEL,
+        channel:
+          BB_DESKTOP_BROWSER_EXPERIMENTAL_TRUST_LOCALHOST_CERTIFICATE_CHANNEL,
         payload: { tabId: "browser:a" },
       },
       { channel: BB_DESKTOP_SET_THEME_CHANNEL, payload: "dark" },
@@ -646,11 +653,15 @@ describe("desktop preload browser API", () => {
     emitIpcPayload({
       channel: BB_DESKTOP_INFO_CHANGED_CHANNEL,
       payload: {
+        applicationName: "bb",
+        channel: "latest",
         lastCheckedAt: null,
         latestVersion: null,
         pendingVersion: null,
         platform: "macos",
+        releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
         serverDaemonLogsAvailable: true,
+        selfUpdateEnabled: true,
         updateAvailable: false,
         updateDownloaded: false,
         version: "0.0.0-test",

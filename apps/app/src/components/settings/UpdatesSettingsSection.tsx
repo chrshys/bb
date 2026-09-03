@@ -767,7 +767,11 @@ export function BbAppUpdateRows({
       desktopInfo.pendingVersion ?? desktopInfo.latestVersion;
     const latest = desktopInfo.updateAvailable ? pendingVersion : null;
     const name = (
-      <RowName name="bb app" current={desktopInfo.version} latest={latest} />
+      <RowName
+        name={desktopInfo.applicationName}
+        current={desktopInfo.version}
+        latest={latest}
+      />
     );
 
     if (desktopInfo.updateDownloaded) {
@@ -798,6 +802,22 @@ export function BbAppUpdateRows({
       );
     }
     if (desktopInfo.updateAvailable) {
+      if (!desktopInfo.selfUpdateEnabled) {
+        return row(
+          name,
+          <RowStateControl
+            state="update-available"
+            buttonLabel="Open release"
+            actionLabel="Open the release page in your browser"
+            onClick={() => {
+              openUrlInExternalBrowser(desktopInfo.releaseUrl);
+            }}
+          />,
+          <RowStateCaption state="update-available">
+            Run <code>pnpm sf-bb:update</code> or download from the release page
+          </RowStateCaption>,
+        );
+      }
       return row(name, <RowStateControl state="update-available" />);
     }
     return row(name, settledStatus);

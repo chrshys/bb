@@ -10,6 +10,7 @@ interface DesktopReleaseInfo {
   applicationName: "bb" | "bb Nightly" | "sf-bb";
   channel: DesktopReleaseChannel;
   iconFileName: "icon.png" | "icon-nightly.png";
+  releaseUrl: string;
   releaseTag: "desktop-latest" | "desktop-nightly" | "desktop-sf-bb";
   updateReleaseBaseUrl: string;
 }
@@ -29,11 +30,13 @@ export function createDesktopReleaseInfo(
       : channel === "nightly"
         ? "desktop-nightly"
         : "desktop-latest";
+  const repository = channel === "custom" ? "chrshys/bb" : "get-bb/bb";
 
   return {
     applicationName,
     channel,
     iconFileName: channel === "nightly" ? "icon-nightly.png" : "icon.png",
+    releaseUrl: `https://github.com/${repository}/releases/tag/${releaseTag}`,
     releaseTag,
     updateReleaseBaseUrl: createDesktopUpdateReleaseBaseUrl(releaseTag),
   };

@@ -140,7 +140,7 @@ function renderBadge(inventory: Partial<UpdateInventory>) {
     systemVersion: undefined,
     desktopInfo: null,
     appUpdateAvailable: false,
-    desktopUpdateReady: false,
+    desktopUpdateActionable: false,
     machines: [],
     actionableCount: 0,
     hasAttention: false,
@@ -168,6 +168,13 @@ describe("SidebarUpdatesBadge", () => {
 
   it("shows only the bb chip for a bb-only update", () => {
     renderBadge({ appUpdateAvailable: true });
+
+    expect(screen.getByTestId("sidebar-updates-badge-bb")).toBeTruthy();
+    expect(screen.queryByTestId("sidebar-updates-badge-providers")).toBeNull();
+  });
+
+  it("shows the bb chip for a non-self-updating desktop release", () => {
+    renderBadge({ desktopUpdateActionable: true });
 
     expect(screen.getByTestId("sidebar-updates-badge-bb")).toBeTruthy();
     expect(screen.queryByTestId("sidebar-updates-badge-providers")).toBeNull();

@@ -50,10 +50,14 @@ interface RecordingBrowserApi {
 const BROWSER_PANEL_RECT = new DOMRect(12, 24, 420, 260);
 
 const desktopInfo = {
+  applicationName: "bb",
+  channel: "latest" as const,
   lastCheckedAt: null,
   latestVersion: null,
   pendingVersion: null,
   platform: "macos" as const,
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
   updateAvailable: false,
   updateDownloaded: false,
   version: "0.0.0-test",
@@ -232,11 +236,7 @@ describe("BrowserTabLifecycleObserver", () => {
       threadId: "thread-1",
     };
     markBrowserAnnotationEpoch(keyClosed, 7);
-    setBrowserAnnotationScreenshot(
-      keyClosed,
-      7,
-      screenshotSessionForTest(),
-    );
+    setBrowserAnnotationScreenshot(keyClosed, 7, screenshotSessionForTest());
     markBrowserAnnotationEpoch(keyKept, 7);
     setBrowserAnnotationScreenshot(keyKept, 7, screenshotSessionForTest());
 
@@ -372,7 +372,6 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
     expect(
       screen.queryByRole("heading", { name: "Browse the web" }),
     ).toBeNull();
-
 
     act(() => {
       emitState({

@@ -12,12 +12,16 @@ const bbDesktopDownloadStateSchema = z.enum([
 ]);
 
 export const bbDesktopInfoSchema = z.object({
+  applicationName: z.string().min(1),
+  channel: z.enum(["latest", "nightly", "custom"]),
   downloadState: bbDesktopDownloadStateSchema.optional(),
   lastCheckedAt: isoUtcDateTimeSchema.nullable(),
   latestVersion: z.string().min(1).nullable(),
   pendingVersion: z.string().min(1).nullable(),
   platform: z.enum(["macos", "linux"]),
+  releaseUrl: z.string().url(),
   serverDaemonLogsAvailable: z.boolean().optional(),
+  selfUpdateEnabled: z.boolean(),
   updateAvailable: z.boolean(),
   updateDownloaded: z.boolean(),
   version: z.string().min(1),

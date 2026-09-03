@@ -8,6 +8,12 @@ import {
 } from "../src/desktop-update-check.js";
 
 const checkedAt = "2026-05-21T00:00:00.000Z";
+const INFO_IDENTITY = {
+  applicationName: "bb" as const,
+  channel: "latest" as const,
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
+};
 
 function createFeed(version: string): BbDesktopVersionFeed {
   return {
@@ -44,6 +50,7 @@ describe("desktop update feed parsing", () => {
       channel: "latest",
       checkedAt,
       currentVersion: "0.0.1",
+      identity: INFO_IDENTITY,
       payloadText: JSON.stringify(createFeed("0.0.2")),
       platform: "macos",
     });
@@ -53,6 +60,7 @@ describe("desktop update feed parsing", () => {
       throw new Error(result.reason);
     }
     expect(result.info).toEqual({
+      ...INFO_IDENTITY,
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.2",
       pendingVersion: null,
@@ -88,6 +96,7 @@ describe("desktop update feed parsing", () => {
       channel: "latest",
       checkedAt,
       currentVersion: "0.0.1",
+      identity: INFO_IDENTITY,
       payloadText: JSON.stringify(payload),
       platform: "macos",
     });
@@ -100,6 +109,7 @@ describe("desktop update feed parsing", () => {
       channel: "latest",
       checkedAt,
       currentVersion: "0.0.1",
+      identity: INFO_IDENTITY,
       payloadText: "{",
       platform: "macos",
     });
@@ -112,6 +122,7 @@ describe("desktop update feed parsing", () => {
       channel: "latest",
       checkedAt,
       currentVersion: "0.0.1",
+      identity: INFO_IDENTITY,
       payloadText: JSON.stringify({
         ...createFeed("0.0.2"),
         platform: "linux",
@@ -131,6 +142,7 @@ describe("desktop update feed parsing", () => {
       channel: "latest",
       checkedAt,
       currentVersion: "0.0.1",
+      identity: INFO_IDENTITY,
       payloadText: JSON.stringify({
         ...createFeed("0.0.2"),
         channel: "nightly",
@@ -150,6 +162,7 @@ describe("desktop update feed parsing", () => {
       channel: "latest",
       checkedAt,
       currentVersion: "0.0.1",
+      identity: INFO_IDENTITY,
       payloadText: JSON.stringify({
         ...createFeed("0.0.2"),
         platform: "linux",
@@ -165,6 +178,7 @@ describe("desktop update feed parsing", () => {
       channel: "latest",
       checkedAt,
       currentVersion: "0.0.2",
+      identity: INFO_IDENTITY,
       payloadText: JSON.stringify(createFeed("0.0.1")),
       platform: "macos",
     });
@@ -174,6 +188,7 @@ describe("desktop update feed parsing", () => {
       throw new Error(result.reason);
     }
     expect(result.info).toEqual({
+      ...INFO_IDENTITY,
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.1",
       pendingVersion: null,
@@ -203,6 +218,7 @@ describe("desktop update service", () => {
       enabled: true,
       feedUrl: "https://example.test/desktop-version.json",
       fetchImpl,
+      identity: INFO_IDENTITY,
       logger: { warn() {} },
       now: () => nowMs,
       platform: "macos",
@@ -210,6 +226,7 @@ describe("desktop update service", () => {
 
     const successfulInfo = await service.checkForUpdates();
     expect(successfulInfo).toEqual({
+      ...INFO_IDENTITY,
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.2",
       pendingVersion: null,
@@ -224,6 +241,7 @@ describe("desktop update service", () => {
 
     expect(fetchCount).toBe(2);
     expect(failedInfo).toEqual({
+      ...INFO_IDENTITY,
       lastCheckedAt: failedCheckedAt,
       latestVersion: "0.0.2",
       pendingVersion: null,
@@ -263,6 +281,7 @@ describe("desktop update service", () => {
         enabled: true,
         feedUrl: "https://example.test/desktop-version.json",
         fetchImpl,
+        identity: INFO_IDENTITY,
         logger: { warn() {} },
         now: () => nowMs,
         platform: "macos",
@@ -276,6 +295,7 @@ describe("desktop update service", () => {
 
       expect(fetchCount).toBe(2);
       expect(timeoutInfo).toEqual({
+        ...INFO_IDENTITY,
         lastCheckedAt: timeoutCheckedAt,
         latestVersion: "0.0.2",
         pendingVersion: null,
@@ -302,6 +322,7 @@ describe("desktop update service", () => {
       enabled: true,
       feedUrl: "https://example.test/desktop-version.json",
       fetchImpl,
+      identity: INFO_IDENTITY,
       logger: { warn() {} },
       now: () => nowMs,
       platform: "macos",
@@ -329,6 +350,7 @@ describe("desktop update service", () => {
       currentVersion: "0.0.1",
       enabled: false,
       feedUrl: "https://example.test/desktop-version.json",
+      identity: INFO_IDENTITY,
       platform: "linux",
     });
 

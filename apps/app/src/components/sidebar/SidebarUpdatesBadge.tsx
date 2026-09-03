@@ -43,7 +43,7 @@ export function SidebarUpdatesBadge({ onNavigate }: SidebarUpdatesBadgeProps) {
   ).length;
   const bbUpdateCount =
     (inventory.appUpdateAvailable ? 1 : 0) +
-    (inventory.desktopUpdateReady ? 1 : 0) +
+    (inventory.desktopUpdateActionable ? 1 : 0) +
     stuckDaemonCount;
 
   const staleProvidersByKey = new Map<ProviderCliKey, StaleProvider>();

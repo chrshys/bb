@@ -44,10 +44,14 @@ import {
 } from "./browserAnnotationState";
 
 const desktopInfo = {
+  applicationName: "bb",
+  channel: "latest" as const,
   lastCheckedAt: null,
   latestVersion: null,
   pendingVersion: null,
   platform: "macos" as const,
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
   updateAvailable: false,
   updateDownloaded: false,
   version: "0.0.0-test",
@@ -260,7 +264,10 @@ describe("BrowserTabContent persistent navigation", () => {
     delete window.bbDesktop;
     Reflect.deleteProperty(HTMLCanvasElement.prototype, "setPointerCapture");
     Reflect.deleteProperty(HTMLCanvasElement.prototype, "hasPointerCapture");
-    Reflect.deleteProperty(HTMLCanvasElement.prototype, "releasePointerCapture");
+    Reflect.deleteProperty(
+      HTMLCanvasElement.prototype,
+      "releasePointerCapture",
+    );
   });
 
   it("keeps the top navigation visible through pointer and focus changes", () => {
@@ -367,7 +374,6 @@ describe("BrowserTabContent persistent navigation", () => {
       }),
     );
   });
-
 
   it("removes the native hit target before rendering recovery actions", async () => {
     const harness = createBrowserChromeHarness();
@@ -1403,7 +1409,11 @@ describe("BrowserTabContent persistent navigation", () => {
       navigationEpoch: 7,
       pixelSize: { height: 600, width: 800 },
     });
-    const harness = createBrowserChromeHarness(undefined, undefined, capturePage);
+    const harness = createBrowserChromeHarness(
+      undefined,
+      undefined,
+      capturePage,
+    );
 
     const viewA = renderBrowserChrome(harness, "https://example.com/one", {
       canHandleBrowserCommands: true,
@@ -1475,7 +1485,9 @@ describe("BrowserTabContent persistent navigation", () => {
       screen.getByRole("button", { name: "Undo" }).hasAttribute("disabled"),
     ).toBe(false);
     expect(
-      screen.getByRole("button", { name: "Arrow" }).getAttribute("aria-pressed"),
+      screen
+        .getByRole("button", { name: "Arrow" })
+        .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
       screen.getByRole("button", { name: "Redo" }).hasAttribute("disabled"),
@@ -1619,9 +1631,7 @@ describe("BrowserTabContent persistent navigation", () => {
       "data:image/jpeg;base64,clipped-element",
     );
     expect(screen.getByText("button#purchase")).not.toBeNull();
-    const feedback = screen.getByLabelText(
-      "Feedback",
-    ) as HTMLTextAreaElement;
+    const feedback = screen.getByLabelText("Feedback") as HTMLTextAreaElement;
     expect(feedback.value).toBe("Move the CTA above the fold.");
     expect(
       screen.getByRole("button", { name: "Fix" }).getAttribute("aria-pressed"),
@@ -1655,7 +1665,11 @@ describe("BrowserTabContent persistent navigation", () => {
     }> = [];
     const runPageScript = vi.fn(
       (
-        request: { source: string; tabId: string; expectedNavigationEpoch: number },
+        request: {
+          source: string;
+          tabId: string;
+          expectedNavigationEpoch: number;
+        },
         options: { signal?: AbortSignal } = {},
       ): Promise<BrowserPickerResult> => {
         if (request.source.includes("__bbBrowserElementPickerCleanup?.()")) {
@@ -1789,7 +1803,11 @@ describe("BrowserTabContent persistent navigation", () => {
         async decode(): Promise<void> {}
       },
     );
-    const harness = createBrowserChromeHarness(undefined, undefined, capturePage);
+    const harness = createBrowserChromeHarness(
+      undefined,
+      undefined,
+      capturePage,
+    );
 
     const view = renderBrowserChrome(harness, "https://example.com/one", {
       canHandleBrowserCommands: true,

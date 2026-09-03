@@ -21,6 +21,12 @@ import {
 } from "../src/desktop-update-provider.js";
 
 const checkedAt = "2026-05-21T00:00:00.000Z";
+const INFO_IDENTITY = {
+  applicationName: "bb" as const,
+  channel: "latest" as const,
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
+};
 
 interface LoggerMessages {
   errors: string[];
@@ -216,6 +222,7 @@ describe("desktop auto-update service", () => {
       currentVersion: "0.0.1",
       enabled: true,
       forceDevUpdateConfig: false,
+      identity: INFO_IDENTITY,
       logger: createLogger(messages),
       now: () => Date.parse(checkedAt),
       platform: "macos",
@@ -236,6 +243,7 @@ describe("desktop auto-update service", () => {
       currentVersion: "0.0.1",
       enabled: true,
       forceDevUpdateConfig: false,
+      identity: INFO_IDENTITY,
       logger: createLogger(messages),
       now: () => Date.parse(checkedAt),
       platform: "macos",
@@ -246,6 +254,7 @@ describe("desktop auto-update service", () => {
 
     expect(updater.downloadUpdateCalls).toBe(1);
     expect(service.getInfo()).toEqual({
+      ...INFO_IDENTITY,
       downloadState: "downloading",
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.2",
@@ -259,6 +268,7 @@ describe("desktop auto-update service", () => {
     updater.emitUpdateDownloaded(createDownloadedEvent("0.0.2"));
 
     expect(service.getInfo()).toEqual({
+      ...INFO_IDENTITY,
       downloadState: "downloaded",
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.2",
@@ -284,6 +294,7 @@ describe("desktop auto-update service", () => {
       currentVersion: "0.0.1",
       enabled: true,
       forceDevUpdateConfig: false,
+      identity: INFO_IDENTITY,
       logger: createLogger(createLoggerMessages()),
       now: () => Date.parse(checkedAt),
       platform: "macos",
@@ -312,6 +323,7 @@ describe("desktop auto-update service", () => {
       currentVersion: "0.0.1",
       enabled: true,
       forceDevUpdateConfig: false,
+      identity: INFO_IDENTITY,
       logger: createLogger(messages),
       now: () => Date.parse(checkedAt),
       platform: "macos",
@@ -328,6 +340,7 @@ describe("desktop auto-update service", () => {
     expect(messages.errors[0]).toContain("download failed");
     expect(messages.errors[0]).toContain("signature rejected");
     expect(service.getInfo()).toEqual({
+      ...INFO_IDENTITY,
       downloadState: "failed",
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.2",
@@ -346,6 +359,7 @@ describe("desktop auto-update service", () => {
       currentVersion: "0.0.1",
       enabled: true,
       forceDevUpdateConfig: false,
+      identity: INFO_IDENTITY,
       logger: createLogger(createLoggerMessages()),
       now: () => Date.parse(checkedAt),
       platform: "macos",
@@ -356,6 +370,7 @@ describe("desktop auto-update service", () => {
 
     expect(updater.checkForUpdatesCalls).toBe(1);
     expect(info).toEqual({
+      ...INFO_IDENTITY,
       downloadState: "idle",
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.2",
@@ -375,6 +390,7 @@ describe("desktop auto-update service", () => {
       currentVersion: "0.0.1",
       enabled: true,
       forceDevUpdateConfig: false,
+      identity: INFO_IDENTITY,
       logger: createLogger(createLoggerMessages()),
       now: () => currentTime,
       platform: "macos",
@@ -391,6 +407,7 @@ describe("desktop auto-update service", () => {
 
     expect(updater.checkForUpdatesCalls).toBe(1);
     expect(service.getInfo()).toEqual({
+      ...INFO_IDENTITY,
       downloadState: "downloaded",
       lastCheckedAt: checkedAt,
       latestVersion: "0.0.2",
@@ -412,6 +429,7 @@ describe("desktop auto-update service", () => {
       currentVersion: "0.0.1",
       enabled,
       forceDevUpdateConfig: false,
+      identity: { ...INFO_IDENTITY, selfUpdateEnabled: enabled },
       logger: createLogger(createLoggerMessages()),
       now: () => Date.parse(checkedAt),
       platform: "macos",

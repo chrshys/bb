@@ -9,10 +9,14 @@ import {
 } from "./bb-desktop";
 
 const desktopInfo: BbDesktopInfo = {
+  applicationName: "bb",
+  channel: "latest",
   lastCheckedAt: null,
   latestVersion: null,
   pendingVersion: null,
   platform: "macos",
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
   updateAvailable: false,
   updateDownloaded: false,
   version: "0.0.0-test",

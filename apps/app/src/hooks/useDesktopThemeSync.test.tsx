@@ -6,10 +6,14 @@ import type { BbDesktopInfo, BbDesktopTheme } from "@bb/desktop-contract";
 import { createBbDesktopApi } from "@/test/bb-desktop-test-utils";
 
 const desktopInfo: BbDesktopInfo = {
+  applicationName: "bb",
+  channel: "latest",
   lastCheckedAt: null,
   latestVersion: null,
   pendingVersion: null,
   platform: "macos",
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
   updateAvailable: false,
   updateDownloaded: false,
   version: "0.0.0-test",

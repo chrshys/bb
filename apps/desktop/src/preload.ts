@@ -104,6 +104,7 @@ import {
   BB_DESKTOP_WINDOW_STATE_CHANGED_CHANNEL,
 } from "./desktop-window-command-ipc.js";
 import { resolveBbDesktopPlatform } from "./desktop-platform.js";
+import { DESKTOP_RELEASE_INFO } from "./desktop-update-provider.js";
 
 function getDesktopVersion(version: string | undefined): string {
   if (version === undefined || version.length === 0) {
@@ -114,11 +115,15 @@ function getDesktopVersion(version: string | undefined): string {
 
 function createInitialDesktopInfo(): BbDesktopInfo {
   return {
+    applicationName: DESKTOP_RELEASE_INFO.applicationName,
+    channel: DESKTOP_RELEASE_INFO.channel,
     downloadState: "idle",
     lastCheckedAt: null,
     latestVersion: null,
     pendingVersion: null,
     platform: resolveBbDesktopPlatform(process.platform),
+    releaseUrl: DESKTOP_RELEASE_INFO.releaseUrl,
+    selfUpdateEnabled: false,
     updateAvailable: false,
     updateDownloaded: false,
     version: getDesktopVersion(process.env.BB_DESKTOP_VERSION),
@@ -277,7 +282,10 @@ const bbBrowserApi: BbDesktopBrowserApi = {
   async experimental_sendBrowserTrustedInput(request, options) {
     const signal = options?.signal;
     if (signal?.aborted === true) {
-      throw new DOMException("Browser trusted input was cancelled", "AbortError");
+      throw new DOMException(
+        "Browser trusted input was cancelled",
+        "AbortError",
+      );
     }
     const payload: unknown = await ipcRenderer.invoke(
       BB_DESKTOP_BROWSER_EXPERIMENTAL_SEND_TRUSTED_INPUT_CHANNEL,
@@ -486,6 +494,12 @@ const bbBrowserApi: BbDesktopBrowserApi = {
 
 const bbDesktopApi: BbDesktopApi = {
   browser: bbBrowserApi,
+  get applicationName() {
+    return currentInfo.applicationName;
+  },
+  get channel() {
+    return currentInfo.channel;
+  },
   get lastCheckedAt() {
     return currentInfo.lastCheckedAt;
   },
@@ -496,8 +510,14 @@ const bbDesktopApi: BbDesktopApi = {
     return currentInfo.pendingVersion;
   },
   platform: resolveBbDesktopPlatform(process.platform),
+  get releaseUrl() {
+    return currentInfo.releaseUrl;
+  },
   get serverDaemonLogsAvailable() {
     return currentInfo.serverDaemonLogsAvailable;
+  },
+  get selfUpdateEnabled() {
+    return currentInfo.selfUpdateEnabled;
   },
   get updateAvailable() {
     return currentInfo.updateAvailable;

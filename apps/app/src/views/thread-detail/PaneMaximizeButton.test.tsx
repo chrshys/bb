@@ -180,10 +180,14 @@ describe("PaneMaximizeButton", () => {
 
   it("preserves full-screen copy in every desktop app context", async () => {
     const desktopInfo: BbDesktopInfo = {
+      applicationName: "bb",
+      channel: "latest",
       lastCheckedAt: null,
       latestVersion: null,
       pendingVersion: null,
       platform: "linux",
+      releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+      selfUpdateEnabled: true,
       updateAvailable: false,
       updateDownloaded: false,
       version: "0.0.0-test",
@@ -204,10 +208,14 @@ describe("PaneMaximizeButton", () => {
 
   it("hides the native desktop browser while the arrangement menu can cover it", async () => {
     const desktopInfo: BbDesktopInfo = {
+      applicationName: "bb",
+      channel: "latest",
       lastCheckedAt: null,
       latestVersion: null,
       pendingVersion: null,
       platform: "macos",
+      releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+      selfUpdateEnabled: true,
       updateAvailable: false,
       updateDownloaded: false,
       version: "0.0.0-test",

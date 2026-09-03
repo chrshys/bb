@@ -46,14 +46,29 @@ const NPM_VERSION = {
 };
 
 const DESKTOP_UPDATE = {
+  applicationName: "bb",
+  channel: "latest" as const,
   lastCheckedAt: "2026-07-19T00:00:00.000Z",
   latestVersion: "0.39.0",
   pendingVersion: "0.39.0",
   platform: "macos" as const,
+  releaseUrl: "https://github.com/get-bb/bb/releases/tag/desktop-latest",
+  selfUpdateEnabled: true,
   updateAvailable: true,
   updateDownloaded: true,
   downloadState: "downloaded" as const,
   version: "0.38.0",
+};
+
+const SF_BB_UPDATE = {
+  ...DESKTOP_UPDATE,
+  applicationName: "sf-bb",
+  channel: "custom" as const,
+  downloadState: "idle" as const,
+  pendingVersion: null,
+  releaseUrl: "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb",
+  selfUpdateEnabled: false,
+  updateDownloaded: false,
 };
 
 function updateIssue(
@@ -391,6 +406,21 @@ export function UpdateStates() {
                 pendingVersion: null,
                 updateDownloaded: false,
               }}
+              isDesktop
+              onRelaunchDesktop={noop}
+              onRetryDesktop={noop}
+            />
+          </StoryAppState>
+        </State>
+
+        <State
+          name="sf-bb update available"
+          note="An ad-hoc sf-bb build opens its public release because it cannot replace itself."
+        >
+          <StoryAppState>
+            <BbAppUpdateRows
+              systemVersion={undefined}
+              desktopInfo={SF_BB_UPDATE}
               isDesktop
               onRelaunchDesktop={noop}
               onRetryDesktop={noop}

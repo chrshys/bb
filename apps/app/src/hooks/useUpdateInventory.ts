@@ -40,7 +40,7 @@ export interface UpdateInventory {
   systemVersion: SystemVersionResponse | undefined;
   desktopInfo: BbDesktopInfo | null;
   appUpdateAvailable: boolean;
-  desktopUpdateReady: boolean;
+  desktopUpdateActionable: boolean;
   machines: UpdateInventoryMachine[];
   pluginAttentionCount: number;
   actionableCount: number;
@@ -58,6 +58,15 @@ export function buildUpdateInventoryProviderIssues(
   return providerCliEntries(providerStatus)
     .map(buildProviderCliIssue)
     .filter(isProviderCliIssue);
+}
+
+export function isDesktopUpdateActionable(
+  desktopInfo: BbDesktopInfo | null,
+): boolean {
+  if (desktopInfo === null || !desktopInfo.updateAvailable) {
+    return false;
+  }
+  return desktopInfo.updateDownloaded || !desktopInfo.selfUpdateEnabled;
 }
 
 export function useUpdateInventory(
@@ -126,7 +135,7 @@ export function useUpdateInventory(
     systemVersion !== undefined &&
     !systemVersion.isDevelopment &&
     systemVersion.updateAvailable;
-  const desktopUpdateReady = desktopInfo?.updateDownloaded === true;
+  const desktopUpdateActionable = isDesktopUpdateActionable(desktopInfo);
   const actionableCount =
     machines.reduce(
       (count, machine) =>
@@ -136,7 +145,7 @@ export function useUpdateInventory(
       0,
     ) +
     (appUpdateAvailable ? 1 : 0) +
-    (desktopUpdateReady ? 1 : 0) +
+    (desktopUpdateActionable ? 1 : 0) +
     pluginAttentionCount;
 
   const desktopLastCheckedAt =
@@ -160,7 +169,7 @@ export function useUpdateInventory(
     systemVersion,
     desktopInfo,
     appUpdateAvailable,
-    desktopUpdateReady,
+    desktopUpdateActionable,
     machines,
     pluginAttentionCount,
     actionableCount,
