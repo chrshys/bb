@@ -22,7 +22,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   document
-    .querySelector<HTMLButtonElement>('button[data-choice="connect"]')
+    .querySelector<HTMLButtonElement>('button[data-default="true"]')
     ?.focus();
 
   window.addEventListener("keydown", (event) => {

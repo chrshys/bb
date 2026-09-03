@@ -65,6 +65,7 @@ import {
 } from "./owned-runtime-supervisor.js";
 import {
   probeBbServer,
+  readBbServerVersionIdentity,
   waitForCompatibleServer,
   type CompatibleServerProbeResult,
   type ServerProbeResult,
@@ -1821,14 +1822,23 @@ async function decideOnExistingServer(
     return "attach";
   }
 
-  const details = await readForeignRuntimeDetails({
-    dataDir: probe.dataDir,
-    serverUrl: probe.serverUrl,
-  });
+  const [details, runningServer] = await Promise.all([
+    readForeignRuntimeDetails({
+      dataDir: probe.dataDir,
+      serverUrl: probe.serverUrl,
+    }),
+    readBbServerVersionIdentity({
+      serverUrl: probe.serverUrl,
+      timeoutMs: ATTACH_PROBE_TIMEOUT_MS,
+    }),
+  ]);
   const choice = await openExistingServerDialog({
     details,
+    launchingApplicationName: DESKTOP_RELEASE_INFO.applicationName,
+    launchingChannel: DESKTOP_RELEASE_CHANNEL,
     parentWindow: getFocusedApplicationWindow(),
     preloadPath,
+    runningServer,
     serverUrl: probe.serverUrl,
   });
 

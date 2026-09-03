@@ -14,6 +14,28 @@ const systemConfigResponseSchema = z
   })
   .passthrough();
 
+const serverVersionIdentityResponseSchema = z
+  .object({
+    currentVersion: z.string().min(1),
+    source: z.enum(["npm", "sf-bb-feed"]),
+    desktop: z
+      .object({
+        channel: z.enum(["latest", "nightly", "custom"]),
+        version: z.string().min(1),
+      })
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+
+export type ServerReleaseChannel = "latest" | "nightly" | "custom";
+
+export interface ServerVersionIdentity {
+  applicationName: "bb" | "bb Nightly" | "sf-bb";
+  channel: ServerReleaseChannel;
+  version: string;
+}
+
 export type ServerProbeResult =
   | CompatibleServerProbeResult
   | IncompatibleServerProbeResult
@@ -43,6 +65,12 @@ interface UnavailableServerProbeResult {
 }
 
 interface ProbeBbServerArgs {
+  fetchImpl?: ServerProbeFetch;
+  serverUrl: string;
+  timeoutMs: number;
+}
+
+interface ReadBbServerVersionIdentityArgs {
   fetchImpl?: ServerProbeFetch;
   serverUrl: string;
   timeoutMs: number;
@@ -106,6 +134,18 @@ function endpointUrl(serverUrl: string, path: string): string {
   return new URL(path, serverUrl).toString();
 }
 
+function applicationNameForChannel(
+  channel: ServerReleaseChannel,
+): ServerVersionIdentity["applicationName"] {
+  if (channel === "custom") {
+    return "sf-bb";
+  }
+  if (channel === "nightly") {
+    return "bb Nightly";
+  }
+  return "bb";
+}
+
 async function fetchJson<TValue>(
   args: FetchJsonArgs<TValue>,
 ): Promise<FetchJsonResult<TValue>> {
@@ -153,6 +193,29 @@ function formatFetchFailure(result: FetchJsonFailureResult): string {
     return `HTTP ${result.status}`;
   }
   return result.message;
+}
+
+export async function readBbServerVersionIdentity(
+  args: ReadBbServerVersionIdentityArgs,
+): Promise<ServerVersionIdentity | null> {
+  const result = await fetchJson({
+    fetchImpl: args.fetchImpl ?? globalThis.fetch,
+    schema: serverVersionIdentityResponseSchema,
+    timeoutMs: args.timeoutMs,
+    url: endpointUrl(args.serverUrl, "/api/v1/system/version"),
+  });
+  if (result.kind !== "success") {
+    return null;
+  }
+
+  const channel =
+    result.value.desktop?.channel ??
+    (result.value.source === "sf-bb-feed" ? "custom" : "latest");
+  return {
+    applicationName: applicationNameForChannel(channel),
+    channel,
+    version: result.value.desktop?.version ?? result.value.currentVersion,
+  };
 }
 
 export async function probeBbServer(

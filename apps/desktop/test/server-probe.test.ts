@@ -4,7 +4,11 @@ import {
   type ServerResponse,
 } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { probeBbServer, type ServerProbeFetch } from "../src/server-probe.js";
+import {
+  probeBbServer,
+  readBbServerVersionIdentity,
+  type ServerProbeFetch,
+} from "../src/server-probe.js";
 
 interface TestServer {
   close(): Promise<void>;
@@ -221,5 +225,54 @@ describe("probeBbServer", () => {
     });
 
     expect(result.kind).toBe("unavailable");
+  });
+});
+
+describe("readBbServerVersionIdentity", () => {
+  it("names the running desktop from its release channel", async () => {
+    const fetchImpl = vi.fn<ServerProbeFetch>().mockResolvedValue(
+      Response.json({
+        currentVersion: "0.41.0",
+        source: "sf-bb-feed",
+        desktop: {
+          channel: "custom",
+          version: "0.41.1-sf.123.1",
+        },
+      }),
+    );
+
+    await expect(
+      readBbServerVersionIdentity({
+        fetchImpl,
+        serverUrl: "https://studio.example",
+        timeoutMs: 1_000,
+      }),
+    ).resolves.toEqual({
+      applicationName: "sf-bb",
+      channel: "custom",
+      version: "0.41.1-sf.123.1",
+    });
+  });
+
+  it("uses the server source when no desktop identity is available", async () => {
+    const fetchImpl = vi.fn<ServerProbeFetch>().mockResolvedValue(
+      Response.json({
+        currentVersion: "0.41.0",
+        source: "npm",
+        desktop: null,
+      }),
+    );
+
+    await expect(
+      readBbServerVersionIdentity({
+        fetchImpl,
+        serverUrl: "https://studio.example",
+        timeoutMs: 1_000,
+      }),
+    ).resolves.toEqual({
+      applicationName: "bb",
+      channel: "latest",
+      version: "0.41.0",
+    });
   });
 });

@@ -5,13 +5,20 @@ import {
   existingServerDialogChooseRequestSchema,
 } from "./existing-server-dialog-ipc.js";
 import type { ForeignRuntimeDetails } from "./foreign-runtime.js";
+import type {
+  ServerReleaseChannel,
+  ServerVersionIdentity,
+} from "./server-probe.js";
 
 type ExistingServerDialogChoice = "connect" | "quit" | "replace";
 
 interface OpenExistingServerDialogArgs {
   details: ForeignRuntimeDetails | null;
+  launchingApplicationName: string;
+  launchingChannel: ServerReleaseChannel;
   parentWindow: BrowserWindow | null;
   preloadPath: string;
+  runningServer: ServerVersionIdentity | null;
   serverUrl: string;
 }
 
@@ -49,28 +56,40 @@ export function formatSurface(surface: string): string {
 function buildDetailRows(args: {
   details: ForeignRuntimeDetails | null;
   now: Date;
+  runningServer: ServerVersionIdentity | null;
   serverUrl: string;
 }): DetailRow[] {
-  const rows: DetailRow[] = [{ label: "Address", value: args.serverUrl }];
+  const rows: DetailRow[] = [];
+  if (args.runningServer !== null) {
+    rows.push(
+      { label: "Product", value: args.runningServer.applicationName },
+      { label: "Channel", value: args.runningServer.channel },
+      { label: "Version", value: args.runningServer.version },
+    );
+  }
+  rows.push({ label: "Address", value: args.serverUrl });
   if (args.details === null) {
     return rows;
   }
-  rows.push(
-    { label: "Data", value: args.details.dataDir },
-    { label: "Version", value: args.details.version },
-    {
-      label: "Started",
-      value: `${formatStartedAt(args.details.startedAt, args.now)} by ${formatSurface(
-        args.details.surface,
-      )} (pid ${String(args.details.pid)})`,
-    },
-  );
+  rows.push({ label: "Data", value: args.details.dataDir });
+  if (args.runningServer === null) {
+    rows.push({ label: "Version", value: args.details.version });
+  }
+  rows.push({
+    label: "Started",
+    value: `${formatStartedAt(args.details.startedAt, args.now)} by ${formatSurface(
+      args.details.surface,
+    )} (pid ${String(args.details.pid)})`,
+  });
   return rows;
 }
 
 interface RenderExistingServerDialogHtmlArgs {
   details: ForeignRuntimeDetails | null;
+  launchingApplicationName: string;
+  launchingChannel: ServerReleaseChannel;
   now: Date;
+  runningServer: ServerVersionIdentity | null;
   serverUrl: string;
 }
 
@@ -80,6 +99,7 @@ export function renderExistingServerDialogHtml(
   const rows = buildDetailRows({
     details: args.details,
     now: args.now,
+    runningServer: args.runningServer,
     serverUrl: args.serverUrl,
   });
   const detailHtml = rows
@@ -91,6 +111,9 @@ export function renderExistingServerDialogHtml(
     )
     .join("\n      ");
   const canReplace = args.details !== null;
+  const channelMismatch =
+    args.runningServer !== null &&
+    args.runningServer.channel !== args.launchingChannel;
   const replaceButtonHtml = canReplace
     ? `<button type="button" data-choice="replace">Quit other bb</button>`
     : "";
@@ -100,13 +123,23 @@ export function renderExistingServerDialogHtml(
   const introText = canReplace
     ? "This app can use the copy that is already running, or you can stop it and start a new one."
     : "This app can use the copy that is already running. bb cannot identify that copy, so it cannot stop it for you.";
+  const mismatchWarningHtml = channelMismatch && args.runningServer !== null
+    ? `<p class="warning warning--mismatch"><strong>Different channels.</strong> ${escapeHtmlText(
+        args.launchingApplicationName,
+      )} is trying to connect to ${escapeHtmlText(
+        args.runningServer.applicationName,
+      )}. Quit ${escapeHtmlText(args.launchingApplicationName)} unless this is intentional.</p>`
+    : "";
+  const dialogTitle = `${args.runningServer?.applicationName ?? "bb"} is already running`;
+  const quitDefault = channelMismatch ? ' data-default="true"' : "";
+  const connectDefault = channelMismatch ? "" : ' data-default="true"';
 
   return `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-  <title>bb is already running</title>
+  <title>${escapeHtmlText(dialogTitle)}</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -160,6 +193,13 @@ export function renderExistingServerDialogHtml(
       margin: 12px 0 0;
     }
 
+    .warning--mismatch {
+      background: color-mix(in srgb, AccentColor 10%, Canvas);
+      border: 1px solid color-mix(in srgb, AccentColor 32%, transparent);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -177,7 +217,7 @@ export function renderExistingServerDialogHtml(
       padding: 5px 14px;
     }
 
-    button[data-choice="connect"] {
+    button[data-default="true"] {
       background: AccentColor;
       border-color: AccentColor;
       color: AccentColorText;
@@ -185,16 +225,17 @@ export function renderExistingServerDialogHtml(
   </style>
 </head>
 <body>
-  <h1>bb is already running on this Mac</h1>
+  <h1>${escapeHtmlText(dialogTitle)} on this Mac</h1>
   <p>${introText}</p>
   <div class="details">
       ${detailHtml}
   </div>
+  ${mismatchWarningHtml}
   ${replaceWarningHtml}
   <div class="actions">
-    <button type="button" data-choice="quit">Quit this bb</button>
+    <button type="button" data-choice="quit"${quitDefault}>Quit ${escapeHtmlText(args.launchingApplicationName)}</button>
     ${replaceButtonHtml}
-    <button type="button" data-choice="connect">Connect</button>
+    <button type="button" data-choice="connect"${connectDefault}>Connect</button>
   </div>
 </body>
 </html>`;
@@ -205,7 +246,7 @@ export function openExistingServerDialog(
 ): Promise<ExistingServerDialogChoice> {
   const dialogWindow = new BrowserWindow({
     fullscreenable: false,
-    height: args.details === null ? 182 : 280,
+    height: args.details === null ? 260 : 340,
     maximizable: false,
     minimizable: false,
     modal: args.parentWindow !== null,
@@ -266,7 +307,10 @@ export function openExistingServerDialog(
       `data:text/html;charset=utf-8,${encodeURIComponent(
         renderExistingServerDialogHtml({
           details: args.details,
+          launchingApplicationName: args.launchingApplicationName,
+          launchingChannel: args.launchingChannel,
           now: new Date(),
+          runningServer: args.runningServer,
           serverUrl: args.serverUrl,
         }),
       )}`,
