@@ -780,8 +780,12 @@ describe("BrowserTabContent persistent navigation", () => {
       onNativeFocus,
     });
 
+    act(() => harness.emitState(browserState()));
     await waitFor(() =>
-      expect(harness.focus).toHaveBeenCalledWith("browser:test"),
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:test",
+        visible: true,
+      }),
     );
     act(() => harness.emitNativeFocus("browser:other"));
     expect(onNativeFocus).not.toHaveBeenCalled();
@@ -902,10 +906,13 @@ describe("BrowserTabContent persistent navigation", () => {
       canShowNativeBrowserView: true,
     });
 
-    expect(harness.setVisible).toHaveBeenLastCalledWith({
-      tabId: "browser:test",
-      visible: true,
-    });
+    act(() => harness.emitState(browserState()));
+    await waitFor(() =>
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:test",
+        visible: true,
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Open inspector" }));
     await waitFor(() =>
       expect(harness.setVisible).toHaveBeenLastCalledWith({
@@ -914,10 +921,12 @@ describe("BrowserTabContent persistent navigation", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Close inspector" }));
-    expect(harness.setVisible).toHaveBeenLastCalledWith({
-      tabId: "browser:test",
-      visible: true,
-    });
+    await waitFor(() =>
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:test",
+        visible: true,
+      }),
+    );
   });
 
   it("contains a crashing Browser action without losing native controls", () => {
