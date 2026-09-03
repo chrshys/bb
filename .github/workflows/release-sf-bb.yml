@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           BASE_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
-          NEXT_PATCH="$(node --input-type=module -e 'import semver from "semver"; const parsed = semver.parse(process.argv[1]); if (parsed === null) process.exit(1); process.stdout.write(`${parsed.major}.${parsed.minor}.${parsed.patch + 1}`);' "$BASE_VERSION")"
+          NEXT_PATCH="$(node --input-type=module -e 'import { resolveVersionArgument } from "./scripts/lib/semver.mjs"; process.stdout.write(resolveVersionArgument({ argument: "--patch", currentVersion: process.argv[1], usage: "" }));' "$BASE_VERSION")"
           VERSION="${NEXT_PATCH}-sf.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
           node scripts/bump-version.mjs "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
