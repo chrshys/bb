@@ -66,7 +66,7 @@ const macConfigSchema = z
 const linuxConfigSchema = z
   .object({
     category: z.literal("Development"),
-    executableName: z.enum(["bb", "bb-nightly"]),
+    executableName: z.enum(["bb", "bb-nightly", "bb-custom"]),
     icon: z.string().min(1),
     target: z.tuple([
       z
@@ -111,7 +111,7 @@ const electronBuilderConfigSchema = z
     publish: z.tuple([
       z
         .object({
-          channel: z.enum(["latest", "nightly"]),
+          channel: z.enum(["latest", "nightly", "custom"]),
           provider: z.literal("generic"),
           url: z.string().min(1),
         })
@@ -571,6 +571,25 @@ describe("electron-builder signing config", () => {
     });
   });
 
+  it("creates an isolated custom app identity", async () => {
+    const { config } = await readResolvedConfig({
+      BB_DESKTOP_RELEASE_CHANNEL: "custom",
+    });
+    const customRelease = createDesktopReleaseInfo("custom");
+
+    expect(config.appId).toBe("dev.bb.desktop.custom");
+    expect(config.productName).toBe("bb Custom");
+    expect(config.artifactName).toBe("bb-custom-${version}-${arch}.${ext}");
+    expect(config.linux.icon).toBe("assets/icon.png");
+    expect(config.linux.executableName).toBe("bb-custom");
+    expect(config.mac.icon).toBe("assets/icon.icns");
+    expect(config.publish[0]).toEqual({
+      channel: "custom",
+      provider: "generic",
+      url: customRelease.updateReleaseBaseUrl,
+    });
+  });
+
   it("rejects unknown desktop release channels", async () => {
     const result = await runConfigScript({
       BB_DESKTOP_RELEASE_CHANNEL: "canary",
@@ -578,7 +597,7 @@ describe("electron-builder signing config", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain(
-      "BB_DESKTOP_RELEASE_CHANNEL must be latest or nightly",
+      "BB_DESKTOP_RELEASE_CHANNEL must be latest, nightly, or custom",
     );
   });
 
@@ -606,9 +625,7 @@ describe("electron-builder signing config", () => {
     });
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain(
-      "Ad-hoc macOS signing cannot be combined",
-    );
+    expect(result.stderr).toContain("Ad-hoc macOS signing cannot be combined");
   });
 
   it("keeps builds unsigned when keychain auto-discovery is explicitly disabled", async () => {

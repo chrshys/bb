@@ -1,4 +1,8 @@
 {
+  "browser": {
+    "category": "utilities",
+    "screenshots": []
+  },
   "ask-user-question": {
     "category": "thread-content",
     "screenshots": []

@@ -2141,11 +2141,14 @@ async function runDesktopApp(): Promise<void> {
 
   const desktopUpdateSupport = resolveDesktopUpdateSupport({
     canReplaceAppImage,
+    channel: DESKTOP_RELEASE_CHANNEL,
     env: process.env,
     platform: desktopPlatform,
   });
+  const desktopVersionFeedChannel =
+    DESKTOP_RELEASE_CHANNEL === "custom" ? "latest" : DESKTOP_RELEASE_CHANNEL;
   desktopUpdateService = createDesktopUpdateService({
-    channel: DESKTOP_RELEASE_CHANNEL,
+    channel: desktopVersionFeedChannel,
     currentVersion: desktopVersion,
     enabled:
       desktopUpdateSupport.versionCheck &&
@@ -2211,6 +2214,8 @@ async function runDesktopApp(): Promise<void> {
   }
   if (desktopUpdateSupport.autoUpdate) {
     desktopAutoUpdateService.start();
+  } else if (DESKTOP_RELEASE_CHANNEL === "custom") {
+    logger.info("Desktop updates are disabled for this custom build.");
   } else {
     logger.info(
       "Desktop auto-install is disabled: only the Linux AppImage build can replace itself. Version checks still report new releases.",
