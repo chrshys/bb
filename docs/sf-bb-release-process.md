@@ -37,6 +37,11 @@ The workflow verifies the published identity and archive before succeeding.
 Ad-hoc apps and `scripts/sf-bb` poll `desktop-version.json`; only a signed build
 with Electron self-update enabled consumes `custom-mac.yml`.
 
+Linux source validation and the Apple Silicon build run in parallel. A separate
+publish job has write access and starts only after both succeed. Validation
+typechecks the repository and tests the app, server, desktop, Plugin Guide, and
+Plugin SDK. Its logs remain attached to the Actions run for seven days.
+
 ## Verify a release
 
 Read the moving feed and identity without a GitHub token:

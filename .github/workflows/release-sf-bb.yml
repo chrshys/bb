@@ -17,18 +17,86 @@ env:
   NODE_VERSION: "22.x"
   PNPM_VERSION: "9.15.0"
 
-permissions:
-  contents: write
-
 concurrency:
   group: release-sf-bb
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish Apple Silicon release
+  validate:
+    name: Validate release source on Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile --prefer-offline; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "::warning::pnpm install failed on attempt $attempt; retrying"
+            sleep $((attempt * 5))
+          done
+
+      - name: Typecheck and test release source
+        run: |
+          set +e
+          pnpm exec turbo run typecheck --output-logs=new-only > "$RUNNER_TEMP/typecheck.txt" 2>&1
+          TYPECHECK_EXIT=$?
+          pnpm exec turbo run test --filter=@bb/app --filter=@bb/server --filter=@bb/plugin-api-map --filter=@get-bb/plugin-sdk --filter=@bb/desktop --output-logs=new-only > "$RUNNER_TEMP/test.txt" 2>&1
+          TEST_EXIT=$?
+          set -e
+          if [[ "$TYPECHECK_EXIT" -ne 0 ]]; then
+            tail -200 "$RUNNER_TEMP/typecheck.txt"
+          fi
+          if [[ "$TEST_EXIT" -ne 0 ]]; then
+            tail -300 "$RUNNER_TEMP/test.txt"
+          fi
+          if [[ "$TYPECHECK_EXIT" -ne 0 || "$TEST_EXIT" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sf-bb-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/typecheck.txt
+            ${{ runner.temp }}/test.txt
+          if-no-files-found: error
+
+  build:
+    name: Build Apple Silicon release
     runs-on: macos-14
     timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      build_date: ${{ steps.identity.outputs.build_date }}
+      signed: ${{ steps.signing.outputs.signed }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Require sf-bb branch
@@ -67,11 +135,6 @@ jobs:
             sleep $((attempt * 5))
           done
 
-      - name: Validate desktop code
-        run: |
-          pnpm exec turbo run typecheck --filter=@bb/desktop --filter=bb-app --output-logs=new-only
-          pnpm exec turbo run test --filter=@bb/desktop --filter=bb-app --force --output-logs=new-only
-
       - name: Verify package version lockstep
         run: node .github/workflows/check-version-lockstep.mjs
 
@@ -102,9 +165,12 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Resolve build identity
+        id: identity
         run: |
-          echo "BB_DESKTOP_BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          BUILD_DATE="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          echo "BB_DESKTOP_BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
           echo "BB_DESKTOP_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
 
       - name: Validate signing configuration
         id: signing
@@ -189,12 +255,55 @@ jobs:
             apps/desktop/release/build-info.json
           if-no-files-found: error
 
-      - name: Publish releases
-        if: github.event_name == 'push' || inputs.publish == true
+      - name: Summarize build
         env:
-          GH_TOKEN: ${{ github.token }}
           SIGNED: ${{ steps.signing.outputs.signed }}
           VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "## sf-bb build"
+            echo
+            echo "- Version: ${VERSION}"
+            echo "- Apple Silicon macOS"
+            echo "- Signed and notarized: ${SIGNED}"
+            echo "- Artifact: sf-bb-${VERSION}-macos-arm64"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish verified sf-bb release
+    needs:
+      - build
+      - validate
+    if: github.event_name == 'push' || inputs.publish == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      BB_DESKTOP_BUILD_DATE: ${{ needs.build.outputs.build_date }}
+      SIGNED: ${{ needs.build.outputs.signed }}
+      VERSION: ${{ needs.build.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+
+      - name: Download release artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: sf-bb-${{ needs.build.outputs.version }}-macos-arm64
+          path: apps/desktop/release
+
+      - name: Publish releases
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           cd apps/desktop/release
@@ -278,9 +387,6 @@ jobs:
           fi
 
       - name: Verify published release
-        if: github.event_name == 'push' || inputs.publish == true
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           FEED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/desktop-version.json"
@@ -295,9 +401,6 @@ jobs:
           curl -fsIL --retry 5 --retry-all-errors "https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/${ZIP_PATH}"
 
       - name: Summarize
-        env:
-          SIGNED: ${{ steps.signing.outputs.signed }}
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           {
             echo "## sf-bb release"
