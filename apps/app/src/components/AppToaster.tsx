@@ -21,7 +21,7 @@ type ToastSwipeDirection = NonNullable<ToasterProps["swipeDirections"]>[number];
 
 interface ToastSwipeStart {
   pointerId: number;
-  toast: ToastT;
+  toastId: ToastT["id"];
   toastElement: HTMLElement;
   x: number;
   y: number;
@@ -38,36 +38,77 @@ function isActiveToast(entry: ToastT | ToastToDismiss): entry is ToastT {
   return !("dismiss" in entry);
 }
 
-function activeToastForElement(
-  toastElement: HTMLElement,
+function toastPositionForElement(toastElement: HTMLElement): string {
+  return `${toastElement.dataset.yPosition}-${toastElement.dataset.xPosition}`;
+}
+
+function activeToastById(id: ToastT["id"]): ToastT | null {
+  return (
+    toast
+      .getToasts()
+      .find(
+        (entry): entry is ToastT => isActiveToast(entry) && entry.id === id,
+      ) ?? null
+  );
+}
+
+function associateToastElements(
+  toasterElement: HTMLElement,
   defaultPosition: ToastPosition,
-): ToastT | null {
-  const index = Number(toastElement.dataset.index);
-  if (!Number.isInteger(index) || index < 0) {
-    return null;
-  }
-  const elementPosition = `${toastElement.dataset.yPosition}-${toastElement.dataset.xPosition}`;
+  toastIdsByElement: WeakMap<HTMLElement, ToastT["id"]>,
+): void {
+  const activeToastsByPosition = new Map<string, ToastT[]>();
   const activeToasts = toast.getToasts();
-  let positionIndex = 0;
   for (
     let storeIndex = activeToasts.length - 1;
     storeIndex >= 0;
     storeIndex--
   ) {
     const candidate = activeToasts[storeIndex];
+    if (candidate === undefined || !isActiveToast(candidate)) {
+      continue;
+    }
+    const candidatePosition = candidate.position ?? defaultPosition;
+    const positionToasts = activeToastsByPosition.get(candidatePosition) ?? [];
+    positionToasts.push(candidate);
+    activeToastsByPosition.set(candidatePosition, positionToasts);
+  }
+
+  const activeElementsByPosition = new Map<string, HTMLElement[]>();
+  const toastElements = toasterElement.querySelectorAll<HTMLElement>(
+    "[data-sonner-toast]",
+  );
+  for (const toastElement of toastElements) {
+    if (toastElement.dataset.removed === "true") {
+      continue;
+    }
+    const elementPosition = toastPositionForElement(toastElement);
+    const positionElements =
+      activeElementsByPosition.get(elementPosition) ?? [];
+    positionElements.push(toastElement);
+    activeElementsByPosition.set(elementPosition, positionElements);
+  }
+
+  for (const [elementPosition, positionElements] of activeElementsByPosition) {
+    const positionToasts = activeToastsByPosition.get(elementPosition);
     if (
-      candidate === undefined ||
-      !isActiveToast(candidate) ||
-      (candidate.position ?? defaultPosition) !== elementPosition
+      positionToasts === undefined ||
+      positionElements.length > positionToasts.length
     ) {
       continue;
     }
-    if (positionIndex === index) {
-      return candidate;
+    for (let index = 0; index < positionElements.length; index++) {
+      const toastElement = positionElements[index];
+      const activeToast = positionToasts[index];
+      if (
+        toastElement !== undefined &&
+        activeToast !== undefined &&
+        !toastIdsByElement.has(toastElement)
+      ) {
+        toastIdsByElement.set(toastElement, activeToast.id);
+      }
     }
-    positionIndex += 1;
   }
-  return null;
 }
 
 function swipeDirection(
@@ -97,6 +138,7 @@ function useCompactToastSwipeFallback({
       return;
     }
     const allowedDirections = new Set(swipeDirections);
+    const toastIdsByElement = new WeakMap<HTMLElement, ToastT["id"]>();
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -116,13 +158,14 @@ function useCompactToastSwipeFallback({
       ) {
         return;
       }
-      const activeToast = activeToastForElement(toastElement, position);
-      if (activeToast === null) {
+      associateToastElements(toasterElement, position, toastIdsByElement);
+      const toastId = toastIdsByElement.get(toastElement);
+      if (toastId === undefined || activeToastById(toastId) === null) {
         return;
       }
       swipeStartRef.current = {
         pointerId: event.pointerId,
-        toast: activeToast,
+        toastId,
         toastElement,
         x: event.clientX,
         y: event.clientY,
@@ -160,8 +203,12 @@ function useCompactToastSwipeFallback({
         ) {
           return;
         }
-        start.toast.onDismiss?.(start.toast);
-        toast.dismiss(start.toast.id);
+        const activeToast = activeToastById(start.toastId);
+        if (activeToast === null) {
+          return;
+        }
+        activeToast.onDismiss?.(activeToast);
+        toast.dismiss(activeToast.id);
       });
     };
 

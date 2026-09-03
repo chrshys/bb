@@ -7,7 +7,7 @@ import {
   render,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { AppToaster } from "./AppToaster";
@@ -34,6 +34,31 @@ async function renderToaster(isCompactViewport: boolean) {
     );
     expect(toaster).not.toBeNull();
     return toaster;
+  });
+}
+
+function flickToast(toastElement: HTMLElement, pointerId: number): void {
+  Object.defineProperty(toastElement, "setPointerCapture", {
+    configurable: true,
+    value: () => undefined,
+  });
+  fireEvent.pointerDown(toastElement, {
+    clientX: 120,
+    clientY: 100,
+    pointerId,
+    pointerType: "touch",
+  });
+  fireEvent.pointerMove(toastElement, {
+    clientX: 200,
+    clientY: 100,
+    pointerId,
+    pointerType: "touch",
+  });
+  fireEvent.pointerUp(toastElement, {
+    clientX: 200,
+    clientY: 100,
+    pointerId,
+    pointerType: "touch",
   });
 }
 
@@ -109,4 +134,58 @@ describe("AppToaster", () => {
       }
     },
   );
+
+  it("dismisses rapid stacked flicks by stable toast identity", async () => {
+    const onDismissA = vi.fn();
+    const onDismissB = vi.fn();
+    const onDismissC = vi.fn();
+    render(
+      <CompactViewportOverrideProvider isCompactViewport>
+        <AppToaster position="bottom-right" />
+      </CompactViewportOverrideProvider>,
+    );
+    act(() => {
+      toast("Stack A", {
+        duration: Number.POSITIVE_INFINITY,
+        id: "stack-a",
+        onDismiss: onDismissA,
+      });
+      toast("Stack B", {
+        duration: Number.POSITIVE_INFINITY,
+        id: "stack-b",
+        onDismiss: onDismissB,
+      });
+      toast("Stack C", {
+        duration: Number.POSITIVE_INFINITY,
+        id: "stack-c",
+        onDismiss: onDismissC,
+      });
+    });
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-sonner-toast]")).toHaveLength(3);
+    });
+    const toastElements = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-sonner-toast]"),
+    );
+    const toastB = toastElements.find(
+      (toastElement) => toastElement.textContent === "Stack B",
+    );
+    const toastC = toastElements.find(
+      (toastElement) => toastElement.textContent === "Stack C",
+    );
+    expect(toastB).toBeDefined();
+    expect(toastC).toBeDefined();
+    if (toastB === undefined || toastC === undefined) {
+      return;
+    }
+
+    flickToast(toastC, 1);
+    await act(async () => Promise.resolve());
+    flickToast(toastB, 2);
+    await act(async () => Promise.resolve());
+
+    expect(onDismissC).toHaveBeenCalledOnce();
+    expect(onDismissB).toHaveBeenCalledOnce();
+    expect(onDismissA).not.toHaveBeenCalled();
+  });
 });
