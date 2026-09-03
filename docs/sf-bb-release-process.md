@@ -216,10 +216,12 @@ has been pushed, so the sync job runs the same Linux typecheck and test commands
 as `release-sf-bb.yml` in place. Validation logs are retained as an artifact for
 seven days.
 
-A real sync requires a fine-grained GitHub PAT named `SYNC_TOKEN`, restricted to
-the `chrshys/bb` repository with Contents read/write. Record its expiry here
-when it is configured: **not configured**. The PAT push is required because a
-push made by the workflow's default token would not start `release-sf-bb.yml`.
+Every sync requires a fine-grained GitHub PAT named `SYNC_TOKEN`, restricted to
+the `chrshys/bb` repository with Contents read/write and Workflows write. The
+current token expires on **2026-12-02**. Workflows write lets the workflow mirror
+upstream changes under `.github/workflows/`; no other repository permission is
+required. A real sync also uses the PAT for its `sf-bb` push because a push made
+by the workflow's default token would not start `release-sf-bb.yml`.
 
 ```bash
 gh workflow run sync-upstream.yml --ref sf-bb -f dry_run=false
