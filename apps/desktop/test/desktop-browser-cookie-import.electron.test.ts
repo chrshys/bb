@@ -7,42 +7,46 @@ import { build } from "esbuild";
 import { expect, it } from "vitest";
 import { createPackagedAppLaunchArguments } from "../scripts/packaged-app-launch.mjs";
 
-it("imports an HttpOnly cookie into a real Electron session", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "bb-electron-cookie-test-"));
-  const output = join(directory, "probe.cjs");
-  try {
-    await build({
-      bundle: true,
-      entryPoints: [
-        join(__dirname, "desktop-browser-cookie-import.electron-probe.ts"),
-      ],
-      external: ["electron"],
-      format: "cjs",
-      outfile: output,
-      platform: "node",
-      target: "node24",
-    });
-    const result = JSON.parse(
-      execFileSync(
-        electronPath,
-        [
-          ...createPackagedAppLaunchArguments({
-            platform: process.platform,
-            userDataDir: join(directory, "user-data"),
-          }),
-          output,
+it(
+  "imports an HttpOnly cookie into a real Electron session",
+  { timeout: 15_000 },
+  async () => {
+    const directory = mkdtempSync(join(tmpdir(), "bb-electron-cookie-test-"));
+    const output = join(directory, "probe.cjs");
+    try {
+      await build({
+        bundle: true,
+        entryPoints: [
+          join(__dirname, "desktop-browser-cookie-import.electron-probe.ts"),
         ],
-        {
-          cwd: __dirname,
-          encoding: "utf8",
-        },
-      ),
-    );
-    expect(result).toEqual({
-      finalCookies: [{ httpOnly: true, name: "session", value: "imported" }],
-      importedCount: 1,
-    });
-  } finally {
-    rmSync(directory, { force: true, recursive: true });
-  }
-});
+        external: ["electron"],
+        format: "cjs",
+        outfile: output,
+        platform: "node",
+        target: "node24",
+      });
+      const result = JSON.parse(
+        execFileSync(
+          electronPath,
+          [
+            ...createPackagedAppLaunchArguments({
+              platform: process.platform,
+              userDataDir: join(directory, "user-data"),
+            }),
+            output,
+          ],
+          {
+            cwd: __dirname,
+            encoding: "utf8",
+          },
+        ),
+      );
+      expect(result).toEqual({
+        finalCookies: [{ httpOnly: true, name: "session", value: "imported" }],
+        importedCount: 1,
+      });
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  },
+);

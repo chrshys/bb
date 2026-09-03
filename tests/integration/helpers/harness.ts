@@ -218,6 +218,7 @@ async function startIntegrationServer(
     builtinSkillsRootPath,
     customModels: [],
     dataDir: serverDataDir,
+    desktop: null,
     featureFlags: defaultFeatureFlags,
     hostDaemonPort: 3001,
     inferenceFallbackModel: "test/mock-fallback-model",
