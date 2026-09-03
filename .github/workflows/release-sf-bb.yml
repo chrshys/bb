@@ -230,7 +230,7 @@ jobs:
               --target "$GITHUB_SHA" \
               --title "sf-bb latest" \
               --notes "$RELEASE_NOTES" \
-              --latest=false
+              --latest
             gh release upload "$MOVING_TAG" "${FEED_ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
             while IFS= read -r asset_name; do
               KEEP_ASSET=false
@@ -252,7 +252,7 @@ jobs:
               --target "$GITHUB_SHA" \
               --title "sf-bb latest" \
               --notes "$RELEASE_NOTES" \
-              --latest=false
+              --latest
           fi
 
       - name: Verify published release
