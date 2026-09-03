@@ -12,6 +12,10 @@ import {
 import { action } from "../action.js";
 import { createCliBbSdk } from "../client.js";
 import { outputJson } from "./helpers.js";
+import {
+  versionApplicationName,
+  versionDisplay,
+} from "./version-presentation.js";
 import { resolveMachineHostId, resolveMachineTargetOption } from "./machine.js";
 
 interface JsonOptions {
@@ -302,7 +306,7 @@ export function registerSettingsCommands(
 
   settings
     .command("version")
-    .description("Check the running and latest BB versions")
+    .description("Check the running and latest application versions")
     .option("--force", "Bypass the latest-version cache")
     .option("--json", "Print machine-readable JSON output")
     .action(
@@ -311,7 +315,17 @@ export function registerSettingsCommands(
           force: opts.force,
         });
         if (outputJson(opts, result)) return;
-        console.log(JSON.stringify(result, null, 2));
+        console.log(
+          `${versionApplicationName(result)} ${versionDisplay(result)}`,
+        );
+        console.log(`Source: ${result.source}`);
+        if (result.isDevelopment) {
+          console.log("Development mode");
+        } else if (result.updateAvailable) {
+          console.log(`Update available. Run: ${result.upgradeCommand}`);
+        } else {
+          console.log("Up to date");
+        }
       }),
     );
 

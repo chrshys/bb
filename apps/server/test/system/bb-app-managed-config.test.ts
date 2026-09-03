@@ -65,6 +65,7 @@ function createRuntimeConfig(): ServerRuntimeConfig {
     builtinSkillsRootPath: "/tmp/bb-test/builtin-skills",
     customModels: [],
     dataDir: "/tmp/bb-test",
+    desktop: null,
     marketplaceUrl: "https://marketplace.invalid/marketplace.json",
     featureFlags: defaultFeatureFlags,
     hostDaemonPort: 38887,

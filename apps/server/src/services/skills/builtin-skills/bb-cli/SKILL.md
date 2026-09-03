@@ -97,7 +97,12 @@ bb thread show "$BB_THREAD_ID" --json
 bb environment status "$BB_ENVIRONMENT_ID" --json
 bb plugin list --json
 bb skill list --environment "$BB_ENVIRONMENT_ID" --json
+bb updates status --json
 ```
+
+`bb updates status` names the running desktop product and reports its update
+source. Custom sf-bb builds use the sf-bb release feed and print
+`pnpm sf-bb:update`; they never recommend the npm bb-app package.
 
 ## Completion
 

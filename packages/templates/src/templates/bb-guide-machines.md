@@ -57,7 +57,8 @@ Updates commands
 One consolidated view of bb and provider CLI updates across machines — the
 CLI counterpart of Settings → Updates and the sidebar Updates badge.
 
-  bb updates [status]                     Show bb-app and provider CLI update
+  bb updates [status]                     Show application and provider CLI
+                                          update
                                           status for every machine
     --machine <id-or-name>                Limit to one machine
     --json                                Print the aggregate as JSON
@@ -66,9 +67,10 @@ CLI counterpart of Settings → Updates and the sidebar Updates badge.
     --machine <id-or-name>                Limit to one machine
     --json                                Print per-target results as JSON
 
-`bb updates apply` covers provider CLIs only. Update bb-app itself with the
-printed upgrade command (`npx bb-app@latest`) or the desktop app's relaunch;
-connected daemons then follow the server version automatically.
+`bb updates apply` covers provider CLIs only. Update the application with the
+printed command. Stock bb uses `npx bb-app@latest`; custom sf-bb uses
+`pnpm sf-bb:update`. The desktop app may also offer a relaunch. Connected
+daemons then follow the server version automatically.
 
 Machine selectors accept either an exact machine ID or an unambiguous machine
 name. `--host` is an alias for `--machine`.

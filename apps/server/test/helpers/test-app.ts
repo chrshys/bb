@@ -194,6 +194,7 @@ export async function createTestAppHarness(
     builtinSkillsRootPath: join(dataDir, "builtin-skills"),
     customModels: [],
     dataDir,
+    desktop: null,
     featureFlags: defaultFeatureFlags,
     hostDaemonPort: 3001,
     marketplaceUrl: "https://marketplace.invalid/marketplace.json",

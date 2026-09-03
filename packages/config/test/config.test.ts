@@ -303,6 +303,7 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_APP_URL).toBe("");
     expect(serverConfig.BB_APP_SURFACE).toBe("web");
     expect(serverConfig.BB_APP_VERSION).toBe("0.0.0-dev");
+    expect(serverConfig.desktop).toBeNull();
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
     expect(serverConfig.BB_INFERENCE).toBe("codex/gpt-5.6-luna");
     expect(serverConfig.BB_INFERENCE_FALLBACK).toBe("codex/gpt-5.4-mini");
@@ -417,6 +418,37 @@ describe("consumer-specific config", () => {
     });
 
     expect(serverConfig.BB_APP_VERSION).toBe("0.1.2");
+  });
+
+  it("parses desktop runtime identity as one configuration", () => {
+    const serverConfig = loadServerConfig({
+      env: createServerRuntimeEnv({
+        BB_DESKTOP_COMMIT: "abc123",
+        BB_DESKTOP_FEED_URL:
+          "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+        BB_DESKTOP_RELEASE_CHANNEL: "custom",
+        BB_DESKTOP_VERSION: "0.41.1-sf.1.1",
+      }),
+    });
+
+    expect(serverConfig.desktop).toEqual({
+      channel: "custom",
+      commit: "abc123",
+      feedUrl: "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+      version: "0.41.1-sf.1.1",
+    });
+  });
+
+  it("rejects a partial desktop runtime identity", () => {
+    expect(() =>
+      loadServerConfig({
+        env: createServerRuntimeEnv({
+          BB_DESKTOP_RELEASE_CHANNEL: "custom",
+        }),
+      }),
+    ).toThrow(
+      "BB_DESKTOP_RELEASE_CHANNEL, BB_DESKTOP_VERSION, and BB_DESKTOP_FEED_URL must be set together",
+    );
   });
 
   it("parses the internal app surface marker for server telemetry", () => {

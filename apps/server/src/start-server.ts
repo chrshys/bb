@@ -75,6 +75,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     marketplaceUrl: serverConfig.BB_MARKETPLACE_URL,
     customModels: [],
     dataDir: serverConfig.BB_DATA_DIR,
+    desktop: serverConfig.desktop,
     featureFlags: serverConfig.featureFlags,
     hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
     inheritedSkillsRootPaths: serverConfig.BB_INHERITED_SKILLS_ROOTS,

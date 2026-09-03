@@ -10,6 +10,10 @@ import { createCliBbSdk } from "../client.js";
 import { renderBorderlessTable } from "../table.js";
 import { outputJson } from "./helpers.js";
 import { resolveMachineId } from "./machine.js";
+import {
+  versionApplicationName,
+  versionDisplay,
+} from "./version-presentation.js";
 
 type ProviderCliKey = string;
 type ProviderCliStatus = HostProviderCliStatusResponse[string];
@@ -186,18 +190,18 @@ export function registerUpdatesCommands(
           return;
         }
 
-        const appState = version.isDevelopment
+        const appStateLabel = version.isDevelopment
           ? "development mode"
           : version.updateAvailable
             ? `${UPDATE_STATE_PRESENTATION["update-available"].label} (run: ${version.upgradeCommand})`
             : UPDATE_STATE_PRESENTATION["up-to-date"].label;
-        const appVersionLabel =
-          version.latestVersion !== null &&
-          version.latestVersion !== version.currentVersion
-            ? `${version.currentVersion} -> ${version.latestVersion}`
-            : version.currentVersion;
+        const appState = `${appStateLabel} (source: ${version.source})`;
         printUpdatesTable({
-          appRow: ["bb-app", appVersionLabel, appState],
+          appRow: [
+            versionApplicationName(version),
+            versionDisplay(version),
+            appState,
+          ],
           entries,
         });
       }),

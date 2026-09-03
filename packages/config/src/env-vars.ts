@@ -19,6 +19,7 @@ import { validateOptionalUrl, validateRequiredUrl } from "./public-url.js";
 import { BB_LOOPBACK_HOST, parsePortValue } from "./runtime.js";
 
 export type ServerBindHost = "127.0.0.1" | "0.0.0.0";
+export type DesktopReleaseChannel = "latest" | "nightly" | "custom";
 
 function parseBooleanEnvValue(args: EnvVarParseArgs): boolean {
   const normalizedValue = args.value.trim().toLowerCase();
@@ -48,6 +49,16 @@ function parseAppSurfaceEnvValue(args: EnvVarParseArgs): AppSurface {
     return parsed;
   }
   throw new Error(`${args.name} must be one of ${formatAppSurfaceValues()}`);
+}
+
+function parseDesktopReleaseChannelEnvValue(
+  args: EnvVarParseArgs,
+): DesktopReleaseChannel {
+  const value = args.value.trim();
+  if (value === "latest" || value === "nightly" || value === "custom") {
+    return value;
+  }
+  throw new Error(`${args.name} must be latest, nightly, or custom`);
 }
 
 function parseOptionalPortEnvValue(args: EnvVarParseArgs): number | undefined {
@@ -188,6 +199,31 @@ export const BB_APP_VERSION_ENV = defineEnvVar<string>({
     "Version of the running bb-app package. The bb-app launcher sets this from packages/bb-app/package.json; defaults to a sentinel for dev/source runs.",
   name: "BB_APP_VERSION",
   parse: parseNonEmptyStringEnvValue,
+});
+
+export const BB_DESKTOP_RELEASE_CHANNEL_ENV =
+  defineEnvVar<DesktopReleaseChannel>({
+    description: "Desktop release channel passed to the embedded bb server",
+    name: "BB_DESKTOP_RELEASE_CHANNEL",
+    parse: parseDesktopReleaseChannelEnvValue,
+  });
+
+export const BB_DESKTOP_VERSION_ENV = defineEnvVar<string>({
+  description: "Desktop application version passed to the embedded bb server",
+  name: "BB_DESKTOP_VERSION",
+  parse: parseNonEmptyStringEnvValue,
+});
+
+export const BB_DESKTOP_COMMIT_ENV = defineEnvVar<string | undefined>({
+  description: "Desktop build commit passed to the embedded bb server",
+  name: "BB_DESKTOP_COMMIT",
+  parse: parseOptionalTrimmedStringEnvValue,
+});
+
+export const BB_DESKTOP_FEED_URL_ENV = defineEnvVar<string>({
+  description: "Desktop update feed base URL passed to the embedded bb server",
+  name: "BB_DESKTOP_FEED_URL",
+  parse: parseRequiredUrlEnvValue,
 });
 
 export const BB_SERVER_LAUNCH_ID_ENV = defineEnvVar<string>({

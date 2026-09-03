@@ -203,6 +203,7 @@ describe("system cache effects", () => {
     const versionKey = systemVersionQueryKey();
     queryClient.setQueryData(versionKey, {
       currentVersion: "0.0.5",
+      desktop: null,
       latestVersion: "0.0.6",
       source: "npm",
       updateAvailable: true,

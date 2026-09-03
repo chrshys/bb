@@ -168,6 +168,7 @@ export const EMPTY_TABS: ThreadTabsResponse = { revision: 0, tabs: [] };
 
 export const SYSTEM_VERSION: SystemVersionResponse = {
   currentVersion: "0.39.0",
+  desktop: null,
   latestVersion: "0.39.0",
   source: "npm",
   updateAvailable: false,

@@ -16,6 +16,10 @@ import {
   BB_APP_URL_ENV,
   BB_APP_SURFACE_ENV,
   BB_APP_VERSION_ENV,
+  BB_DESKTOP_COMMIT_ENV,
+  BB_DESKTOP_FEED_URL_ENV,
+  BB_DESKTOP_RELEASE_CHANNEL_ENV,
+  BB_DESKTOP_VERSION_ENV,
   BB_EXTERNAL_URL_ENV,
   BB_INHERITED_SKILLS_ROOTS_ENV,
   BB_INFERENCE_FALLBACK_ENV,
@@ -40,6 +44,7 @@ import {
   DEFAULT_OPENAI_API_KEY,
   OPENAI_API_KEY_ENV,
   parseServerBindHost,
+  type DesktopReleaseChannel,
   type ServerBindHost,
 } from "./env-vars.js";
 import { loadFeatureFlags } from "./feature-flags.js";
@@ -64,8 +69,16 @@ export interface ServerConfig
   BB_SERVER_LAUNCH_ID?: string;
   BB_TELEMETRY: boolean;
   BB_TRANSCRIPTION: string;
+  desktop: ServerDesktopConfig | null;
   OPENAI_API_KEY: string;
   featureFlags: FeatureFlags;
+}
+
+export interface ServerDesktopConfig {
+  channel: DesktopReleaseChannel;
+  commit: string | null;
+  feedUrl: string;
+  version: string;
 }
 
 type LoadServerConfigArgs = LoadCommonConfigArgs;
@@ -101,6 +114,49 @@ export function loadServerConfig(
     homeDir: loader.context.homeDir,
     mode: loader.mode,
   });
+  const desktopReleaseChannel = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_DESKTOP_RELEASE_CHANNEL_ENV,
+    env: loader.env,
+  });
+  const desktopVersion = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_DESKTOP_VERSION_ENV,
+    env: loader.env,
+  });
+  const desktopCommit = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_DESKTOP_COMMIT_ENV,
+    env: loader.env,
+  });
+  const desktopFeedUrl = readOptionalEnvVar({
+    context: loader.context,
+    definition: BB_DESKTOP_FEED_URL_ENV,
+    env: loader.env,
+  });
+  const hasDesktopConfig =
+    desktopReleaseChannel !== undefined ||
+    desktopVersion !== undefined ||
+    desktopCommit !== undefined ||
+    desktopFeedUrl !== undefined;
+  let desktop: ServerDesktopConfig | null = null;
+  if (hasDesktopConfig) {
+    if (
+      desktopReleaseChannel === undefined ||
+      desktopVersion === undefined ||
+      desktopFeedUrl === undefined
+    ) {
+      throw new Error(
+        "BB_DESKTOP_RELEASE_CHANNEL, BB_DESKTOP_VERSION, and BB_DESKTOP_FEED_URL must be set together",
+      );
+    }
+    desktop = {
+      channel: desktopReleaseChannel,
+      commit: desktopCommit ?? null,
+      feedUrl: desktopFeedUrl,
+      version: desktopVersion,
+    };
+  }
   const config: ServerConfig = {
     ...commonConfig,
     ...databaseConfig,
@@ -183,6 +239,7 @@ export function loadServerConfig(
       definition: BB_TRANSCRIPTION_ENV,
       env: loader.env,
     }),
+    desktop,
     OPENAI_API_KEY: readEnvVarWithDefault({
       context: loader.context,
       defaultValue: DEFAULT_OPENAI_API_KEY,

@@ -172,10 +172,19 @@ export type ThemeCatalogResponse = z.infer<typeof themeCatalogResponseSchema>;
 export const systemVersionResponseSchema = z.object({
   currentVersion: z.string(),
   latestVersion: z.string().nullable(),
-  source: z.literal("npm"),
+  source: z.enum(["npm", "sf-bb-feed"]),
   updateAvailable: z.boolean(),
   isDevelopment: z.boolean(),
   upgradeCommand: z.string(),
+  desktop: z
+    .object({
+      channel: z.enum(["latest", "nightly", "custom"]),
+      version: z.string(),
+      commit: z.string().nullable(),
+      feedUrl: z.string().url().nullable(),
+      releaseUrl: z.string().url().nullable(),
+    })
+    .nullable(),
 });
 export type SystemVersionResponse = z.infer<typeof systemVersionResponseSchema>;
 

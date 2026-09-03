@@ -1,4 +1,5 @@
 import type { CustomProviderModel } from "@bb/config/bb-app-managed-config";
+import type { ServerConfig } from "@bb/config/server";
 import type { DbConnection } from "@bb/db";
 import type { FeatureFlags, ProviderNativeSkillRoots } from "@bb/domain";
 import type { Logger } from "@bb/logger";
@@ -26,6 +27,7 @@ export interface ServerRuntimeConfig {
   builtinSkillsRootPath: string;
   customModels: CustomProviderModel[];
   dataDir: string;
+  desktop: ServerConfig["desktop"];
   featureFlags: FeatureFlags;
   hostDaemonPort: number;
   inheritedSkillsRootPaths: string[];

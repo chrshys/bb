@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { defaultAppSettings, defaultExperiments } from "@bb/domain";
 import {
+  collectLogPayloads,
   runCommand,
   setupCommandOutputTestEnvironment,
   stubServerApi,
@@ -158,5 +159,35 @@ describe("bb settings commands", () => {
     expect(getUsage).toHaveBeenCalledWith({
       query: { hostId: "host-remote" },
     });
+  });
+
+  it("reports the custom desktop version and update source", async () => {
+    stubServerApi({
+      "v1.system.version.$get": vi.fn(async () => ({
+        currentVersion: "0.41.1-sf.1.1",
+        desktop: {
+          channel: "custom" as const,
+          commit: "abc123",
+          feedUrl:
+            "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+          releaseUrl:
+            "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb",
+          version: "0.41.1-sf.1.1",
+        },
+        isDevelopment: false,
+        latestVersion: "0.41.1-sf.2.1",
+        source: "sf-bb-feed" as const,
+        updateAvailable: true,
+        upgradeCommand: "pnpm sf-bb:update",
+      })),
+    });
+
+    await runCommand(["settings", "version"], register);
+
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "sf-bb 0.41.1-sf.1.1 -> 0.41.1-sf.2.1",
+      "Source: sf-bb-feed",
+      "Update available. Run: pnpm sf-bb:update",
+    ]);
   });
 });

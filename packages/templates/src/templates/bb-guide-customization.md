@@ -115,6 +115,10 @@ branches bb creates after the change.
   bb settings version [--force]
   bb settings reload
 
+`bb settings version` names the running product, prints its update source, and
+uses that source's upgrade command. Custom sf-bb builds compare against the
+sf-bb desktop feed rather than npm.
+
 `bb settings ai-services` shows the helper-inference and voice-transcription
 settings (`BB_INFERENCE`, `BB_INFERENCE_FALLBACK`, `BB_TRANSCRIPTION`, set with
 `bb-app config`) and the plugin-registered AI services they may name as

@@ -96,12 +96,19 @@ set of startup-only server or launcher env entries is:
 
 - `BB_APP_SURFACE`, `BB_APP_URL`, `BB_DATA_DIR`, `BB_DEV_APP_PORT`, and
   `BB_EXTERNAL_URL`
+- `BB_DESKTOP_COMMIT`, `BB_DESKTOP_FEED_URL`, `BB_DESKTOP_RELEASE_CHANNEL`,
+  and `BB_DESKTOP_VERSION`
 - `BB_HOST_DAEMON_PORT`, `BB_INFERENCE`,
   `BB_INFERENCE_FALLBACK`, and `BB_INHERITED_SKILLS_ROOTS`
 - `BB_LOG_LEVEL`, `BB_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD`,
   `BB_MARKETPLACE_URL`, `BB_POSTHOG_API_KEY`, and `BB_TELEMETRY`
 - `BB_SERVER_BIND_HOST`, `BB_SERVER_PORT`, `BB_TRANSCRIPTION`, and all
   `BB_FF_*` feature flags
+
+The desktop app sets the four `BB_DESKTOP_*` values when it starts its embedded
+server. They identify the desktop build and select its update feed. They are
+internal handoff values, not user-facing configuration, and should not be set
+with `bb-app config` or `bb-app env`.
 
 Setting or unsetting one still runs the reload for any other pending changes,
 but the running processes keep their current values. Apply it with a full

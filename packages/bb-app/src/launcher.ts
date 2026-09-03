@@ -2582,6 +2582,10 @@ export function createServerEnv(args: CreateServerEnvArgs): NodeJS.ProcessEnv {
   return {
     ...args.env,
     BB_APP_VERSION: args.context.appVersion,
+    BB_DESKTOP_COMMIT: args.env.BB_DESKTOP_COMMIT,
+    BB_DESKTOP_FEED_URL: args.env.BB_DESKTOP_FEED_URL,
+    BB_DESKTOP_RELEASE_CHANNEL: args.env.BB_DESKTOP_RELEASE_CHANNEL,
+    BB_DESKTOP_VERSION: args.env.BB_DESKTOP_VERSION,
     [APP_SURFACE_ENV_NAME]: resolveServerAppSurface(args.env),
     BB_CLI: join(args.context.daemonBundleDir, "bb"),
     BB_CLI_DIR: args.context.daemonBundleDir,

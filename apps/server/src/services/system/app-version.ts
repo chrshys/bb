@@ -4,11 +4,14 @@ import type { SystemVersionResponse } from "@bb/server-contract";
 import type { ServerLogger, ServerRuntimeConfig } from "../../types.js";
 
 const NPM_LATEST_URL = "https://registry.npmjs.org/bb-app/latest";
-const NPM_LATEST_TIMEOUT_MS = 5_000;
-const NPM_LATEST_CACHE_TTL_MS = 60 * 60 * 1000;
-const UPGRADE_COMMAND = "npx bb-app@latest";
+const SF_BB_RELEASE_URL =
+  "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb";
+const LATEST_VERSION_TIMEOUT_MS = 5_000;
+const LATEST_VERSION_CACHE_TTL_MS = 60 * 60 * 1000;
+const NPM_UPGRADE_COMMAND = "npx bb-app@latest";
+const SF_BB_UPGRADE_COMMAND = "pnpm sf-bb:update";
 
-const npmLatestResponseSchema = z
+const latestVersionResponseSchema = z
   .object({
     version: z.string().min(1),
   })
@@ -25,54 +28,91 @@ interface AppVersionGetSystemVersionArgs {
 }
 
 interface CreateAppVersionServiceArgs {
-  config: Pick<ServerRuntimeConfig, "appVersion" | "isDevelopment">;
+  config: Pick<ServerRuntimeConfig, "appVersion" | "desktop" | "isDevelopment">;
   fetchImpl?: typeof fetch;
   logger: ServerLogger;
   cacheTtlMs?: number;
   now?: () => number;
 }
 
-interface NpmLatestCacheEntry {
+interface LatestVersionCacheEntry {
   cachedAt: number;
   latestVersion: string;
+}
+
+interface LatestVersionSource {
+  currentVersion: string;
+  source: SystemVersionResponse["source"];
+  upgradeCommand: string;
+  url: string;
+}
+
+function resolveDesktopVersionFeedUrl(feedUrl: string): string {
+  const baseUrl = new URL(feedUrl);
+  if (!baseUrl.pathname.endsWith("/")) {
+    baseUrl.pathname = `${baseUrl.pathname}/`;
+  }
+  baseUrl.hash = "";
+  baseUrl.search = "";
+  return new URL("desktop-version.json", baseUrl).toString();
+}
+
+function resolveLatestVersionSource(
+  config: CreateAppVersionServiceArgs["config"],
+): LatestVersionSource {
+  if (config.desktop?.channel === "custom") {
+    return {
+      currentVersion: config.desktop.version,
+      source: "sf-bb-feed",
+      upgradeCommand: SF_BB_UPGRADE_COMMAND,
+      url: resolveDesktopVersionFeedUrl(config.desktop.feedUrl),
+    };
+  }
+  return {
+    currentVersion: config.appVersion,
+    source: "npm",
+    upgradeCommand: NPM_UPGRADE_COMMAND,
+    url: NPM_LATEST_URL,
+  };
 }
 
 export function createAppVersionService(
   args: CreateAppVersionServiceArgs,
 ): AppVersionService {
   const fetchImpl = args.fetchImpl ?? fetch;
-  const cacheTtlMs = args.cacheTtlMs ?? NPM_LATEST_CACHE_TTL_MS;
+  const cacheTtlMs = args.cacheTtlMs ?? LATEST_VERSION_CACHE_TTL_MS;
   const now = args.now ?? (() => Date.now());
   const logger = args.logger;
   const config = args.config;
+  const latestVersionSource = resolveLatestVersionSource(config);
 
-  let cache: NpmLatestCacheEntry | null = null;
+  let cache: LatestVersionCacheEntry | null = null;
   let inflight: Promise<string | null> | null = null;
 
-  async function fetchNpmLatest(): Promise<string | null> {
+  async function fetchLatestVersion(): Promise<string | null> {
     const controller = new AbortController();
     const timeoutHandle = setTimeout(
       () => controller.abort(),
-      NPM_LATEST_TIMEOUT_MS,
+      LATEST_VERSION_TIMEOUT_MS,
     );
     try {
-      const response = await fetchImpl(NPM_LATEST_URL, {
+      const response = await fetchImpl(latestVersionSource.url, {
         headers: { accept: "application/json" },
         signal: controller.signal,
       });
       if (!response.ok) {
         logger.warn(
-          { status: response.status, url: NPM_LATEST_URL },
-          "Failed to fetch latest bb-app version from npm",
+          { status: response.status, url: latestVersionSource.url },
+          "Failed to fetch latest application version",
         );
         return null;
       }
       const json = await response.json();
-      const parsed = npmLatestResponseSchema.safeParse(json);
+      const parsed = latestVersionResponseSchema.safeParse(json);
       if (!parsed.success) {
         logger.warn(
-          { url: NPM_LATEST_URL, issue: parsed.error.message },
-          "npm latest response did not match expected shape",
+          { url: latestVersionSource.url, issue: parsed.error.message },
+          "Latest application version response did not match expected shape",
         );
         return null;
       }
@@ -80,8 +120,8 @@ export function createAppVersionService(
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.warn(
-        { url: NPM_LATEST_URL, error: message },
-        "npm latest lookup failed",
+        { url: latestVersionSource.url, error: message },
+        "Latest application version lookup failed",
       );
       return null;
     } finally {
@@ -104,7 +144,7 @@ export function createAppVersionService(
       return inflight;
     }
     const requestPromise = (async () => {
-      const result = await fetchNpmLatest();
+      const result = await fetchLatestVersion();
       if (result !== null) {
         cache = { cachedAt: now(), latestVersion: result };
       }
@@ -125,12 +165,22 @@ export function createAppVersionService(
       args: AppVersionGetSystemVersionArgs = {},
     ): Promise<SystemVersionResponse> {
       const baseResponse: SystemVersionResponse = {
-        currentVersion: config.appVersion,
+        currentVersion: latestVersionSource.currentVersion,
+        desktop:
+          config.desktop === null
+            ? null
+            : {
+                ...config.desktop,
+                releaseUrl:
+                  config.desktop.channel === "custom"
+                    ? SF_BB_RELEASE_URL
+                    : null,
+              },
         latestVersion: null,
-        source: "npm",
+        source: latestVersionSource.source,
         updateAvailable: false,
         isDevelopment: config.isDevelopment,
-        upgradeCommand: UPGRADE_COMMAND,
+        upgradeCommand: latestVersionSource.upgradeCommand,
       };
 
       if (config.isDevelopment) {
@@ -144,12 +194,12 @@ export function createAppVersionService(
         return baseResponse;
       }
 
-      const parsedCurrent = semver.parse(config.appVersion);
+      const parsedCurrent = semver.parse(latestVersionSource.currentVersion);
       const parsedLatest = semver.parse(latestVersion);
       if (parsedCurrent === null || parsedLatest === null) {
         logger.warn(
           {
-            currentVersion: config.appVersion,
+            currentVersion: latestVersionSource.currentVersion,
             latestVersion,
           },
           "Skipping update check because a version is not valid semver",

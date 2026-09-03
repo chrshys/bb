@@ -2234,4 +2234,26 @@ describe("bb-app launcher", () => {
     expect(webServerEnv.BB_APP_SURFACE).toBe("web");
     expect(invalidSurfaceServerEnv.BB_APP_SURFACE).toBe("web");
   });
+
+  it("keeps desktop release identity in the server environment", () => {
+    const context = createTestStartContext();
+    const serverEnv = createServerEnv({
+      context,
+      env: {
+        BB_DESKTOP_COMMIT: "abc123",
+        BB_DESKTOP_FEED_URL:
+          "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+        BB_DESKTOP_RELEASE_CHANNEL: "custom",
+        BB_DESKTOP_VERSION: "0.41.1-sf.1.1",
+      },
+    });
+
+    expect(serverEnv).toMatchObject({
+      BB_DESKTOP_COMMIT: "abc123",
+      BB_DESKTOP_FEED_URL:
+        "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+      BB_DESKTOP_RELEASE_CHANNEL: "custom",
+      BB_DESKTOP_VERSION: "0.41.1-sf.1.1",
+    });
+  });
 });

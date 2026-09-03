@@ -1689,6 +1689,10 @@ async function startOwnedRuntime(
     env: {
       ...process.env,
       [APP_SURFACE_ENV_NAME]: APP_SURFACE_DESKTOP,
+      BB_DESKTOP_COMMIT: process.env.BB_DESKTOP_COMMIT ?? "",
+      BB_DESKTOP_FEED_URL: DESKTOP_RELEASE_INFO.updateReleaseBaseUrl,
+      BB_DESKTOP_RELEASE_CHANNEL: DESKTOP_RELEASE_INFO.channel,
+      BB_DESKTOP_VERSION: app.getVersion(),
     },
     logLineLimit: PROCESS_LOG_LINE_LIMIT,
     runtime: resolveBbAppProcessRuntime({

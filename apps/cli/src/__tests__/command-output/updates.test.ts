@@ -37,6 +37,7 @@ const hosts: Host[] = [
 
 const version = {
   currentVersion: "0.0.32",
+  desktop: null,
   latestVersion: "0.0.33",
   source: "npm" as const,
   updateAvailable: true,
@@ -114,13 +115,43 @@ describe("bb updates command output", () => {
     const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
     expect(output).toContain("bb-app");
     expect(output).toContain("0.0.32 -> 0.0.33");
-    expect(output).toContain("Update available (run: npx bb-app@latest)");
+    expect(output).toContain(
+      "Update available (run: npx bb-app@latest) (source: npm)",
+    );
     expect(output).toContain("workstation · Codex");
     expect(output).toContain("0.140.0 -> 0.141.0");
     expect(output).toContain("workstation · Claude Code");
     expect(output).toContain("Up to date");
     expect(output).toContain("laptop");
     expect(output).toContain("offline");
+  });
+
+  it("bb updates uses the custom desktop product and feed", async () => {
+    stubServerApi({
+      "v1.system.version.$get": vi.fn(async () => ({
+        ...version,
+        desktop: {
+          channel: "custom" as const,
+          commit: "abc123",
+          feedUrl:
+            "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+          releaseUrl:
+            "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb",
+          version: "0.41.1-sf.1.1",
+        },
+        source: "sf-bb-feed" as const,
+        upgradeCommand: "pnpm sf-bb:update",
+      })),
+      "v1.hosts.$get": vi.fn(async () => []),
+    });
+
+    await runCommand(["updates"], register);
+
+    const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output).toContain("sf-bb");
+    expect(output).toContain("source: sf-bb-feed");
+    expect(output).toContain("run: pnpm sf-bb:update");
+    expect(output).not.toContain("npx bb-app@latest");
   });
 
   it("bb updates --json prints the aggregate", async () => {
