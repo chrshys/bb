@@ -39,8 +39,11 @@ with Electron self-update enabled consumes `custom-mac.yml`.
 
 Linux source validation and the Apple Silicon build run in parallel. A separate
 publish job has write access and starts only after both succeed. Validation
-typechecks the repository and tests the app, server, desktop, Plugin Guide, and
-Plugin SDK. Its logs remain attached to the Actions run for seven days.
+typechecks the repository and tests the server, desktop, and Plugin Guide. Its
+logs remain attached to the Actions run for seven days. The original
+five-package test set measured 11m43s on run 33803484909, so app and Plugin SDK
+tests were removed from this gate while their types remain covered repo-wide.
+The resulting gate measured 8m27s on run 33804689537.
 
 ## Verify a release
 
@@ -192,6 +195,46 @@ signed release, launch it, and grant Keychain and TCC access once.
 upstream PR #2796, `gantis-storm/browser-automation`. Merge; never rebase the
 published `sf-bb` history because immutable release tags point into it.
 
+### Automated path
+
+`.github/workflows/sync-upstream.yml` is the primary sync path. A dry run still
+fast-forwards the remote `main` mirror, but it does not push the merged `sf-bb`
+commit:
+
+```bash
+gh workflow run sync-upstream.yml --ref sf-bb -f dry_run=true
+```
+
+The workflow merges the pinned pull request first and upstream `main` second.
+It regenerates the Plugin SDK inventory when that is the only conflict, and it
+regenerates `pnpm-lock.yaml` when that is the only conflict. Any source conflict
+aborts the merge, fails the run, and creates or updates a dated issue with the
+conflicted paths, both input SHAs, and the manual recovery commands below.
+
+The merged tree is not available to a separate reusable-workflow job until it
+has been pushed, so the sync job runs the same Linux typecheck and test commands
+as `release-sf-bb.yml` in place. Validation logs are retained as an artifact for
+seven days.
+
+A real sync requires a fine-grained GitHub PAT named `SYNC_TOKEN`, restricted to
+the `chrshys/bb` repository with Contents read/write. Record its expiry here
+when it is configured: **not configured**. The PAT push is required because a
+push made by the workflow's default token would not start `release-sf-bb.yml`.
+
+```bash
+gh workflow run sync-upstream.yml --ref sf-bb -f dry_run=false
+```
+
+The workflow remains dispatch-only until it has completed three hands-off
+runs. A schedule probe on 2026-09-03 received no events over multiple 15-minute
+intervals on the active default branch, so GitHub cron is not trusted for this
+fork.
+
+When upstream PR #2796 closes or merges, the workflow skips its pull ref and
+opens or updates an issue to remove the pinned merge before the next sync.
+
+### Manual fallback
+
 Add the missing upstream remote before the first fetch:
 
 ```bash
@@ -208,7 +251,9 @@ git fetch upstream main refs/pull/2796/head:refs/remotes/upstream/pr-2796
 git switch sf-bb
 git merge --no-edit upstream/pr-2796
 git merge --no-edit origin/main
+pnpm install --frozen-lockfile
 pnpm exec turbo run typecheck
+pnpm exec turbo run test --filter=@bb/server --filter=@bb/plugin-api-map --filter=@bb/desktop
 git push origin sf-bb
 ```
 
@@ -235,14 +280,6 @@ git commit --no-edit
 Stop for manual resolution when any source file conflicts. When PR #2796 is
 merged upstream, stop merging its pull-ref and remove that step from the sync
 workflow before the next sync.
-
-### Planned automation
-
-SFR-11 will add `sync-upstream.yml` with the same merge and validation path. It
-will remain dispatch-only until it has completed three hands-off runs. A
-schedule probe on 2026-09-03 received no events over multiple 15-minute
-intervals on the active default branch, so GitHub cron is not trusted for this
-fork.
 
 ## Fork workflow hygiene
 
