@@ -213,9 +213,10 @@ jobs:
           else
             RELEASE_NOTES="Ad-hoc signed sf-bb ${VERSION} for Apple Silicon Macs. On first launch, use System Settings > Privacy & Security > Open Anyway, or run xattr -dr com.apple.quarantine /Applications/sf-bb.app. Automatic installation is disabled until Developer ID signing is configured."
           fi
+          git tag "$VERSION_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/${VERSION_TAG}"
           gh release create "$VERSION_TAG" "${ASSETS[@]}" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
             --title "sf-bb ${VERSION}" \
             --notes "$RELEASE_NOTES" \
             --prerelease \
