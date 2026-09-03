@@ -804,6 +804,9 @@ export interface BbDesktopBrowserApi {
   setBounds(request: BbDesktopBrowserSetBoundsRequest): void;
   setVisible(request: BbDesktopBrowserSetVisibleRequest): void;
   setVisibleWithoutFocus?(request: BbDesktopBrowserSetVisibleRequest): void;
+  experimental_trustLocalhostCertificate?(
+    request: BbDesktopBrowserTabRef,
+  ): void;
   /** Optional capability marker for desktop/SPA version skew. */
   experimental_browserPageRuntimeVersion?: 1;
   experimental_browserFrameRuntimeVersion?: 1;

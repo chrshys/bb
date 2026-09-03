@@ -257,6 +257,23 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         firstParty: ["Docs"],
       },
       {
+        id: "app-overlay",
+        title: "App-wide overlays",
+        summary:
+          "Mounts floating plugin UI across the bb app, outside route-owned layout regions. With this, a plugin can:",
+        bullets: [
+          "Render a persistent widget once per bb window while the plugin is enabled",
+          "Use app-level SDK hooks and preserve their React context through portals",
+          "Own the widget's chrome, position, visibility, and responsive behavior",
+          "Coexist with other overlays while crashes remain isolated to the overlay that failed",
+        ],
+        apiSymbols: [
+          "ExperimentalAppOverlayRegistration",
+          "ExperimentalAppOverlayProps",
+        ],
+        experimental: true,
+      },
+      {
         id: "content-scripts",
         title: "App-wide scripts",
         summary:
@@ -464,7 +481,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         summary:
           "Declares the settings your plugin needs as plain data; bb renders the form for them on the plugin's settings page and stores the values. With this, a plugin can:",
         bullets: [
-          "Declare each field's type (text, toggle, choice, or project) with a label and an optional default",
+          "Declare each field's type (text, number, toggle, choice, or project) with a label and an optional default",
           "Get the form, its validation, and autosaving without writing any UI",
           "Validate each proposed value with a synchronous, non-transforming Standard Schema through `experimental_schema`; Zod schemas qualify",
           "Render multi-line text with `experimental_multiline`",

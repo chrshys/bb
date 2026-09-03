@@ -62,7 +62,11 @@ import {
   createAcpDeltaTranslator,
   type AcpDeltaTranslator,
 } from "../delta-translation.js";
-import { resolveAcpDialect, type AcpDialect } from "../dialect.js";
+import {
+  compactionOutcomeForEndTurn,
+  resolveAcpDialect,
+  type AcpDialect,
+} from "../dialect.js";
 import type { AcpMaintenanceDialect } from "./provider-maintenance.js";
 import {
   buildAcpPermissionInteractionPayload,
@@ -76,6 +80,7 @@ import {
   type AcpSessionParams,
   type AcpSkillRoot,
 } from "../session-params.js";
+import { buildCursorParameterizedModelCatalog } from "../cursor-model-selection.js";
 import {
   getAcpProviderHealth,
   getAcpProviderInstallationRun,
@@ -93,6 +98,8 @@ import {
   acpSessionForkResultSchema,
   acpSessionNewResultSchema,
   acpSessionNotificationParamsSchema,
+  acpAgentMessageChunkUpdateSchema,
+  extractAcpContentText,
   acpUsageUpdateSchema,
   type AcpSessionModels,
   type AcpUsageUpdate,
@@ -161,6 +168,7 @@ interface AcpThreadSession {
   policy: AcpSessionPolicy;
   pendingInstructions: string | undefined;
   activePromptKind: "turn" | "compaction" | null;
+  compactionAgentMessage: string;
   queuedInputs: AcpPendingTurnInput[];
   promptRequestPending: boolean;
   cancelRequested: boolean;
@@ -1093,6 +1101,56 @@ async function resolveAgentLaunchArgs(
   };
 }
 
+const ACP_MODEL_SELECTION_RETRY_DELAY_MS = 250;
+const ACP_MODEL_SELECTION_MAX_ATTEMPTS = 120;
+
+function isAcpUnknownModelError(error: unknown, modelId: string): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes(`Unknown ACP model: ${modelId}`)
+  );
+}
+function waitForAcpModelRegistration(): Promise<void> {
+  return new Promise<void>((resolveDelay) => {
+    setTimeout(resolveDelay, ACP_MODEL_SELECTION_RETRY_DELAY_MS);
+  });
+}
+
+async function setAcpNativeModel(args: {
+  connection: AcpAgentConnection;
+  sessionId: string;
+  modelId: string;
+  configId?: string;
+}): Promise<z.infer<typeof acpConfigStateResultSchema> | null> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return args.configId === undefined
+        ? await args.connection.request({
+            method: "session/set_model",
+            params: { sessionId: args.sessionId, modelId: args.modelId },
+            resultSchema: z.union([acpConfigStateResultSchema, z.null()]),
+          })
+        : await args.connection.request({
+            method: "session/set_config_option",
+            params: {
+              sessionId: args.sessionId,
+              configId: args.configId,
+              value: args.modelId,
+            },
+            resultSchema: z.union([acpConfigStateResultSchema, z.null()]),
+          });
+    } catch (error) {
+      if (
+        attempt === ACP_MODEL_SELECTION_MAX_ATTEMPTS ||
+        !isAcpUnknownModelError(error, args.modelId)
+      ) {
+        throw error;
+      }
+      await waitForAcpModelRegistration();
+    }
+  }
+}
+
 async function selectAcpNativeModel(args: {
   connection: AcpAgentConnection;
   sessionId: string;
@@ -1117,21 +1175,12 @@ async function selectAcpNativeModel(args: {
       sessionModelsIncludeSelection &&
       args.models?.currentModelId !== selection.modelId);
   if (shouldSetModel) {
-    const configState = modelOption
-      ? await args.connection.request({
-          method: "session/set_config_option",
-          params: {
-            sessionId: args.sessionId,
-            configId: modelOption.id,
-            value: selection.modelId,
-          },
-          resultSchema: z.union([acpConfigStateResultSchema, z.null()]),
-        })
-      : await args.connection.request({
-          method: "session/set_model",
-          params: { sessionId: args.sessionId, modelId: selection.modelId },
-          resultSchema: z.union([acpConfigStateResultSchema, z.null()]),
-        });
+    const configState = await setAcpNativeModel({
+      connection: args.connection,
+      sessionId: args.sessionId,
+      modelId: selection.modelId,
+      ...(modelOption === undefined ? {} : { configId: modelOption.id }),
+    });
     configOptions = configState?.configOptions ?? configOptions;
   }
   await selectAcpNativeReasoning({
@@ -1693,6 +1742,7 @@ async function startAgentSession(
     },
     pendingInstructions: params.instructions,
     activePromptKind: null,
+    compactionAgentMessage: "",
     queuedInputs: [],
     promptRequestPending: false,
     cancelRequested: false,
@@ -2082,6 +2132,7 @@ function startCompaction(
   pending: AcpPendingTurnInput,
 ): void {
   session.activePromptKind = "compaction";
+  session.compactionAgentMessage = "";
   emitForSession(session, ACP_COMPACTION_STARTED_METHOD, {
     threadId: session.bbThreadId,
   });
@@ -2104,7 +2155,10 @@ function startCompaction(
     .then((result) => {
       finish(
         result.stopReason === "end_turn"
-          ? { status: "completed" }
+          ? compactionOutcomeForEndTurn(
+              session.dialect,
+              session.compactionAgentMessage,
+            )
           : result.stopReason === "cancelled"
             ? { status: "interrupted" }
             : {
@@ -2218,6 +2272,15 @@ function handleAgentNotification(
   if (parsed.data.sessionId !== session.providerThreadId) {
     return;
   }
+  if (session.activePromptKind === "compaction") {
+    const chunk = acpAgentMessageChunkUpdateSchema.safeParse(
+      parsed.data.update,
+    );
+    if (chunk.success) {
+      session.compactionAgentMessage +=
+        extractAcpContentText(chunk.data.content) ?? "";
+    }
+  }
   emitForSession(session, ACP_UPDATE_METHOD, update);
 }
 
@@ -2271,15 +2334,20 @@ function decodeAcpBridgeJsonRpcRequest(raw: unknown): DecodedAcpBridgeRequest {
 async function handleModelList(
   id: string | number,
   params: AcpModelListParams,
+  dialectId: string | undefined,
 ): Promise<void> {
   const catalog = params.listCommand
     ? await loadAgentModelCatalog(params.listCommand)
     : null;
   if (catalog) {
+    const catalogModels =
+      params.parameterizedModelPicker && dialectId === "cursor"
+        ? buildCursorParameterizedModelCatalog(catalog.models)
+        : catalog.models;
     sendResult(
       id,
       splitPrimaryModels(
-        applyConfiguredReasoningToModels(catalog.models, {
+        applyConfiguredReasoningToModels(catalogModels, {
           reasoningCli: params.reasoningCli,
           nativeReasoning: params.nativeReasoning,
         }),
@@ -2419,6 +2487,7 @@ async function handleRequest(
           decodeLaunchSpec(request.params.providerOptions),
           modelPicker,
         ),
+        decodeDialectId(request.params.providerOptions),
       );
       return;
     }

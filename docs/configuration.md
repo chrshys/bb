@@ -573,10 +573,14 @@ machine. The current value is readable through the host API and
 
 Machine installation and daemon protocol repair use the owning server as the
 distribution source: `/install/version` reports the server package/protocol and
-`/install/bb-app.tgz` serves its exact installable package. The installer falls
-back to the npm registry only when the package route returns 404. It installs
-the package under the machine's bb data directory rather than npm's system-wide
-prefix, so enrollment needs neither `sudo` nor a global npm configuration.
+`/install/bb-app.tgz` serves its exact host-only package with a SHA-256 digest
+and strong ETag. That package contains the daemon, its workers and native
+dependencies, and the bundled `bb` CLI; it omits the server and web app. The
+installer verifies the digest and skips the download and npm install when its
+recorded installed digest receives `304 Not Modified`. It falls back to the npm
+registry only when the package route returns 404. It installs the package under
+the machine's bb data directory rather than npm's system-wide prefix, so
+enrollment needs neither `sudo` nor a global npm configuration.
 Installed services enable `--auto-update`; remove that flag from the launchd
 plist or systemd user unit and reload the service to opt out. Updates only move
 to a newer server protocol, retry failures with a persisted exponential backoff
@@ -861,8 +865,8 @@ nothing, because waiting does not fix them.
 
 The builtin Workflows plugin is disabled on fresh installations. Enable it
 under Extensions → Plugins or with `bb plugin enable workflows`. Its six
-settings accept base-10 integer strings through Extensions → Plugins or
-`bb plugin config workflows set <key> <value>`:
+settings are bounded integers, edited with numeric inputs under Extensions →
+Plugins or with `bb plugin config workflows set <key> <value>`:
 
 | Key                    |    Default |       Allowed range | Behavior                                               |
 | ---------------------- | ---------: | ------------------: | ------------------------------------------------------ |

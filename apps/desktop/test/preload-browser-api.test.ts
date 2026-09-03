@@ -27,6 +27,7 @@ import {
   BB_DESKTOP_BROWSER_EXPERIMENTAL_IMPORT_COOKIES_FROM_BROWSER_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_CLEAR_IMPORTED_COOKIES_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_LIST_COOKIE_IMPORT_SOURCES_CHANNEL,
+  BB_DESKTOP_BROWSER_EXPERIMENTAL_TRUST_LOCALHOST_CERTIFICATE_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_WAIT_EVENT_CHANNEL,
   BB_DESKTOP_BROWSER_FIND_RESULT_CHANNEL,
   BB_DESKTOP_BROWSER_GO_BACK_CHANNEL,
@@ -277,6 +278,7 @@ describe("desktop preload browser API", () => {
       "experimental_sendBrowserPointerInput",
       "experimental_sendBrowserTrustedInput",
       "experimental_setBrowserViewportProfile",
+      "experimental_trustLocalhostCertificate",
       "experimental_waitBrowserEvent",
       "findInPage",
       "focus",
@@ -312,6 +314,7 @@ describe("desktop preload browser API", () => {
     api.browser.setVisibleWithoutFocus?.(visibleRequest);
     api.browser.findInPage?.(findRequest);
     api.browser.stopFindInPage?.(stopFindRequest);
+    api.browser.experimental_trustLocalhostCertificate?.({ tabId: "browser:a" });
     await expect(
       api.browser.experimental_listCookieImportSources?.({
         tabId: "browser:a",
@@ -387,6 +390,10 @@ describe("desktop preload browser API", () => {
       {
         channel: BB_DESKTOP_BROWSER_STOP_FIND_IN_PAGE_CHANNEL,
         payload: stopFindRequest,
+      },
+      {
+        channel: BB_DESKTOP_BROWSER_EXPERIMENTAL_TRUST_LOCALHOST_CERTIFICATE_CHANNEL,
+        payload: { tabId: "browser:a" },
       },
       { channel: BB_DESKTOP_SET_THEME_CHANNEL, payload: "dark" },
     ]);

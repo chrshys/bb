@@ -144,6 +144,21 @@ export const BROWSER_ELEMENT_ANNOTATION_INTENTS = [
 export type BrowserElementAnnotationIntent =
   (typeof BROWSER_ELEMENT_ANNOTATION_INTENTS)[number];
 
+function annotationIntentInstruction(
+  intent: BrowserElementAnnotationIntent,
+): string {
+  switch (intent) {
+    case "fix":
+      return "Implement this feedback as a defect fix for the selected element. Verify that the reported problem is resolved.";
+    case "change":
+      return "Make this deliberate change to the selected element. Preserve behavior that the feedback does not change.";
+    case "question":
+      return "Answer this question about the selected element before making changes. This note does not request an implementation change.";
+    case "approve":
+      return "Treat the selected element as approved. Do not change it unless another annotation explicitly requires a change.";
+  }
+}
+
 export type BrowserElementAnnotationPriority =
   | "blocking"
   | "important"
@@ -613,7 +628,7 @@ export function redactBrowserElementAnnotation(
 export function browserElementAnnotationAgentText(
   annotation: BrowserElementAnnotation,
 ): string | null {
-  if (annotation.sensitive) return null;
+  const redacted = annotation.sensitive;
   const lines = [
     `Attached browser context from ${annotation.pageUrl}`,
     "",
@@ -622,6 +637,9 @@ export function browserElementAnnotationAgentText(
     "Selected element:",
     `Element: ${annotation.dom.tag}`,
   ];
+  if (redacted) {
+    lines.push("Sensitive form values were redacted.", "");
+  }
   if (annotation.accessibility.name !== null) {
     lines.push(
       `Accessible name: "${annotationInlineText(annotation.accessibility.name)}"`,
@@ -768,12 +786,7 @@ export function browserElementAnnotationsAgentText(
   annotations: readonly BrowserElementAnnotationNote[],
   tabId: string,
 ): string | null {
-  if (
-    annotations.length === 0 ||
-    annotations.some(({ annotation }) => annotation.sensitive)
-  ) {
-    return null;
-  }
+  if (annotations.length === 0) return null;
   const first = annotations[0].annotation;
   const lines = [
     `## Design Feedback: ${annotationPageHeading(first)}`,
@@ -791,8 +804,12 @@ export function browserElementAnnotationsAgentText(
     lines.push(
       `### ${index + 1}. ${annotationElementLabel(annotation)}`,
       `**Intent:** ${note.intent}`,
+      `**Requested outcome:** ${annotationIntentInstruction(note.intent)}`,
       `**Selector:** ${annotationInlineCode(annotation.dom.selector)}`,
     );
+    if (annotation.sensitive) {
+      lines.push("**Sensitive field:** Values redacted.");
+    }
     if (annotation.accessibility.role !== null) {
       lines.push(
         `**Role:** ${annotationInlineText(annotation.accessibility.role)}`,

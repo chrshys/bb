@@ -84,6 +84,7 @@ export const APP_SHELL_MARKS = [
   "code-renderers",
   "thread-panel",
   "file-opener",
+  "app-overlay",
   "content-scripts",
 ] as const;
 
@@ -1177,6 +1178,20 @@ function AppShellWireframeBody({
           onTabSelect={onRightPanelTabSelect}
         />
       </div>
+
+      <Mark
+        id="app-overlay"
+        label="App-wide floating plugin interface"
+        className="absolute bottom-24 right-12 z-[6] flex w-44 items-center gap-2 border border-border bg-popover px-3 py-2 text-foreground shadow-md"
+      >
+        <PluginGlyph className="size-4 shrink-0" />
+        <span className="min-w-0">
+          <span className="block truncate font-medium">Floating widget</span>
+          <span className="block truncate text-2xs text-subtle-foreground">
+            2 agents active
+          </span>
+        </span>
+      </Mark>
     </WindowFrame>
   );
 }
@@ -1746,6 +1761,20 @@ export function SettingsWireframe() {
                 className="mt-0.5 flex h-4.5 w-8 shrink-0 items-center rounded-full bg-foreground/60 p-0.5"
               >
                 <span className="ml-auto size-3.5 rounded-full bg-background" />
+              </span>
+            </span>
+            <span className="flex items-start justify-between gap-3 py-1.5">
+              <span className="min-w-0">
+                <span className="block text-foreground">Retry attempts</span>
+                <span className="block pt-1 leading-relaxed">
+                  Maximum retries before stopping.
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className="flex h-6 w-32 shrink-0 items-center rounded-md border border-border bg-card px-2 text-xs text-foreground"
+              >
+                3
               </span>
             </span>
             <span className="block py-1.5">

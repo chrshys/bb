@@ -18,6 +18,7 @@ import {
   BB_DESKTOP_BROWSER_EXPERIMENTAL_IMPORT_COOKIES_FROM_BROWSER_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_CLEAR_IMPORTED_COOKIES_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_LIST_COOKIE_IMPORT_SOURCES_CHANNEL,
+  BB_DESKTOP_BROWSER_EXPERIMENTAL_TRUST_LOCALHOST_CERTIFICATE_CHANNEL,
   BB_DESKTOP_BROWSER_EXPERIMENTAL_RUN_PAGE_SCRIPT_CHANNEL,
   BB_DESKTOP_BROWSER_GO_BACK_CHANNEL,
   BB_DESKTOP_BROWSER_GO_FORWARD_CHANNEL,
@@ -165,6 +166,7 @@ class RecordingDesktopBrowserViewManager implements DesktopBrowserViewManager {
   public readonly navigateCalls: NavigateCall[] = [];
   public readonly releaseWindowCalls: number[] = [];
   public readonly reloadCalls: TabCommandCall[] = [];
+  public readonly trustLocalhostCertificateCalls: TabCommandCall[] = [];
   public readonly setBoundsCalls: SetBoundsCall[] = [];
   public readonly setVisibleCalls: SetVisibleCall[] = [];
   public readonly setVisibleWithoutFocusCalls: SetVisibleCall[] = [];
@@ -273,6 +275,10 @@ class RecordingDesktopBrowserViewManager implements DesktopBrowserViewManager {
   reload(args: TabCommandCall): void {
     this.reloadCalls.push(args);
   }
+  trustLocalhostCertificate(args: TabCommandCall): void {
+    this.trustLocalhostCertificateCalls.push(args);
+  }
+
 
   setBounds(args: SetBoundsCall): void {
     this.setBoundsCalls.push(args);
@@ -440,6 +446,11 @@ describe("registerDesktopBrowserIpc", () => {
       sender: renderer.sender,
     });
     sendBrowserIpc({
+      channel: BB_DESKTOP_BROWSER_EXPERIMENTAL_TRUST_LOCALHOST_CERTIFICATE_CHANNEL,
+      payload: { tabId: "browser:a" },
+      sender: renderer.sender,
+    });
+    sendBrowserIpc({
       channel: BB_DESKTOP_BROWSER_FOCUS_CHANNEL,
       payload: { tabId: "browser:a" },
       sender: renderer.sender,
@@ -452,6 +463,9 @@ describe("registerDesktopBrowserIpc", () => {
     expect(manager.navigateCalls[0]?.hostWindow).toBe(renderer.hostWindow);
     expect(manager.navigateCalls[0]?.request).toEqual(navigateRequest);
     expect(manager.reloadCalls).toEqual([
+      { hostWindow: renderer.hostWindow, tabId: "browser:a" },
+    ]);
+    expect(manager.trustLocalhostCertificateCalls).toEqual([
       { hostWindow: renderer.hostWindow, tabId: "browser:a" },
     ]);
     expect(manager.focusCalls).toEqual([
@@ -606,6 +620,7 @@ describe("registerDesktopBrowserIpc", () => {
       BB_DESKTOP_BROWSER_GO_FORWARD_CHANNEL,
       BB_DESKTOP_BROWSER_RELOAD_CHANNEL,
       BB_DESKTOP_BROWSER_STOP_CHANNEL,
+      BB_DESKTOP_BROWSER_EXPERIMENTAL_TRUST_LOCALHOST_CERTIFICATE_CHANNEL,
     ]) {
       sendBrowserIpc({
         channel,

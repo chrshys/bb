@@ -65,7 +65,10 @@ import {
 } from "@/components/commands/AppCommandProvider";
 import type { AppShortcutPresentation } from "@/lib/app-keybindings";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
-import { isLocalOnlyUrl } from "@/lib/loopback-hostname";
+import {
+  isLoopbackHostname,
+  isLocalOnlyUrl,
+} from "@/lib/loopback-hostname";
 import { PluginBrowserActions } from "@/components/plugin/PluginBrowserActions";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { parseBrowserCookieImport } from "@/lib/browser-cookie-import";
@@ -189,6 +192,7 @@ interface BrowserPageLoadErrorProps {
   onOpenExternal: () => void;
   onRetry: () => void;
   url: string;
+  onTrustLocalhostCertificate: () => void;
 }
 
 const EMPTY_BROWSER_VIEW_BOUNDS: BbDesktopBrowserViewBounds = {
@@ -237,6 +241,9 @@ function browserPageLoadErrorTitle(args: {
   errorText: string;
   url: string;
 }): string {
+  if (args.errorText.includes("ERR_CERT_")) {
+    return "Certificate not trusted";
+  }
   if (isLocalOnlyUrl(args.url)) {
     return "Server not reachable";
   }
@@ -245,6 +252,22 @@ function browserPageLoadErrorTitle(args: {
   }
   return "Page unavailable";
 }
+
+function canTrustLocalhostCertificate(args: {
+  errorText: string;
+  url: string;
+}): boolean {
+  if (!args.errorText.includes("ERR_CERT_")) return false;
+  try {
+    const parsed = new URL(args.url);
+    return (
+      parsed.protocol === "https:" && isLoopbackHostname(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 
 function browserElementPickerTheme() {
   const styles = getComputedStyle(document.documentElement);
@@ -447,16 +470,23 @@ function BrowserPageLoadError({
   errorText,
   onOpenExternal,
   onRetry,
+  onTrustLocalhostCertificate,
   url,
 }: BrowserPageLoadErrorProps) {
   const host = getBrowserUrlHost(url);
   const title = browserPageLoadErrorTitle({ errorText, url });
-  const message = isLocalOnlyUrl(url)
-    ? `The browser could not reach ${host || "this local server"}. Start the server, then reload.`
-    : "The browser could not load this page. Try reloading or opening it externally.";
+  const canTrustCertificate = canTrustLocalhostCertificate({ errorText, url });
+  const message = canTrustCertificate
+    ? `The certificate for ${host || "this local server"} is not trusted. Trust it for this Browser session, then retry.`
+    : isLocalOnlyUrl(url)
+      ? `The browser could not reach ${host || "this local server"}. Start the server, then reload.`
+      : "The browser could not load this page. Try reloading or opening it externally.";
 
   return (
-    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+    <div
+      data-browser-load-error=""
+      className="relative z-10 flex h-full flex-col items-center justify-center px-6 text-center"
+    >
       <div className="flex w-full max-w-sm flex-col items-center gap-3">
         <span className="flex size-11 items-center justify-center rounded-lg border border-border bg-surface-recessed text-muted-foreground">
           <Icon name="Globe" className="size-6" aria-hidden />
@@ -481,6 +511,16 @@ function BrowserPageLoadError({
             <Icon name="RotateCcw" className="size-3.5" aria-hidden />
             Reload
           </button>
+          {canTrustCertificate ? (
+            <button
+              type="button"
+              onClick={onTrustLocalhostCertificate}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
+            >
+              <Icon name="SecurityCheck" className="size-3.5" aria-hidden />
+              Trust and reload
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onOpenExternal}
@@ -515,9 +555,10 @@ interface BrowserElementAnnotationTrayProps {
   onAddToChat?: (text: string) => void;
   onClear: () => void;
   onCopy: (text: string) => void;
-  onRemove: (id: string) => void;
-  onSelectElement: () => void;
   onEdit: (note: BrowserElementAnnotationNote) => void;
+  onRemove: (noteId: string) => void;
+  onMove: (noteId: string, direction: "up" | "down") => void;
+  onSelectElement: () => void;
   tabId: string;
 }
 
@@ -589,7 +630,7 @@ function BrowserElementAnnotationReview({
   onSubmit,
   onClose,
 }: BrowserElementAnnotationReviewProps) {
-  const canSubmit = !annotation.sensitive && comment.trim().length > 0;
+  const canSubmit = comment.trim().length > 0;
   const cardWidth = 352;
   const inset = 12;
   const targetCenterX = annotation.rect.x + annotation.rect.width / 2;
@@ -640,54 +681,46 @@ function BrowserElementAnnotationReview({
             {annotation.dom.selector}
           </code>
         </div>
-        {annotation.sensitive ? (
-          <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-            Sensitive form fields are never copied or attached to an agent.
-          </p>
-        ) : (
-          <>
-            <label className="sr-only" htmlFor="browser-annotation-feedback">
-              Feedback
-            </label>
-            <textarea
-              id="browser-annotation-feedback"
-              value={comment}
-              maxLength={2_000}
-              autoFocus
-              onChange={(event) => onCommentChange(event.target.value)}
-              placeholder="Describe what the agent should change here..."
-              className="h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
-            />
-            <div
-              className="mt-2 grid grid-cols-2 gap-2"
-              role="group"
-              aria-label="Annotation intent"
+        <label className="sr-only" htmlFor="browser-annotation-feedback">
+          Feedback
+        </label>
+        <textarea
+          id="browser-annotation-feedback"
+          value={comment}
+          maxLength={2_000}
+          autoFocus
+          onChange={(event) => onCommentChange(event.target.value)}
+          placeholder="Describe what the agent should change here..."
+          className="h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+        />
+        <div
+          className="mt-2 grid grid-cols-2 gap-2"
+          role="group"
+          aria-label="Annotation intent"
+        >
+          {BROWSER_ELEMENT_ANNOTATION_INTENTS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={intent === option}
+              onClick={() => onIntentChange(option)}
+              className={cn(
+                "h-8 rounded-md border px-3 text-xs font-medium transition-colors",
+                intent === option
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-foreground hover:bg-state-hover",
+              )}
             >
-              {BROWSER_ELEMENT_ANNOTATION_INTENTS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  aria-pressed={intent === option}
-                  onClick={() => onIntentChange(option)}
-                  className={cn(
-                    "h-8 rounded-md border px-3 text-xs font-medium transition-colors",
-                    intent === option
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-foreground hover:bg-state-hover",
-                  )}
-                >
-                  {option === "fix"
-                    ? "Fix"
-                    : option === "change"
-                      ? "Change"
-                      : option === "question"
-                        ? "Question"
-                        : "Approve"}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
+              {option === "fix"
+                ? "Fix"
+                : option === "change"
+                  ? "Change"
+                  : option === "question"
+                    ? "Question"
+                    : "Approve"}
+            </button>
+          ))}
+        </div>
         <div className="mt-3 flex justify-end gap-2">
           <button
             type="button"
@@ -722,6 +755,7 @@ function BrowserElementAnnotationTray({
   onCopy,
   onEdit,
   onRemove,
+  onMove,
   onSelectElement,
   tabId,
 }: BrowserElementAnnotationTrayProps) {
@@ -729,58 +763,92 @@ function BrowserElementAnnotationTray({
   return (
     <aside
       aria-label="Page annotations"
-      className="absolute bottom-3 right-3 z-30 flex max-h-[45%] w-[min(20rem,calc(100%-1.5rem))] flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-xl backdrop-blur"
+      className="absolute bottom-3 right-3 z-30 flex max-h-[55%] w-[min(24rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-xl bg-popover/95 text-popover-foreground shadow-xl backdrop-blur"
     >
-      <header className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-        <span className="min-w-0 flex-1 text-sm font-medium">
-          {annotations.length}{" "}
-          {annotations.length === 1 ? "annotation" : "annotations"}
-        </span>
-        <button
-          type="button"
-          aria-label="Clear page annotations"
-          onClick={onClear}
-          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
-        >
-          <Icon name="Clean" className="size-3.5" aria-hidden />
-        </button>
+      <header className="border-b border-border px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Page annotations</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Use the arrows to set the order sent to the prompt.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+            {annotations.length} {annotations.length === 1 ? "annotation" : "annotations"}
+          </span>
+          <button
+            type="button"
+            aria-label="Clear page annotations"
+            onClick={onClear}
+            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+          >
+            <Icon name="Clean" className="size-3.5" aria-hidden />
+          </button>
+        </div>
       </header>
-      <ol className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+      <ol className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
         {annotations.map((note, index) => (
           <li
             key={note.id}
-            className="group flex gap-2 rounded-lg border border-border/70 bg-background/80 px-2.5 py-2 text-xs shadow-sm transition-colors hover:bg-state-hover focus-within:bg-state-hover"
+            className="rounded-lg border border-border bg-background px-3 py-2.5 text-xs shadow-sm"
           >
-            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-              {index + 1}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium text-foreground">
-                {(note.annotation.accessibility.name ?? note.annotation.text) ||
-                  note.annotation.dom.tag}
-              </p>
-              <p className="mt-0.5 text-muted-foreground">{note.intent}</p>
-              <p className="mt-1 whitespace-pre-wrap text-foreground">
-                {note.comment}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-start gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-              <button
-                type="button"
-                aria-label={`Edit annotation ${index + 1}`}
-                onClick={() => onEdit(note)}
-                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:opacity-100"
-              >
-                <Icon name="EditFile" className="size-3.5" aria-hidden />
-              </button>
-              <button
-                type="button"
-                aria-label={`Remove annotation ${index + 1}`}
-                onClick={() => onRemove(note.id)}
-                className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:opacity-100"
-              >
-                <Icon name="X" className="size-3.5" aria-hidden />
-              </button>
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                {index + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 truncate font-medium text-foreground">
+                    {(note.annotation.accessibility.name ?? note.annotation.text) ||
+                      note.annotation.dom.tag}
+                  </p>
+                  <span className="rounded-full bg-surface-recessed px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {note.intent}
+                  </span>
+                </div>
+                <code className="mt-1 block truncate text-[11px] text-muted-foreground">
+                  {note.annotation.dom.selector}
+                </code>
+                <p className="mt-1.5 whitespace-pre-wrap leading-5 text-foreground">
+                  {note.comment}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-start gap-0.5">
+                <button
+                  type="button"
+                  aria-label={`Move annotation ${index + 1} up`}
+                  disabled={index === 0}
+                  onClick={() => onMove(note.id, "up")}
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <Icon name="ArrowUp" className="size-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move annotation ${index + 1} down`}
+                  disabled={index === annotations.length - 1}
+                  onClick={() => onMove(note.id, "down")}
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <Icon name="ArrowDown" className="size-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Edit annotation ${index + 1}`}
+                  onClick={() => onEdit(note)}
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+                >
+                  <Icon name="EditFile" className="size-3.5" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove annotation ${index + 1}`}
+                  onClick={() => onRemove(note.id)}
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+                >
+                  <Icon name="X" className="size-3.5" aria-hidden />
+                </button>
+              </div>
             </div>
           </li>
         ))}
@@ -1152,6 +1220,25 @@ export function BrowserTabContent({
             : annotation,
         ),
         review: null,
+      });
+    },
+    [annotationKey],
+  );
+
+  const moveElementAnnotation = useCallback(
+    (noteId: string, direction: "up" | "down") => {
+      const record = annotationRecordRef.current;
+      if (record === null || record === undefined || record.elements === null) return;
+      const sourceIndex = record.elements.notes.findIndex((note) => note.id === noteId);
+      const targetIndex = sourceIndex + (direction === "up" ? -1 : 1);
+      if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= record.elements.notes.length) {
+        return;
+      }
+      const notes = [...record.elements.notes];
+      [notes[sourceIndex], notes[targetIndex]] = [notes[targetIndex], notes[sourceIndex]];
+      setBrowserAnnotationElements(annotationKey, record.navigationEpoch, {
+        ...record.elements,
+        notes,
       });
     },
     [annotationKey],
@@ -1632,11 +1719,14 @@ export function BrowserTabContent({
       visibilityCoordinator.show(tabId, syncBounds, {
         focus: canHandleBrowserCommands,
       });
+    } else if (hasPageLoadError) {
+      visibilityCoordinator.hide(tabId);
     } else {
       visibilityCoordinator.cover(tabId);
     }
   }, [
     canHandleBrowserCommands,
+    hasPageLoadError,
     visibilityCoordinator,
     tabId,
     isNativeBrowserViewVisible,
@@ -1729,6 +1819,10 @@ export function BrowserTabContent({
     }
     desktopBrowser?.reload(tabId);
   }, [desktopBrowser, state?.isLoading, tabId]);
+
+  const handleTrustLocalhostCertificate = useCallback(() => {
+    desktopBrowser?.experimental_trustLocalhostCertificate?.({ tabId });
+  }, [desktopBrowser, tabId]);
 
   const handleFocusLocation = useCallback((): boolean => {
     if (!canHandleBrowserCommands || desktopBrowser === null) return false;
@@ -2360,6 +2454,7 @@ export function BrowserTabContent({
             errorText={pageLoadErrorText}
             onOpenExternal={handleOpenExternal}
             onRetry={handleReloadOrStop}
+            onTrustLocalhostCertificate={handleTrustLocalhostCertificate}
             url={currentUrl}
           />
         ) : hasPage && !isBrowserDimmingModalOpen ? null : (
@@ -2390,6 +2485,7 @@ export function BrowserTabContent({
             }}
             onEdit={(note) => editElementAnnotation(note)}
             onRemove={(id) => removeElementAnnotation(id)}
+            onMove={moveElementAnnotation}
             onSelectElement={() => {
               setIsResumingElementPicker(true);
             }}

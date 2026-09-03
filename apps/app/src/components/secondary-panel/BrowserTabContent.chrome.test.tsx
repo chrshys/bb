@@ -14,7 +14,7 @@ import type {
 } from "@bb/desktop-contract";
 import type { PluginBrowserActionProps } from "@get-bb/plugin-sdk";
 import { TooltipProvider } from "@bb/shared-ui/tooltip";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 const clipboardMock = vi.hoisted(() => ({
   copyToClipboardWithToast: vi.fn(),
 }));
@@ -60,7 +60,9 @@ interface BrowserChromeHarness {
   emitNativeFocus: (tabId: string) => void;
   focus: ReturnType<typeof vi.fn>;
   goBack: ReturnType<typeof vi.fn>;
+  trustLocalhostCertificate: Mock;
   stop: ReturnType<typeof vi.fn>;
+  setBounds: Mock;
   setVisible: ReturnType<typeof vi.fn>;
 }
 interface BrowserCookieImportHarness {
@@ -87,13 +89,17 @@ function createBrowserChromeHarness(
   const focus = vi.fn();
   const goBack = vi.fn();
   const stop = vi.fn();
+  const setBounds = vi.fn();
   const setVisible = vi.fn();
+  const trustLocalhostCertificate = vi.fn();
   const api: BbDesktopBrowserApi = {
     ...createNoopDesktopBrowserApi(),
     goBack,
     focus,
     stop,
+    setBounds,
     setVisible,
+    experimental_trustLocalhostCertificate: trustLocalhostCertificate,
     ...(runPageScript
       ? {
           experimental_browserPageRuntimeVersion: 1 as const,
@@ -143,7 +149,9 @@ function createBrowserChromeHarness(
     focus,
     goBack,
     stop,
+    setBounds,
     setVisible,
+    trustLocalhostCertificate,
   };
 }
 
@@ -358,6 +366,128 @@ describe("BrowserTabContent persistent navigation", () => {
         visible: true,
       }),
     );
+  });
+
+
+  it("removes the native hit target before rendering recovery actions", async () => {
+    const harness = createBrowserChromeHarness();
+    renderBrowserChrome(harness, "https://localhost:8443/", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+    });
+    harness.setBounds.mockClear();
+    harness.setVisible.mockClear();
+
+    act(() =>
+      harness.emitState(
+        browserState({
+          errorText: "ERR_CERT_AUTHORITY_INVALID",
+          url: "https://localhost:8443/",
+        }),
+      ),
+    );
+
+    await waitFor(() =>
+      expect(harness.setBounds).toHaveBeenLastCalledWith({
+        bounds: { height: 0, width: 0, x: 0, y: 0 },
+        tabId: "browser:test",
+      }),
+    );
+  });
+  it("trusts a loopback certificate only from the recovery action", async () => {
+    const harness = createBrowserChromeHarness();
+    renderBrowserChrome(harness, "https://localhost:8443/", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+    });
+
+    act(() =>
+      harness.emitState(
+        browserState({
+          errorText: "ERR_CERT_AUTHORITY_INVALID",
+          url: "https://localhost:8443/",
+        }),
+      ),
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Trust and reload" }),
+    );
+
+    expect(
+      document.querySelector("[data-browser-load-error]")?.className,
+    ).toContain("z-10");
+    expect(harness.trustLocalhostCertificate).toHaveBeenCalledWith({
+      tabId: "browser:test",
+    });
+  });
+  it("hides the native view while another thread is active and restores it on return", async () => {
+    const harness = createBrowserChromeHarness();
+    const threadA = renderBrowserChrome(harness, "https://example.com/a", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      tabId: "browser:thread-a",
+      threadId: "thread-a",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ tabId: "browser:thread-a", navigationEpoch: 7 }),
+      ),
+    );
+    await waitFor(() =>
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:thread-a",
+        visible: true,
+      }),
+    );
+
+    threadA.unmount();
+    expect(harness.setVisible).toHaveBeenLastCalledWith({
+      tabId: "browser:thread-a",
+      visible: false,
+    });
+
+    const threadB = renderBrowserChrome(harness, "https://example.com/b", {
+      canHandleBrowserCommands: true,
+      canShowNativeBrowserView: true,
+      tabId: "browser:thread-b",
+      threadId: "thread-b",
+    });
+    act(() =>
+      harness.emitState(
+        browserState({ tabId: "browser:thread-b", navigationEpoch: 7 }),
+      ),
+    );
+    await waitFor(() =>
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:thread-b",
+        visible: true,
+      }),
+    );
+
+    threadB.unmount();
+    const restoredThreadA = renderBrowserChrome(
+      harness,
+      "https://example.com/a",
+      {
+        canHandleBrowserCommands: true,
+        canShowNativeBrowserView: true,
+        tabId: "browser:thread-a",
+        threadId: "thread-a",
+      },
+    );
+    act(() =>
+      harness.emitState(
+        browserState({ tabId: "browser:thread-a", navigationEpoch: 7 }),
+      ),
+    );
+    await waitFor(() =>
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:thread-a",
+        visible: true,
+      }),
+    );
+    restoredThreadA.unmount();
   });
 
   it("uses a page snapshot while a toast overlays the native browser", async () => {
@@ -674,8 +804,12 @@ describe("BrowserTabContent persistent navigation", () => {
       onNativeFocus,
     });
 
+    act(() => harness.emitState(browserState()));
     await waitFor(() =>
-      expect(harness.focus).toHaveBeenCalledWith("browser:test"),
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:test",
+        visible: true,
+      }),
     );
     act(() => harness.emitNativeFocus("browser:other"));
     expect(onNativeFocus).not.toHaveBeenCalled();
@@ -796,10 +930,13 @@ describe("BrowserTabContent persistent navigation", () => {
       canShowNativeBrowserView: true,
     });
 
-    expect(harness.setVisible).toHaveBeenLastCalledWith({
-      tabId: "browser:test",
-      visible: true,
-    });
+    act(() => harness.emitState(browserState()));
+    await waitFor(() =>
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:test",
+        visible: true,
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Open inspector" }));
     await waitFor(() =>
       expect(harness.setVisible).toHaveBeenLastCalledWith({
@@ -808,10 +945,12 @@ describe("BrowserTabContent persistent navigation", () => {
       }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Close inspector" }));
-    expect(harness.setVisible).toHaveBeenLastCalledWith({
-      tabId: "browser:test",
-      visible: true,
-    });
+    await waitFor(() =>
+      expect(harness.setVisible).toHaveBeenLastCalledWith({
+        tabId: "browser:test",
+        visible: true,
+      }),
+    );
   });
 
   it("contains a crashing Browser action without losing native controls", () => {

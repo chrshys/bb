@@ -162,6 +162,23 @@ write.
   values and unsets, before stabilizing `experimental_set`.
 - Decide whether schemas and server-side writes stabilize independently.
 
+## `PluginSettingDescriptor` type `"number"`
+
+**What it does.** A numeric setting descriptor gives server code, provider
+configuration, and plugin UI a finite `number` instead of making each consumer
+parse a string. The host renders a number input and converts CLI values before
+validation. `experimental_schema` can enforce integer and range constraints.
+Stored numeric strings from settings created before this descriptor existed
+are read as numbers so migrated plugins preserve their configuration.
+
+**Audit before stabilizing.**
+
+- Decide whether common minimum, maximum, and step metadata belongs directly
+  on the descriptor instead of only in `experimental_schema`.
+- Confirm clearing a number input should continue to unset the stored value.
+- Decide how long legacy stored numeric strings should be coerced on read.
+- Exercise decimal and exponent input across browser engines and the CLI.
+
 ## `bb.experimental_hooks` (`on`, `recheck`)
 
 **What it does.** The one plugin surface that _decides_ rather than observes.
@@ -1745,6 +1762,42 @@ Implementation: the shared workflow is
    project metadata with `projects.list({ includePersonal: true })`. Before
    stabilizing, confirm unconditional project switching is right for embedded
    plugin workflows, rather than adding an explicit project-locking policy.
+
+## `app.slots.experimental_appOverlay` (`@get-bb/plugin-sdk/app`)
+
+**What it does.** Mounts an additive plugin React component once per BB app
+window, outside route-owned layout regions and inside `PluginSlotMount`. The
+component receives no props and owns its chrome, positioning, visibility,
+focus, and responsive behavior. It can call app-level SDK hooks and either
+render fixed UI directly or create a React portal without losing plugin,
+router, query, realtime, or sidebar thread/action context. Hooks whose contract
+requires a particular surface, including `useComposer` and `useComposerView`,
+remain limited to that surface. One overlay crash hides only that registration;
+sibling overlays remain mounted.
+
+**Audit before stabilizing.**
+
+1. **Name and boundary.** Confirm "app overlay" is broad enough for floating
+   widgets, launchers, and transient app-wide UI without inviting plugins to
+   replace host-owned navigation or layout.
+2. **App-level versus pane-level context.** Define the selected route in split
+   layouts and document which pane-local capabilities remain unavailable to a
+   once-per-window owner, including composer and side-panel hosts.
+3. **Host-owned layer.** Decide whether arbitrary fixed/portalled content is
+   sufficient or BB should provide a named overlay root, z-index band,
+   collision area, docking, or drag persistence.
+4. **Responsive and accessibility policy.** Audit keyboard access, focus
+   restoration, escape behavior, compact drawers, reduced motion, and whether
+   any of those must become host-owned rather than plugin-owned.
+5. **Multiplicity and budgets.** Registrations are additive with no cap.
+   Measure startup, query fan-out, visual collisions, and several plugins
+   mounting persistent widgets in one window.
+6. **Lifecycle.** Verify exact once-per-window mounting across route changes,
+   split changes, frontend reload, disable, uninstall, app teardown, and
+   multiple desktop windows or browser tabs.
+7. **Crash and stylesheet lifetime.** Confirm a hidden crash fallback and the
+   standard slot-owned CSS retention are the right failure semantics for UI
+   that may have no in-layout representation.
 
 ## `app.slots.experimental_newThreadPanelAction` (`@get-bb/plugin-sdk/app`)
 
