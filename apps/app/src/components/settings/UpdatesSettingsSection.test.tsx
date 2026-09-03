@@ -249,6 +249,7 @@ function makeInventory(overrides: Partial<UpdateInventory>): UpdateInventory {
       updateAvailable: false,
       isDevelopment: false,
       upgradeCommand: "npx bb-app@latest",
+      desktop: null,
     },
     desktopInfo: null,
     appUpdateAvailable: false,
@@ -1323,6 +1324,7 @@ The canonical release summary.
       updateAvailable: true,
       isDevelopment: false,
       upgradeCommand: "npx bb-app@latest",
+      desktop: null,
     };
     useUpdateInventoryMock.mockReturnValue(
       makeInventory({

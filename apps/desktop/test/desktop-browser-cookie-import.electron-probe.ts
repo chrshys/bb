@@ -5,17 +5,28 @@ import { DatabaseSync } from "node:sqlite";
 import { app, session } from "electron";
 import { importCookiesFromBrowserSource } from "../src/desktop-browser-cookie-import.js";
 
+function chromiumProfile(home: string): string {
+  if (process.platform === "darwin") {
+    return join(
+      home,
+      "Library",
+      "Application Support",
+      "Google",
+      "Chrome",
+      "Default",
+    );
+  }
+  if (process.platform === "linux") {
+    return join(home, ".config", "google-chrome", "Default");
+  }
+  throw new Error(`Unsupported test platform: ${process.platform}`);
+}
+
 app.whenReady().then(async () => {
   const previousHome = process.env.HOME;
+  const previousConfigHome = process.env.XDG_CONFIG_HOME;
   const home = mkdtempSync(join(tmpdir(), "bb-real-cookie-import-"));
-  const profile = join(
-    home,
-    "Library",
-    "Application Support",
-    "Google",
-    "Chrome",
-    "Default",
-  );
+  const profile = chromiumProfile(home);
   mkdirSync(profile, { recursive: true });
   const database = new DatabaseSync(join(profile, "Cookies"));
   database.exec(`
@@ -40,6 +51,9 @@ app.whenReady().then(async () => {
   `);
   database.close();
   process.env.HOME = home;
+  if (process.platform === "linux") {
+    process.env.XDG_CONFIG_HOME = join(home, ".config");
+  }
   try {
     const imported = importCookiesFromBrowserSource({
       family: "chrome",
@@ -60,7 +74,8 @@ app.whenReady().then(async () => {
     });
     for (const cookie of await cookies.get({})) {
       const domain = cookie.domain;
-      if (domain === undefined) throw new Error("Electron returned a cookie without a domain");
+      if (domain === undefined)
+        throw new Error("Electron returned a cookie without a domain");
       await cookies.remove(
         `${cookie.secure ? "https" : "http"}://${domain.replace(/^\./, "")}${cookie.path}`,
         cookie.name,
@@ -95,6 +110,8 @@ app.whenReady().then(async () => {
   } finally {
     if (previousHome === undefined) delete process.env.HOME;
     else process.env.HOME = previousHome;
+    if (previousConfigHome === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previousConfigHome;
     rmSync(home, { force: true, recursive: true });
     app.quit();
   }

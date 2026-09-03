@@ -42,6 +42,7 @@ const NPM_VERSION = {
   updateAvailable: false,
   isDevelopment: false,
   upgradeCommand: "npx bb-app@latest",
+  desktop: null,
 };
 
 const DESKTOP_UPDATE = {

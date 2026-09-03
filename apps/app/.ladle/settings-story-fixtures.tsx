@@ -143,6 +143,7 @@ const systemVersion = {
   updateAvailable: false,
   isDevelopment: false,
   upgradeCommand: "npx bb-app@latest",
+  desktop: null,
 } satisfies SystemVersionResponse;
 
 const systemProviders = [
