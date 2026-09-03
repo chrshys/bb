@@ -6,10 +6,10 @@ import {
 type DesktopReleaseChannel = "latest" | "nightly" | "custom";
 
 interface DesktopReleaseInfo {
-  applicationName: "bb" | "bb Nightly" | "bb Custom";
+  applicationName: "bb" | "bb Nightly" | "sf-bb";
   channel: DesktopReleaseChannel;
   iconFileName: "icon.png" | "icon-nightly.png";
-  releaseTag: "desktop-latest" | "desktop-nightly" | "desktop-custom";
+  releaseTag: "desktop-latest" | "desktop-nightly" | "desktop-sf-bb";
   updateReleaseBaseUrl: string;
 }
 
@@ -18,13 +18,13 @@ export function createDesktopReleaseInfo(
 ): DesktopReleaseInfo {
   const applicationName =
     channel === "custom"
-      ? "bb Custom"
+      ? "sf-bb"
       : channel === "nightly"
         ? "bb Nightly"
         : "bb";
   const releaseTag =
     channel === "custom"
-      ? "desktop-custom"
+      ? "desktop-sf-bb"
       : channel === "nightly"
         ? "desktop-nightly"
         : "desktop-latest";

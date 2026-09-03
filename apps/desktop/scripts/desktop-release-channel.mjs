@@ -34,13 +34,13 @@ export function resolveDesktopBuildPlatform(nodePlatform) {
 export function createDesktopReleaseConfig(channel) {
   if (channel === "custom") {
     return {
-      appId: "dev.bb.desktop.custom",
-      applicationName: "bb Custom",
-      artifactName: "bb-custom-${version}-${arch}.${ext}",
+      appId: "dev.bb.desktop.sf-bb",
+      applicationName: "sf-bb",
+      artifactName: "sf-bb-${version}-${arch}.${ext}",
       iconFileName: "icon.png",
-      linuxExecutableName: "bb-custom",
+      linuxExecutableName: "sf-bb",
       macIconPath: "assets/icon.icns",
-      releaseTag: "desktop-custom",
+      releaseTag: "desktop-sf-bb",
       updateMetadataFileNames: {
         linux: "custom-linux.yml",
         macos: "custom-mac.yml",

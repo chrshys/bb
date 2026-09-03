@@ -7,13 +7,13 @@ export interface DesktopUpdateMetadataFileNames {
 }
 
 export interface DesktopReleaseConfig {
-  appId: "dev.bb.desktop" | "dev.bb.desktop.nightly" | "dev.bb.desktop.custom";
-  applicationName: "bb" | "bb Nightly" | "bb Custom";
+  appId: "dev.bb.desktop" | "dev.bb.desktop.nightly" | "dev.bb.desktop.sf-bb";
+  applicationName: "bb" | "bb Nightly" | "sf-bb";
   artifactName: string;
   iconFileName: "icon.png" | "icon-nightly.png";
-  linuxExecutableName: "bb" | "bb-nightly" | "bb-custom";
+  linuxExecutableName: "bb" | "bb-nightly" | "sf-bb";
   macIconPath: "assets/icon.icns" | "assets/icon-nightly.icns";
-  releaseTag: "desktop-latest" | "desktop-nightly" | "desktop-custom";
+  releaseTag: "desktop-latest" | "desktop-nightly" | "desktop-sf-bb";
   updateMetadataFileNames: DesktopUpdateMetadataFileNames;
 }
 

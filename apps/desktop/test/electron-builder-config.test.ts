@@ -66,7 +66,7 @@ const macConfigSchema = z
 const linuxConfigSchema = z
   .object({
     category: z.literal("Development"),
-    executableName: z.enum(["bb", "bb-nightly", "bb-custom"]),
+    executableName: z.enum(["bb", "bb-nightly", "sf-bb"]),
     icon: z.string().min(1),
     target: z.tuple([
       z
@@ -577,11 +577,11 @@ describe("electron-builder signing config", () => {
     });
     const customRelease = createDesktopReleaseInfo("custom");
 
-    expect(config.appId).toBe("dev.bb.desktop.custom");
-    expect(config.productName).toBe("bb Custom");
-    expect(config.artifactName).toBe("bb-custom-${version}-${arch}.${ext}");
+    expect(config.appId).toBe("dev.bb.desktop.sf-bb");
+    expect(config.productName).toBe("sf-bb");
+    expect(config.artifactName).toBe("sf-bb-${version}-${arch}.${ext}");
     expect(config.linux.icon).toBe("assets/icon.png");
-    expect(config.linux.executableName).toBe("bb-custom");
+    expect(config.linux.executableName).toBe("sf-bb");
     expect(config.mac.icon).toBe("assets/icon.icns");
     expect(config.publish[0]).toEqual({
       channel: "custom",
