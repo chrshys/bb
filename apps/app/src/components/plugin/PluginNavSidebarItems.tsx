@@ -99,7 +99,7 @@ import {
   togglePluginNavPanelVisibility,
 } from "./pluginNavSidebarOrder";
 
-export const PLUGIN_NAV_VISIBLE_LIMIT = 3;
+const PLUGIN_NAV_VISIBLE_LIMIT = 3;
 
 type PluginSidebarNavRow = {
   kind: "plugin";
@@ -619,7 +619,6 @@ function SidebarNavigationCustomizeMenu({
         align="start"
         sideOffset={8}
         className="w-52 p-2"
-        mobileTitle="Customize sidebar"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           contentRef.current

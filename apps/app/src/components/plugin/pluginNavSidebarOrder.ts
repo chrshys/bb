@@ -42,7 +42,6 @@ interface ArrangedPluginNavPanelPreferences<
   TPanel extends PluginNavPanelIdentity,
 > extends ArrangedPluginNavPanels<TPanel> {
   visible: TPanel[];
-  overflow: TPanel[];
   visibleKeys: string[];
   normalizedVisibleKeys: string[] | null;
 }
@@ -103,9 +102,6 @@ export function arrangePluginNavPanelPreferences<
     normalizedOrder,
     visible: ordered.filter((panel) =>
       visibleSet.has(getPluginNavPanelKey(panel)),
-    ),
-    overflow: ordered.filter(
-      (panel) => !visibleSet.has(getPluginNavPanelKey(panel)),
     ),
     visibleKeys: ordered
       .map(getPluginNavPanelKey)

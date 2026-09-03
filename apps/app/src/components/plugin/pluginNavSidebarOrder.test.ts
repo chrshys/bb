@@ -81,7 +81,10 @@ describe("arrangePluginNavPanelPreferences", () => {
       "github/pulls",
       "docs/vault",
     ]);
-    expect(result.overflow.map(getPluginNavPanelKey)).toEqual([
+    expect(result.ordered.map(getPluginNavPanelKey)).toEqual([
+      "tasks/board",
+      "github/pulls",
+      "docs/vault",
       "calendar/agenda",
     ]);
     expect(result.visibleKeys).toEqual([
@@ -101,7 +104,7 @@ describe("arrangePluginNavPanelPreferences", () => {
     });
 
     expect(result.visible).toEqual([]);
-    expect(result.overflow.map(getPluginNavPanelKey)).toEqual([
+    expect(result.ordered.map(getPluginNavPanelKey)).toEqual([
       "github/pulls",
       "docs/vault",
       "tasks/board",
@@ -118,8 +121,9 @@ describe("arrangePluginNavPanelPreferences", () => {
     });
 
     expect(result.visible.map(getPluginNavPanelKey)).toEqual(["github/pulls"]);
-    expect(result.overflow.map(getPluginNavPanelKey)).toEqual([
+    expect(result.ordered.map(getPluginNavPanelKey)).toEqual([
       "docs/vault",
+      "github/pulls",
       "tasks/board",
     ]);
     expect(result.normalizedVisibleKeys).toEqual([
@@ -128,7 +132,7 @@ describe("arrangePluginNavPanelPreferences", () => {
     ]);
   });
 
-  it("places a newly installed unchecked panel in overflow", () => {
+  it("keeps a newly installed panel unchecked", () => {
     const result = arrangePluginNavPanelPreferences({
       panels: [github, docs, tasks],
       storedOrder: ["github/pulls", "docs/vault"],
@@ -140,7 +144,6 @@ describe("arrangePluginNavPanelPreferences", () => {
       "github/pulls",
       "docs/vault",
     ]);
-    expect(result.overflow.map(getPluginNavPanelKey)).toEqual(["tasks/board"]);
     expect(result.normalizedOrder).toEqual([
       "github/pulls",
       "docs/vault",
@@ -148,7 +151,7 @@ describe("arrangePluginNavPanelPreferences", () => {
     ]);
   });
 
-  it("uses the master order for both visible and overflow panels", () => {
+  it("uses the master order for visible panels", () => {
     const result = arrangePluginNavPanelPreferences({
       panels: [github, docs, tasks],
       storedOrder: ["tasks/board", "github/pulls", "docs/vault"],
@@ -160,8 +163,10 @@ describe("arrangePluginNavPanelPreferences", () => {
       "tasks/board",
       "docs/vault",
     ]);
-    expect(result.overflow.map(getPluginNavPanelKey)).toEqual([
+    expect(result.ordered.map(getPluginNavPanelKey)).toEqual([
+      "tasks/board",
       "github/pulls",
+      "docs/vault",
     ]);
   });
 });
@@ -184,11 +189,10 @@ describe("legacy hidden-panel migration", () => {
       ),
     ).toEqual(["github/pulls", "docs/vault"]);
   });
-
 });
 
 describe("reorderPluginNavPanels", () => {
-  it("moves a row across an overflow boundary", () => {
+  it("moves a row across the full customization order", () => {
     const order = [
       "one/main",
       "two/main",
