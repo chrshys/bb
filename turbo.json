@@ -159,7 +159,7 @@
     },
     "@bb/desktop#build": {
       "dependsOn": ["bb-app#build"],
-      "env": ["BB_DESKTOP_RELEASE_CHANNEL"],
+      "env": ["BB_DESKTOP_CUSTOM_AUTO_UPDATE", "BB_DESKTOP_RELEASE_CHANNEL"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/desktop/**",

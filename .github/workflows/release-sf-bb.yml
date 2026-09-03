@@ -1,0 +1,207 @@
+name: Release sf-bb
+
+on:
+  push:
+    branches:
+      - sf-bb
+  workflow_dispatch:
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  NODE_VERSION: "22.x"
+  PNPM_VERSION: "9.15.0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-sf-bb
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish Apple Silicon release
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Validate desktop code
+        run: |
+          pnpm exec turbo run typecheck --filter=@bb/desktop --filter=bb-app --output-logs=new-only
+          pnpm exec turbo run test --filter=@bb/desktop --filter=bb-app --force --output-logs=new-only
+
+      - name: Derive release version
+        id: version
+        run: |
+          set -euo pipefail
+          BASE_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+          NEXT_PATCH="$(node --input-type=module -e 'import semver from "semver"; const parsed = semver.parse(process.argv[1]); if (parsed === null) process.exit(1); process.stdout.write(`${parsed.major}.${parsed.minor}.${parsed.patch + 1}`);' "$BASE_VERSION")"
+          VERSION="${NEXT_PATCH}-sf.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          node scripts/bump-version.mjs "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate signing configuration
+        id: signing
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          VALUES=(
+            "$MACOS_CERTIFICATE_P12"
+            "$MACOS_CERTIFICATE_PASSWORD"
+            "$APPLE_ID"
+            "$APPLE_APP_PASSWORD"
+            "$APPLE_TEAM_ID"
+          )
+          PRESENT=0
+          for value in "${VALUES[@]}"; do
+            if [[ -n "$value" ]]; then
+              PRESENT=$((PRESENT + 1))
+            fi
+          done
+          if [[ "$PRESENT" -eq 0 ]]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$PRESENT" -eq "${#VALUES[@]}" ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "The macOS signing secret set is incomplete." >&2
+            exit 1
+          fi
+
+      - name: Build signed release
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          BB_DESKTOP_CUSTOM_AUTO_UPDATE: "1"
+          BB_DESKTOP_RELEASE_CHANNEL: custom
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CSC_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+        run: pnpm exec turbo run desktop:build --filter=@bb/desktop --force --output-logs=new-only
+
+      - name: Build ad-hoc release
+        if: steps.signing.outputs.signed == 'false'
+        env:
+          BB_DESKTOP_ADHOC_SIGNING: "true"
+          BB_DESKTOP_CUSTOM_AUTO_UPDATE: "0"
+          BB_DESKTOP_RELEASE_CHANNEL: custom
+        run: pnpm exec turbo run desktop:build --filter=@bb/desktop --force --output-logs=new-only
+
+      - name: Generate version feed
+        env:
+          BB_DESKTOP_RELEASE_CHANNEL: custom
+        run: pnpm --dir apps/desktop run desktop:version-feed
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sf-bb-${{ steps.version.outputs.version }}-macos-arm64
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/custom-mac.yml
+            apps/desktop/release/desktop-version.json
+          if-no-files-found: error
+
+      - name: Publish releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd apps/desktop/release
+          ASSETS=(
+            ./*.dmg
+            ./*.zip
+            ./*.blockmap
+            ./custom-mac.yml
+            ./desktop-version.json
+          )
+          for asset in "${ASSETS[@]}"; do
+            if [[ ! -e "$asset" ]]; then
+              echo "Missing release asset: $asset" >&2
+              exit 1
+            fi
+          done
+          VERSION_TAG="sf-bb-v${VERSION}"
+          MOVING_TAG="desktop-sf-bb"
+          if gh release view "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $VERSION_TAG already exists." >&2
+            exit 1
+          fi
+          if [[ "$SIGNED" == "true" ]]; then
+            RELEASE_NOTES="Signed and notarized sf-bb ${VERSION} for Apple Silicon Macs. Automatic updates are enabled."
+          else
+            RELEASE_NOTES="Ad-hoc signed sf-bb ${VERSION} for Apple Silicon Macs. Open the app with Control-click → Open on first launch. Automatic installation is disabled until Developer ID signing is configured."
+          fi
+          gh release create "$VERSION_TAG" "${ASSETS[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "sf-bb ${VERSION}" \
+            --notes "$RELEASE_NOTES" \
+            --latest=false
+          git tag -f "$MOVING_TAG" "$GITHUB_SHA"
+          git push --force origin "refs/tags/${MOVING_TAG}"
+          if gh release view "$MOVING_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release view "$MOVING_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | while IFS= read -r asset_name; do
+              if [[ -n "$asset_name" ]]; then
+                gh release delete-asset "$MOVING_TAG" "$asset_name" --repo "$GITHUB_REPOSITORY" --yes
+              fi
+            done
+            gh release edit "$MOVING_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "sf-bb latest" \
+              --notes "$RELEASE_NOTES" \
+              --latest=false
+            gh release upload "$MOVING_TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$MOVING_TAG" "${ASSETS[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "sf-bb latest" \
+              --notes "$RELEASE_NOTES" \
+              --latest=false
+          fi
+
+      - name: Summarize
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo "## sf-bb release"
+            echo
+            echo "- Version: ${VERSION}"
+            echo "- Apple Silicon macOS"
+            echo "- Signed and notarized: ${SIGNED}"
+            echo "- Download: https://github.com/${GITHUB_REPOSITORY}/releases/tag/desktop-sf-bb"
+          } >> "$GITHUB_STEP_SUMMARY"

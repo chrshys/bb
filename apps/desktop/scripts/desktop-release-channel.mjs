@@ -82,5 +82,7 @@ export function createDesktopReleaseConfig(channel) {
 }
 
 export function createDesktopUpdateReleaseBaseUrl(releaseTag) {
-  return `https://github.com/get-bb/bb/releases/download/${releaseTag}/`;
+  const repository =
+    releaseTag === "desktop-sf-bb" ? "chrshys/bb" : "get-bb/bb";
+  return `https://github.com/${repository}/releases/download/${releaseTag}/`;
 }

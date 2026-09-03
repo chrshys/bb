@@ -234,6 +234,18 @@ is baked into the Electron main/preload bundles and selects the nightly product
 identity, yellow icon, and update URLs. Omit the variable (or set it to
 `latest`) for stable and local builds.
 
+## sf-bb team channel
+
+This fork builds `BB_DESKTOP_RELEASE_CHANNEL=custom` as the isolated `sf-bb`
+application. Custom builds read the moving `desktop-sf-bb` release in
+`chrshys/bb`. Version checks are enabled for every packaged custom build.
+Automatic installation is baked in only when
+`BB_DESKTOP_CUSTOM_AUTO_UPDATE=1`; the team workflow sets it for Developer ID
+signed and notarized releases and leaves it off for ad-hoc builds.
+
+See [`SF-BB.md`](../../SF-BB.md) for team installation, release, signing, and
+upstream synchronization instructions.
+
 ## About panel
 
 The app menu's About item opens a message box listing the facts a bug report

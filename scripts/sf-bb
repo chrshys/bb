@@ -22,8 +22,8 @@ Usage: scripts/sf-bb <command>
   status    Show development and installed-app status.
 
 The packaged sf-bb app uses the normal ~/.bb data directory and ports. Do not
-run stock bb, legacy bb Custom, and sf-bb simultaneously. Upstream desktop
-updates are disabled in custom-channel builds.
+run stock bb, legacy bb Custom, and sf-bb simultaneously. Local ad-hoc builds
+check the public sf-bb release feed but install updates manually.
 EOF
 }
 

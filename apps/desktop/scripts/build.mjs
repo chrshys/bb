@@ -78,6 +78,9 @@ const commonOptions = {
   define: {
     "process.env.BB_DESKTOP_BUILD_DATE": JSON.stringify(desktopBuildDate),
     "process.env.BB_DESKTOP_COMMIT": JSON.stringify(desktopCommit),
+    "process.env.BB_DESKTOP_CUSTOM_AUTO_UPDATE": JSON.stringify(
+      process.env.BB_DESKTOP_CUSTOM_AUTO_UPDATE === "1" ? "1" : "0",
+    ),
     "process.env.BB_DESKTOP_PLUGIN_SDK_VERSION":
       JSON.stringify(pluginSdkVersion),
     "process.env.BB_DESKTOP_RELEASE_CHANNEL": JSON.stringify(

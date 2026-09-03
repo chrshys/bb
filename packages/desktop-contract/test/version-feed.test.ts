@@ -101,6 +101,31 @@ describe("desktop version feed schema", () => {
     ).toBe(true);
   });
 
+  it("accepts the isolated custom desktop channel", () => {
+    expect(
+      bbDesktopVersionFeedSchema.safeParse({
+        channel: "custom",
+        files: [
+          {
+            sha512: "BASE64_SHA512_FROM_ELECTRON_BUILDER",
+            size: 123456789,
+            url: "sf-bb-0.0.2-sf.1.1-arm64.zip",
+          },
+        ],
+        minimumSystemVersion: null,
+        path: "sf-bb-0.0.2-sf.1.1-arm64.zip",
+        platform: "macos",
+        releaseDate: checkedAt,
+        releaseName: "sf-bb desktop 0.0.2-sf.1.1",
+        releaseNotes: null,
+        schemaVersion: 1,
+        sha512: "BASE64_SHA512_FROM_ELECTRON_BUILDER",
+        stagingPercentage: null,
+        version: "0.0.2-sf.1.1",
+      }).success,
+    ).toBe(true);
+  });
+
   it("accepts a Linux AppImage version feed payload", () => {
     expect(
       bbDesktopVersionFeedSchema.safeParse({

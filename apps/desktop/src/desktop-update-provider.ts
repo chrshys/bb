@@ -2,6 +2,7 @@ import {
   createBbDesktopVersionFeedFileName,
   type BbDesktopVersionFeedPlatform,
 } from "@bb/desktop-contract";
+import { createDesktopUpdateReleaseBaseUrl } from "../scripts/desktop-release-channel.mjs";
 
 type DesktopReleaseChannel = "latest" | "nightly" | "custom";
 
@@ -34,7 +35,7 @@ export function createDesktopReleaseInfo(
     channel,
     iconFileName: channel === "nightly" ? "icon-nightly.png" : "icon.png",
     releaseTag,
-    updateReleaseBaseUrl: `https://github.com/get-bb/bb/releases/download/${releaseTag}/`,
+    updateReleaseBaseUrl: createDesktopUpdateReleaseBaseUrl(releaseTag),
   };
 }
 
@@ -92,15 +93,23 @@ interface DesktopUpdateSupport {
 interface ResolveDesktopUpdateSupportArgs {
   canReplaceAppImage: (appImagePath: string) => boolean;
   channel?: DesktopReleaseChannel;
+  customAutoUpdate: boolean;
   env: NodeJS.ProcessEnv;
   platform: BbDesktopVersionFeedPlatform;
 }
 
+export const DESKTOP_CUSTOM_AUTO_UPDATE_ENABLED =
+  process.env.BB_DESKTOP_CUSTOM_AUTO_UPDATE === "1";
+
 export function resolveDesktopUpdateSupport(
   args: ResolveDesktopUpdateSupportArgs,
 ): DesktopUpdateSupport {
-  if ((args.channel ?? DESKTOP_RELEASE_CHANNEL) === "custom") {
-    return { autoUpdate: false, versionCheck: false };
+  const channel = args.channel ?? DESKTOP_RELEASE_CHANNEL;
+  if (channel === "custom") {
+    return {
+      autoUpdate: args.platform === "macos" && args.customAutoUpdate,
+      versionCheck: true,
+    };
   }
 
   if (args.platform === "macos") {

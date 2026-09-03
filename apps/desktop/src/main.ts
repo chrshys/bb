@@ -124,6 +124,7 @@ import {
   type DesktopUpdateService,
 } from "./desktop-update-check.js";
 import {
+  DESKTOP_CUSTOM_AUTO_UPDATE_ENABLED,
   DESKTOP_RELEASE_CHANNEL,
   DESKTOP_RELEASE_INFO,
   resolveDesktopUpdateSupport,
@@ -2142,13 +2143,12 @@ async function runDesktopApp(): Promise<void> {
   const desktopUpdateSupport = resolveDesktopUpdateSupport({
     canReplaceAppImage,
     channel: DESKTOP_RELEASE_CHANNEL,
+    customAutoUpdate: DESKTOP_CUSTOM_AUTO_UPDATE_ENABLED,
     env: process.env,
     platform: desktopPlatform,
   });
-  const desktopVersionFeedChannel =
-    DESKTOP_RELEASE_CHANNEL === "custom" ? "latest" : DESKTOP_RELEASE_CHANNEL;
   desktopUpdateService = createDesktopUpdateService({
-    channel: desktopVersionFeedChannel,
+    channel: DESKTOP_RELEASE_CHANNEL,
     currentVersion: desktopVersion,
     enabled:
       desktopUpdateSupport.versionCheck &&
@@ -2215,7 +2215,9 @@ async function runDesktopApp(): Promise<void> {
   if (desktopUpdateSupport.autoUpdate) {
     desktopAutoUpdateService.start();
   } else if (DESKTOP_RELEASE_CHANNEL === "custom") {
-    logger.info("Desktop updates are disabled for this custom build.");
+    logger.info(
+      "Desktop auto-install is disabled for this custom build; version checks remain enabled.",
+    );
   } else {
     logger.info(
       "Desktop auto-install is disabled: only the Linux AppImage build can replace itself. Version checks still report new releases.",

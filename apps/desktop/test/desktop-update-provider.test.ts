@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createDesktopReleaseInfo,
   createDesktopUpdateFeedUrl,
   resolveDesktopUpdateSupport,
 } from "../src/desktop-update-provider.js";
@@ -13,6 +14,12 @@ describe("desktop update feed url", () => {
       "https://github.com/get-bb/bb/releases/download/desktop-latest/desktop-version-linux.json",
     );
   });
+
+  it("points custom builds at the sf-bb fork release", () => {
+    expect(createDesktopReleaseInfo("custom").updateReleaseBaseUrl).toBe(
+      "https://github.com/chrshys/bb/releases/download/desktop-sf-bb/",
+    );
+  });
 });
 
 const APP_IMAGE_PATH = "/home/user/Apps/bb-0.37.0-x86_64.AppImage";
@@ -20,21 +27,32 @@ const alwaysReplaceable = () => true;
 const neverReplaceable = () => false;
 
 describe("desktop update support", () => {
-  it("disables all upstream updates for custom builds", () => {
+  it("checks custom releases and enables signed custom auto-updates", () => {
     expect(
       resolveDesktopUpdateSupport({
         canReplaceAppImage: alwaysReplaceable,
         channel: "custom",
+        customAutoUpdate: false,
         env: { APPIMAGE: APP_IMAGE_PATH },
         platform: "macos",
       }),
-    ).toEqual({ autoUpdate: false, versionCheck: false });
+    ).toEqual({ autoUpdate: false, versionCheck: true });
+    expect(
+      resolveDesktopUpdateSupport({
+        canReplaceAppImage: alwaysReplaceable,
+        channel: "custom",
+        customAutoUpdate: true,
+        env: { APPIMAGE: APP_IMAGE_PATH },
+        platform: "macos",
+      }),
+    ).toEqual({ autoUpdate: true, versionCheck: true });
   });
 
   it("enables both update paths on macOS", () => {
     expect(
       resolveDesktopUpdateSupport({
         canReplaceAppImage: neverReplaceable,
+        customAutoUpdate: false,
         env: {},
         platform: "macos",
       }),
@@ -45,6 +63,7 @@ describe("desktop update support", () => {
     expect(
       resolveDesktopUpdateSupport({
         canReplaceAppImage: alwaysReplaceable,
+        customAutoUpdate: false,
         env: { APPIMAGE: APP_IMAGE_PATH },
         platform: "linux",
       }),
@@ -52,6 +71,7 @@ describe("desktop update support", () => {
     expect(
       resolveDesktopUpdateSupport({
         canReplaceAppImage: alwaysReplaceable,
+        customAutoUpdate: false,
         env: {},
         platform: "linux",
       }),
@@ -59,6 +79,7 @@ describe("desktop update support", () => {
     expect(
       resolveDesktopUpdateSupport({
         canReplaceAppImage: alwaysReplaceable,
+        customAutoUpdate: false,
         env: { APPIMAGE: "  " },
         platform: "linux",
       }),
@@ -74,6 +95,7 @@ describe("desktop update support", () => {
           checked.push(path);
           return false;
         },
+        customAutoUpdate: false,
         env: { APPIMAGE: APP_IMAGE_PATH },
         platform: "linux",
       }),
@@ -89,6 +111,7 @@ describe("desktop update support", () => {
         consulted = true;
         return true;
       },
+      customAutoUpdate: false,
       env: { APPIMAGE: APP_IMAGE_PATH },
       platform: "macos",
     });
