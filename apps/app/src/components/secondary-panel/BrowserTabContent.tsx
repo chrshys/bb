@@ -34,10 +34,8 @@ import {
   COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
   COARSE_POINTER_TEXT_SM_CLASS,
-  COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS,
 } from "@bb/shared-ui/coarse-pointer-sizing";
 import { Icon } from "@bb/shared-ui/icon";
-import { Button } from "@bb/shared-ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import { getBbDesktopInfo, getDesktopBrowserApi } from "@/lib/bb-desktop";
 import { cn } from "@bb/shared-ui/lib/utils";
@@ -2160,6 +2158,14 @@ export function BrowserTabContent({
         annotationAction={
           <>
             <NavButton
+              icon="File"
+              label="Import browser session"
+              disabled={!canImportCookies}
+              onClick={() => {
+                void handleOpenCookieImportWizard();
+              }}
+            />
+            <NavButton
               icon="EditFile"
               label="Annotate screenshot"
               disabled={!canAnnotateScreenshot}
@@ -2207,20 +2213,6 @@ export function BrowserTabContent({
                 void startElementPicker("annotate");
               }}
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label="Import browser session"
-              disabled={!canImportCookies}
-              onClick={() => {
-                void handleOpenCookieImportWizard();
-              }}
-              className={COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS}
-            >
-              <Icon name="File" aria-hidden />
-              Import
-            </Button>
           </>
         }
         pluginActions={

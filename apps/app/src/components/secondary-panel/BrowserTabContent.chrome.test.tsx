@@ -527,7 +527,31 @@ describe("BrowserTabContent persistent navigation", () => {
     const importButton = await screen.findByRole("button", {
       name: "Import browser session",
     });
-    expect(importButton.textContent).toContain("Import");
+    const openExternalButton = screen.getByRole("button", {
+      name: "Open in external browser",
+    });
+    const annotateButton = screen.getByRole("button", {
+      name: "Annotate screenshot",
+    });
+    const chromeButtonLabels = Array.from(
+      screen.getByTestId("browser-tab-nav-controls").querySelectorAll("button"),
+      (button) => button.getAttribute("aria-label"),
+    );
+    expect(importButton.textContent).toBe("");
+    expect(importButton.querySelector('[data-icon="File"]')).not.toBeNull();
+    expect(importButton.className).toBe(annotateButton.className);
+    expect(
+      chromeButtonLabels.indexOf(importButton.getAttribute("aria-label")),
+    ).toBe(
+      chromeButtonLabels.indexOf(
+        openExternalButton.getAttribute("aria-label"),
+      ) + 1,
+    );
+    expect(
+      chromeButtonLabels.indexOf(annotateButton.getAttribute("aria-label")),
+    ).toBe(
+      chromeButtonLabels.indexOf(importButton.getAttribute("aria-label")) + 1,
+    );
     fireEvent.click(importButton);
     await screen.findByRole("region", { name: "Import browser session" });
     expect(
