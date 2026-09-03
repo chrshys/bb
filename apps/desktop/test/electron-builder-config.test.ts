@@ -41,6 +41,12 @@ const macConfigSchema = z
   .object({
     entitlements: z.string().min(1),
     entitlementsInherit: z.string().min(1),
+    extendInfo: z
+      .object({
+        BbDesktopBuildDate: z.string().datetime(),
+        BbDesktopCommit: z.string().regex(/^[0-9a-f]{7,64}$/u),
+      })
+      .optional(),
     gatekeeperAssess: z.literal(false),
     hardenedRuntime: z.literal(true),
     icon: z.string().min(1),
@@ -142,11 +148,13 @@ const workspacePackageJsonSchema = z
   })
   .passthrough();
 
-const signingEnvironmentKeys = [
+const controlledEnvironmentKeys = [
   "APPLE_APP_SPECIFIC_PASSWORD",
   "APPLE_ID",
   "APPLE_TEAM_ID",
   "BB_DESKTOP_ADHOC_SIGNING",
+  "BB_DESKTOP_BUILD_DATE",
+  "BB_DESKTOP_COMMIT",
   "CSC_IDENTITY_AUTO_DISCOVERY",
   "CSC_KEY_PASSWORD",
   "CSC_LINK",
@@ -179,7 +187,7 @@ type RunNativePrepScript = (appOutDir: string) => Promise<ScriptRunResult>;
 const createScriptEnvironment: CreateScriptEnvironment = (overrides) => {
   const env = { ...process.env };
 
-  for (const key of signingEnvironmentKeys) {
+  for (const key of controlledEnvironmentKeys) {
     delete env[key];
   }
 
@@ -492,6 +500,33 @@ describe("electron-builder signing config", () => {
       { arch: ["arm64"], target: "dmg" },
       { arch: ["arm64"], target: "zip" },
     ]);
+  });
+
+  it("embeds the desktop build identity in the macOS bundle", async () => {
+    const buildDate = "2026-09-03T18:55:00.000Z";
+    const commit = "0123456789abcdef0123456789abcdef01234567";
+    const { config } = await readResolvedConfig({
+      BB_DESKTOP_BUILD_DATE: buildDate,
+      BB_DESKTOP_COMMIT: commit,
+    });
+
+    expect(config.mac.extendInfo).toEqual({
+      BbDesktopBuildDate: buildDate,
+      BbDesktopCommit: commit,
+    });
+  });
+
+  it.each([
+    [{ BB_DESKTOP_COMMIT: "not-a-commit" }, "must be a Git commit SHA"],
+    [
+      { BB_DESKTOP_BUILD_DATE: "September 3, 2026" },
+      "must be an ISO 8601 UTC date",
+    ],
+  ])("rejects invalid desktop build identity", async (overrides, message) => {
+    const result = await runConfigScript(overrides);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain(message);
   });
 
   it("packages a Linux AppImage for x64", async () => {

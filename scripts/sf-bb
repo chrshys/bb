@@ -116,6 +116,23 @@ describe_version() {
   fi
 }
 
+describe_build_identity() {
+  local version="${1:?version is required}"
+  local commit="${2:-}"
+  local build_date="${3:-}"
+  local description
+  description="$(describe_version "${version}")"
+  if [[ -n "${commit}" && -n "${build_date}" ]]; then
+    printf '%s built from %s at %s' "${description}" "${commit}" "${build_date}"
+  elif [[ -n "${commit}" ]]; then
+    printf '%s built from %s' "${description}" "${commit}"
+  elif [[ -n "${build_date}" ]]; then
+    printf '%s built at %s' "${description}" "${build_date}"
+  else
+    printf '%s' "${description}"
+  fi
+}
+
 acquire_update_lock() {
   local lock_pid=""
   mkdir -p "${support_dir}"
@@ -328,6 +345,25 @@ read_bundle_version() {
   printf '%s' "${version}"
 }
 
+read_bundle_identity_value() {
+  local bundle_path="${1:?bundle path is required}"
+  local key="${2:?bundle identity key is required}"
+  local value
+  value="$(/usr/libexec/PlistBuddy -c "Print ${key}" "${bundle_path}/Contents/Info.plist" 2>/dev/null)" || return 1
+  case "${key}" in
+    BbDesktopCommit)
+      [[ "${value}" =~ ^[0-9A-Fa-f]{7,64}$ ]] || return 1
+      ;;
+    BbDesktopBuildDate)
+      [[ "${value}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$ ]] || return 1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  printf '%s' "${value}"
+}
+
 print_json_string_or_null() {
   local value="${1:-}"
   if [[ -n "${value}" ]]; then
@@ -347,7 +383,8 @@ show_version() {
   fi
 
   local installed_version=""
-  local feed_json feed_version
+  local installed_commit="" installed_build_date=""
+  local feed_json feed_version feed_build_json="" feed_build_version="" feed_channel="" feed_commit="" feed_build_date=""
   local running_json="" running_version=""
   local update_available=true
   local comparison
@@ -358,6 +395,8 @@ show_version() {
       echo "Could not parse the installed sf-bb version." >&2
       return 2
     fi
+    installed_commit="$(read_bundle_identity_value "${install_path}" BbDesktopCommit 2>/dev/null || true)"
+    installed_build_date="$(read_bundle_identity_value "${install_path}" BbDesktopBuildDate 2>/dev/null || true)"
   fi
 
   if ! feed_json="$(curl -fsSL --retry 5 --retry-all-errors "${release_feed_url}?cache-bust=$(date +%s)")"; then
@@ -367,6 +406,17 @@ show_version() {
   if ! feed_version="$(read_json_string "${feed_json}" version)" || ! compare_semver "${feed_version}" "${feed_version}" >/dev/null; then
     echo "Could not parse the sf-bb release feed version." >&2
     return 2
+  fi
+  feed_build_json="$(curl -fsSL --retry 2 --retry-all-errors "${release_feed_url%/desktop-version.json}/build-info.json?cache-bust=$(date +%s)" 2>/dev/null || true)"
+  if [[ -n "${feed_build_json}" ]]; then
+    feed_build_version="$(read_json_string "${feed_build_json}" version 2>/dev/null || true)"
+    feed_channel="$(read_json_string "${feed_build_json}" channel 2>/dev/null || true)"
+    feed_commit="$(read_json_string "${feed_build_json}" commit 2>/dev/null || true)"
+    feed_build_date="$(read_json_string "${feed_build_json}" buildDate 2>/dev/null || true)"
+    [[ "${feed_build_version}" == "${feed_version}" && "${feed_channel}" == "custom" ]] || feed_commit=""
+    [[ "${feed_build_version}" == "${feed_version}" && "${feed_channel}" == "custom" ]] || feed_build_date=""
+    [[ "${feed_commit}" =~ ^[0-9A-Fa-f]{7,64}$ ]] || feed_commit=""
+    [[ "${feed_build_date}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$ ]] || feed_build_date=""
   fi
 
   if lsof -nP -iTCP:38886 -sTCP:LISTEN >/dev/null 2>&1; then
@@ -399,8 +449,8 @@ show_version() {
     print_json_string_or_null "${running_version}"
     printf ',"updateAvailable":%s}\n' "${update_available}"
   else
-    printf 'Installed bundle: %s\n' "$(if [[ -n "${installed_version}" ]]; then printf 'sf-bb %s' "$(describe_version "${installed_version}")"; else printf 'not installed'; fi)"
-    printf 'Release feed: sf-bb %s\n' "${feed_version}"
+    printf 'Installed bundle: %s\n' "$(if [[ -n "${installed_version}" ]]; then printf 'sf-bb %s' "$(describe_build_identity "${installed_version}" "${installed_commit}" "${installed_build_date}")"; else printf 'not installed'; fi)"
+    printf 'Release feed: sf-bb %s\n' "$(describe_build_identity "${feed_version}" "${feed_commit}" "${feed_build_date}")"
     printf 'Running server: %s\n' "$(if [[ -n "${running_version}" ]]; then describe_version "${running_version}"; else printf 'not running'; fi)"
     if [[ -n "${running_version}" && "${running_version}" != "${installed_version}" ]]; then
       echo "Running server differs from the installed sf-bb bundle."
@@ -833,18 +883,20 @@ update_sf_bb() {
 }
 
 build_sf_bb() {
-  local base_version next_patch local_version short_sha
+  local base_version build_date full_sha next_patch local_version short_sha
   require_build_runtime
   cd "${repo_root}"
   pnpm install --frozen-lockfile
 
   base_version="$(node -p "require('./apps/desktop/package.json').version")"
   next_patch="$(node --input-type=module -e 'import { resolveVersionArgument } from "./scripts/lib/semver.mjs"; process.stdout.write(resolveVersionArgument({ argument: "--patch", currentVersion: process.argv[1], usage: "" }));' "${base_version}")"
+  full_sha="$(git rev-parse HEAD)"
   short_sha="$(git rev-parse --short=12 HEAD)"
   if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
     short_sha="${short_sha}-dirty"
   fi
   local_version="${next_patch}-local.$(date -u '+%Y%m%d%H%M%S').${short_sha}"
+  build_date="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   cleanup_version_backup_dir="$(mktemp -d "${TMPDIR:-/tmp}/sf-bb-version.XXXXXX")"
   cp -p apps/desktop/package.json "${cleanup_version_backup_dir}/desktop-package.json"
   cp -p packages/bb-app/package.json "${cleanup_version_backup_dir}/bb-app-package.json"
@@ -852,7 +904,9 @@ build_sf_bb() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   node scripts/bump-version.mjs "${local_version}"
-  BB_DESKTOP_RELEASE_CHANNEL=custom \
+  BB_DESKTOP_BUILD_DATE="${build_date}" \
+    BB_DESKTOP_COMMIT="${full_sha}" \
+    BB_DESKTOP_RELEASE_CHANNEL=custom \
     BB_DESKTOP_ADHOC_SIGNING=true \
     pnpm exec turbo run package --filter=@bb/desktop --output-logs=new-only
   [[ -d "${built_app}" ]] || {

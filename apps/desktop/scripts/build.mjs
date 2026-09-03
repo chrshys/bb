@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { build } from "esbuild";
+import { resolveDesktopBuildIdentity } from "./build-identity.mjs";
 import { resolveDesktopReleaseChannel } from "./desktop-release-channel.mjs";
 
 const packageRoot = process.cwd();
@@ -29,36 +29,6 @@ function readPackageVersion(packageJsonText, label) {
   return packageJson.version;
 }
 
-/**
- * The About panel reports the commit a build came from. A tarball checkout or
- * a shallow CI clone can have no usable git metadata, so an unknown commit is
- * reported as such rather than failing the build.
- */
-function readBuildCommit(env) {
-  const injected =
-    env.BB_DESKTOP_COMMIT?.trim() ?? env.GITHUB_SHA?.trim() ?? "";
-  if (injected.length > 0) {
-    return injected;
-  }
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: packageRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return "";
-  }
-}
-
-function readBuildDate(env) {
-  const injected = env.BB_DESKTOP_BUILD_DATE?.trim() ?? "";
-  if (injected.length > 0) {
-    return injected;
-  }
-  return new Date().toISOString();
-}
-
 await rm(distDir, { force: true, recursive: true });
 
 const desktopVersion = readPackageVersion(
@@ -70,8 +40,8 @@ const pluginSdkVersion = readPackageVersion(
   "packages/plugin-sdk/package.json",
 );
 const desktopReleaseChannel = resolveDesktopReleaseChannel(process.env);
-const desktopCommit = readBuildCommit(process.env);
-const desktopBuildDate = readBuildDate(process.env);
+const { buildDate: desktopBuildDate, commit: desktopCommit } =
+  resolveDesktopBuildIdentity(process.env, packageRoot);
 
 const commonOptions = {
   bundle: true,

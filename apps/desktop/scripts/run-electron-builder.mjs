@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveDesktopBuildIdentity } from "./build-identity.mjs";
 import {
   createDesktopReleaseConfig,
   createDesktopUpdateReleaseBaseUrl,
@@ -184,8 +185,14 @@ function resolveElectronBuilderConfig(baseConfig, env) {
   const releaseChannel = resolveDesktopReleaseChannel(env);
   const releaseConfig = createDesktopReleaseConfig(releaseChannel);
   const config = cloneJson(baseConfig);
+  const buildIdentity = resolveDesktopBuildIdentity(env, desktopPackageRoot);
   const mac = {
     ...config.mac,
+    extendInfo: {
+      ...config.mac?.extendInfo,
+      BbDesktopBuildDate: buildIdentity.buildDate,
+      BbDesktopCommit: buildIdentity.commit,
+    },
     icon: releaseConfig.macIconPath,
     notarize: signingPlan.notarizationEnabled,
   };

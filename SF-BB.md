@@ -176,6 +176,22 @@ and uninstall it with `pnpm sf-bb:schedule -- remove`. Reinstall the schedule
 after moving the checkout or standalone script because launchd stores its
 absolute path.
 
+## Versions and build identity
+
+Team releases use `<next-patch>-sf.<workflow-run-id>.<attempt>`. Local packages
+use `<next-patch>-local.<UTC-timestamp>.<commit>` and add `-dirty` when the
+checkout has changes. SemVer sorts `-local.` below `-sf.` for the same patch,
+while the updater's local-build guard prevents that ordering from replacing a
+development build without `--force`.
+
+Each release publishes `build-info.json` beside the desktop feed with its
+version, full commit, UTC build date, workflow URL, and channel. The same commit
+and build date are embedded as `BbDesktopCommit` and `BbDesktopBuildDate` in the
+application's `Info.plist`; `scripts/sf-bb version` shows both the installed and
+released identities. Immutable tag `sf-bb-v<version>` points at that commit, so
+`gh release view sf-bb-v<version>` and `git rev-list -n 1 sf-bb-v<version>` are
+the corresponding remote and local lookups.
+
 Build commands need the Node version in `.nvmrc`. The script checks
 `BB_CUSTOM_NODE_BIN` first, then asks Volta for the `.nvmrc` version, then uses
 a compatible Node already on `PATH`. `BB_CUSTOM_NODE_BIN` must name the bin

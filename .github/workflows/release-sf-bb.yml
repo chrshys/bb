@@ -101,6 +101,11 @@ jobs:
           node scripts/bump-version.mjs "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve build identity
+        run: |
+          echo "BB_DESKTOP_BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+          echo "BB_DESKTOP_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+
       - name: Validate signing configuration
         id: signing
         env:
@@ -164,6 +169,12 @@ jobs:
           BB_DESKTOP_RELEASE_CHANNEL: custom
         run: pnpm --dir apps/desktop run desktop:version-feed
 
+      - name: Generate build identity
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e 'const fs = require("node:fs"); const value = { version: process.env.VERSION, commit: process.env.BB_DESKTOP_COMMIT, buildDate: process.env.BB_DESKTOP_BUILD_DATE, runUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`, channel: "custom" }; fs.writeFileSync("apps/desktop/release/build-info.json", `${JSON.stringify(value, null, 2)}\n`);'
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -175,6 +186,7 @@ jobs:
             apps/desktop/release/*.blockmap
             apps/desktop/release/custom-mac.yml
             apps/desktop/release/desktop-version.json
+            apps/desktop/release/build-info.json
           if-no-files-found: error
 
       - name: Publish releases
@@ -192,6 +204,7 @@ jobs:
             ./*.blockmap
           )
           FEED_ASSETS=(
+            ./build-info.json
             ./custom-mac.yml
             ./desktop-version.json
           )
@@ -213,6 +226,15 @@ jobs:
           else
             RELEASE_NOTES="Ad-hoc signed sf-bb ${VERSION} for Apple Silicon Macs. On first launch, use System Settings > Privacy & Security > Open Anyway, or run xattr -dr com.apple.quarantine /Applications/sf-bb.app. Automatic installation is disabled until Developer ID signing is configured."
           fi
+          PREVIOUS_TAG="$(git describe --tags --match 'sf-bb-v*' --abbrev=0 HEAD^ 2>/dev/null || true)"
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            CHANGE_BASE="$PREVIOUS_TAG"
+            CHANGE_LOG="$(git log --oneline "${PREVIOUS_TAG}..HEAD")"
+          else
+            CHANGE_BASE="initial"
+            CHANGE_LOG="initial"
+          fi
+          RELEASE_NOTES="$(printf '%s\n\nCommit: %s\nChanges since %s:\n%s' "$RELEASE_NOTES" "$GITHUB_SHA" "$CHANGE_BASE" "$CHANGE_LOG")"
           git tag "$VERSION_TAG" "$GITHUB_SHA"
           git push origin "refs/tags/${VERSION_TAG}"
           gh release create "$VERSION_TAG" "${ASSETS[@]}" \
@@ -262,9 +284,14 @@ jobs:
         run: |
           set -euo pipefail
           FEED_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/desktop-version.json"
+          BUILD_INFO_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/build-info.json"
           FEED_FILE="$RUNNER_TEMP/published-desktop-version.json"
-          curl -fsSL --retry 5 --retry-all-errors --header 'Cache-Control: no-cache' "$FEED_URL" --output "$FEED_FILE"
+          BUILD_INFO_FILE="$RUNNER_TEMP/published-build-info.json"
+          CACHE_BUST="cache-bust=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          curl -fsSL --retry 5 --retry-all-errors "${FEED_URL}?${CACHE_BUST}" --output "$FEED_FILE"
+          curl -fsSL --retry 5 --retry-all-errors "${BUILD_INFO_URL}?${CACHE_BUST}" --output "$BUILD_INFO_FILE"
           ZIP_PATH="$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (value.version !== process.argv[2]) { throw new Error(`Published feed version ${value.version} does not match ${process.argv[2]}`); } if (typeof value.path !== "string" || value.path.length === 0) { throw new Error("Published feed has no zip path"); } process.stdout.write(value.path);' "$FEED_FILE" "$VERSION")"
+          node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); const expected = { version: process.argv[2], commit: process.env.GITHUB_SHA, buildDate: process.env.BB_DESKTOP_BUILD_DATE, runUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`, channel: "custom" }; for (const [key, expectedValue] of Object.entries(expected)) { if (value[key] !== expectedValue) { throw new Error(`Published build identity ${key}=${value[key]} does not match ${expectedValue}`); } }' "$BUILD_INFO_FILE" "$VERSION"
           curl -fsIL --retry 5 --retry-all-errors "https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-sf-bb/${ZIP_PATH}"
 
       - name: Summarize
