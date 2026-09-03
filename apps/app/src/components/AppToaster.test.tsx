@@ -10,12 +10,27 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
+import { POINTER_COARSE_QUERY } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import { AppToaster } from "./AppToaster";
 
 afterEach(() => {
   toast.dismiss();
   cleanup();
+  vi.restoreAllMocks();
 });
+
+function mockPointerCoarse(): void {
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    matches: query === POINTER_COARSE_QUERY,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }));
+}
 
 async function renderToaster(isCompactViewport: boolean) {
   render(
@@ -85,7 +100,9 @@ describe("AppToaster", () => {
     ["left flick", 200, 100, 120, 100, true],
     ["right flick", 120, 100, 200, 100, true],
     ["up flick", 160, 120, 160, 80, true],
-    ["downward drag", 160, 100, 160, 180, false],
+    ["down flick", 160, 100, 160, 180, true],
+    ["down-right diagonal flick", 120, 100, 180, 170, true],
+    ["down-left diagonal flick", 200, 100, 140, 170, true],
     ["short horizontal drag", 160, 100, 172, 100, false],
   ] as const)(
     "handles a compact viewport single-move %s",
@@ -134,6 +151,24 @@ describe("AppToaster", () => {
       }
     },
   );
+
+  it("handles touch flicks outside the compact viewport", async () => {
+    mockPointerCoarse();
+    await renderToaster(false);
+    const toastElement = document.querySelector<HTMLElement>(
+      "[data-sonner-toast]",
+    );
+    expect(toastElement).not.toBeNull();
+    if (toastElement === null) {
+      return;
+    }
+
+    flickToast(toastElement, 1);
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-sonner-toast]")).toBeNull();
+    });
+  });
 
   it("dismisses rapid stacked flicks by stable toast identity", async () => {
     const onDismissA = vi.fn();

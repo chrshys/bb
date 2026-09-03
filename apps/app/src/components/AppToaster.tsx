@@ -7,14 +7,15 @@ import {
   type ToastToDismiss,
 } from "sonner";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
+import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import { usePreferredTheme } from "@/hooks/useTheme";
 
 const COMPACT_TOAST_TOP_OFFSET =
   "calc(env(safe-area-inset-top) + var(--bb-app-chrome-row-height) + 16px)";
-const COMPACT_TOAST_SWIPE_DISTANCE_PX = 20;
-const COMPACT_TOAST_SWIPE_DIRECTIONS: NonNullable<
+const TOUCH_TOAST_SWIPE_DISTANCE_PX = 20;
+const TOUCH_TOAST_SWIPE_DIRECTIONS: NonNullable<
   ToasterProps["swipeDirections"]
-> = ["top", "left", "right"];
+> = ["top", "right", "bottom", "left"];
 
 type ToastPosition = NonNullable<ToasterProps["position"]>;
 type ToastSwipeDirection = NonNullable<ToasterProps["swipeDirections"]>[number];
@@ -27,7 +28,7 @@ interface ToastSwipeStart {
   y: number;
 }
 
-interface CompactToastSwipeFallbackOptions {
+interface TouchToastSwipeFallbackOptions {
   enabled: boolean;
   position: ToastPosition;
   swipeDirections: readonly ToastSwipeDirection[] | undefined;
@@ -124,12 +125,12 @@ function swipeDirection(
   return deltaY > 0 ? "bottom" : "top";
 }
 
-function useCompactToastSwipeFallback({
+function useTouchToastSwipeFallback({
   enabled,
   position,
   swipeDirections,
   toasterRef,
-}: CompactToastSwipeFallbackOptions): void {
+}: TouchToastSwipeFallbackOptions): void {
   const swipeStartRef = useRef<ToastSwipeStart | null>(null);
 
   useEffect(() => {
@@ -191,7 +192,7 @@ function useCompactToastSwipeFallback({
       if (
         direction === null ||
         !allowedDirections.has(direction) ||
-        distance < COMPACT_TOAST_SWIPE_DISTANCE_PX
+        distance < TOUCH_TOAST_SWIPE_DISTANCE_PX
       ) {
         return;
       }
@@ -253,13 +254,15 @@ export function AppToaster({
 }: ToasterProps) {
   const theme = usePreferredTheme();
   const isCompactViewport = useIsCompactViewport();
+  const isPointerCoarse = usePointerCoarse();
   const toasterRef = useRef<HTMLElement | null>(null);
   const renderedPosition = isCompactViewport ? "top-center" : position;
+  const touchSwipeEnabled = isCompactViewport || isPointerCoarse;
   const renderedSwipeDirections =
     swipeDirections ??
-    (isCompactViewport ? COMPACT_TOAST_SWIPE_DIRECTIONS : undefined);
-  useCompactToastSwipeFallback({
-    enabled: isCompactViewport,
+    (touchSwipeEnabled ? TOUCH_TOAST_SWIPE_DIRECTIONS : undefined);
+  useTouchToastSwipeFallback({
+    enabled: touchSwipeEnabled,
     position: renderedPosition,
     swipeDirections: renderedSwipeDirections,
     toasterRef,
