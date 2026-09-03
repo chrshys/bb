@@ -13,7 +13,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useCloseMobileSidebar,
-  useSidebar,
 } from "@/components/ui/sidebar.js";
 import { ProjectList } from "./ProjectList";
 import { PluginThreadList } from "./PluginThreadList";
@@ -86,8 +85,6 @@ export function AppSidebar({
     label: "New thread",
   });
   const closeOnMobile = useCloseMobileSidebar();
-  const { isCompactViewport, openMobile } = useSidebar();
-  const [compactCustomizeMode, setCompactCustomizeMode] = useState(false);
   const [desktopInfo] = useState(getBbDesktopInfo);
   const [threadShortcutKeysById, setThreadShortcutKeysById] = useState<
     ReadonlyMap<string, SidebarThreadShortcutPresentation>
@@ -174,13 +171,6 @@ export function AppSidebar({
   );
 
   const isHiddenHostedBody = mobileHosted?.hidden === true;
-  const isCompactCustomizeModeActive =
-    isCompactViewport && compactCustomizeMode;
-  useEffect(() => {
-    if (!isCompactViewport || !openMobile || isHiddenHostedBody) {
-      setCompactCustomizeMode(false);
-    }
-  }, [isCompactViewport, isHiddenHostedBody, openMobile]);
   const activateVisibleThreadShortcut = useCallback(
     (index: number) =>
       isHiddenHostedBody ? false : activateThreadShortcut(index),
@@ -238,8 +228,6 @@ export function AppSidebar({
         </div>
       ) : null}
       <SidebarNavigationRegion
-        compactCustomizeMode={isCompactCustomizeModeActive}
-        onCompactCustomizeModeChange={setCompactCustomizeMode}
         onNavigate={closeOnMobile}
         splitEnabled
         toolsRoutePath={toolsRoutePath}
@@ -247,23 +235,19 @@ export function AppSidebar({
         onNewChat={handleNewChat}
         onSearchThreads={closeOnMobile}
       />
-      {!isCompactCustomizeModeActive ? (
-        <>
-          <div
-            aria-hidden="true"
-            className="mx-2 my-2 shrink-0 border-t border-sidebar-border/25"
-            data-testid="app-sidebar-navigation-divider"
-          />
-          <SidebarContent>
-            <PluginThreadList
-              replacement={threadListReplacement}
-              original={originalThreadList}
-              searchQuery=""
-              onNavigate={closeOnMobile}
-            />
-          </SidebarContent>
-        </>
-      ) : null}
+      <div
+        aria-hidden="true"
+        className="mx-2 my-2 shrink-0 border-t border-sidebar-border/25"
+        data-testid="app-sidebar-navigation-divider"
+      />
+      <SidebarContent>
+        <PluginThreadList
+          replacement={threadListReplacement}
+          original={originalThreadList}
+          searchQuery=""
+          onNavigate={closeOnMobile}
+        />
+      </SidebarContent>
       <SidebarFooter className="relative">
         <OverflowFade placement="above" tone="sidebar" size="sm" />
         {}
