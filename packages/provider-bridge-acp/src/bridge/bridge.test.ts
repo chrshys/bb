@@ -630,6 +630,36 @@ describe("acp bridge", () => {
     });
   });
 
+  it("uses Cursor CLI variants as reasoning metadata for bare ACP models", async () => {
+    const modelListId = sendModelList({
+      dialectId: "cursor",
+      parameterizedModelPicker: true,
+      modelPickerPrimaryModels: ["default", "gemini-3.8-flash"],
+      modelLines: [
+        "auto - Auto (default)",
+        "gemini-3.8-flash-low - Gemini 3.8 Flash Low",
+        "gemini-3.8-flash-medium - Gemini 3.8 Flash Medium",
+        "gemini-3.8-flash-high - Gemini 3.8 Flash High",
+      ].join("\n"),
+    });
+
+    const result = (await waitForResponse(modelListId)).result as {
+      models: {
+        id: string;
+        supportedReasoningEfforts: { reasoningEffort: string }[];
+      }[];
+    };
+    expect(result.models.map((model) => model.id)).toEqual([
+      "default",
+      "gemini-3.8-flash",
+    ]);
+    expect(
+      result.models[1]?.supportedReasoningEfforts.map(
+        (effort) => effort.reasoningEffort,
+      ),
+    ).toEqual(["low", "medium", "high"]);
+  });
+
   it("discovers ACP-native models and per-model reasoning from session configOptions", async () => {
     const modelListId = sendModelList({
       envVars: {
@@ -2373,8 +2403,34 @@ describe("acp bridge", () => {
     expect(threadEventsOfType("thread/compacted")).toEqual([]);
   });
 
+  it.each([
+    { dialect: "generic", startArgs: {} },
+    { dialect: "OpenCode", startArgs: { dialectId: "opencode" } },
+  ])(
+    "does not apply OMP compaction prose to $dialect ACP",
+    async ({ startArgs }) => {
+      const { providerThreadId } = await startThread({
+        ...startArgs,
+        envVars: {
+          FAKE_ACP_COMPACT_AGENT_MESSAGE:
+            "The first compaction failed, but retry succeeded and the context is now smaller.",
+        },
+      });
+
+      const turnId = sendTurnRequest("turn/start", providerThreadId, {
+        input: compactCommandInput(),
+      });
+      expect((await waitForResponse(turnId)).error).toBeUndefined();
+
+      const completed = await waitForTurnCompleted();
+      expect(completed).toMatchObject({ status: "completed" });
+      expect(threadEventsOfType("thread/compacted")).toHaveLength(1);
+    },
+  );
+
   it("fails the compaction turn when the agent reports the failure in an end-turn message", async () => {
     const { providerThreadId } = await startThread({
+      dialectId: "omp",
       envVars: {
         FAKE_ACP_COMPACT_AGENT_MESSAGE:
           "Compaction failed: summary model rejected the request",
@@ -2398,6 +2454,7 @@ describe("acp bridge", () => {
 
   it("completes a no-op compaction turn without reporting a compacted context", async () => {
     const { providerThreadId } = await startThread({
+      dialectId: "omp",
       envVars: {
         FAKE_ACP_COMPACT_AGENT_MESSAGE:
           "Compaction failed: Nothing to compact (session too small)",
@@ -2421,6 +2478,7 @@ describe("acp bridge", () => {
 
   it("keeps classifying a no-op compaction when the agent rewords its prose", async () => {
     const { providerThreadId } = await startThread({
+      dialectId: "omp",
       envVars: {
         FAKE_ACP_COMPACT_AGENT_MESSAGE:
           "compaction failed: nothing to compact — the session is still small",
@@ -2445,6 +2503,7 @@ describe("acp bridge", () => {
 
   it("fails the compaction turn when the failure report is reworded or preceded by other text", async () => {
     const { providerThreadId } = await startThread({
+      dialectId: "omp",
       envVars: {
         FAKE_ACP_COMPACT_AGENT_MESSAGE:
           "Tried shrinking the context.\nCompaction failed: session is locked by another compaction",

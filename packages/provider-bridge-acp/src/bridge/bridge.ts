@@ -62,7 +62,11 @@ import {
   createAcpDeltaTranslator,
   type AcpDeltaTranslator,
 } from "../delta-translation.js";
-import { resolveAcpDialect, type AcpDialect } from "../dialect.js";
+import {
+  compactionOutcomeForEndTurn,
+  resolveAcpDialect,
+  type AcpDialect,
+} from "../dialect.js";
 import type { AcpMaintenanceDialect } from "./provider-maintenance.js";
 import {
   buildAcpPermissionInteractionPayload,
@@ -76,6 +80,7 @@ import {
   type AcpSessionParams,
   type AcpSkillRoot,
 } from "../session-params.js";
+import { buildCursorParameterizedModelCatalog } from "../cursor-model-selection.js";
 import {
   getAcpProviderHealth,
   getAcpProviderInstallationRun,
@@ -2081,20 +2086,6 @@ function runTurn(
   })();
 }
 
-const COMPACTION_FAILURE_PATTERN = /\bcompaction failed\b/i;
-const COMPACTION_NOOP_PATTERN = /\b(?:nothing to compact|already compacted)\b/i;
-
-function compactionOutcomeForEndTurn(
-  agentMessage: string,
-): Record<string, unknown> {
-  const text = agentMessage.trim();
-  if (!COMPACTION_FAILURE_PATTERN.test(text)) {
-    return { status: "completed" };
-  }
-  return COMPACTION_NOOP_PATTERN.test(text)
-    ? { status: "skipped", detail: text }
-    : { status: "failed", error: text };
-}
 function startCompaction(
   session: AcpThreadSession,
   pending: AcpPendingTurnInput,
@@ -2123,7 +2114,10 @@ function startCompaction(
     .then((result) => {
       finish(
         result.stopReason === "end_turn"
-          ? compactionOutcomeForEndTurn(session.compactionAgentMessage)
+          ? compactionOutcomeForEndTurn(
+              session.dialect,
+              session.compactionAgentMessage,
+            )
           : result.stopReason === "cancelled"
             ? { status: "interrupted" }
             : {
@@ -2299,15 +2293,20 @@ function decodeAcpBridgeJsonRpcRequest(raw: unknown): DecodedAcpBridgeRequest {
 async function handleModelList(
   id: string | number,
   params: AcpModelListParams,
+  dialectId: string | undefined,
 ): Promise<void> {
   const catalog = params.listCommand
     ? await loadAgentModelCatalog(params.listCommand)
     : null;
   if (catalog) {
+    const catalogModels =
+      params.parameterizedModelPicker && dialectId === "cursor"
+        ? buildCursorParameterizedModelCatalog(catalog.models)
+        : catalog.models;
     sendResult(
       id,
       splitPrimaryModels(
-        applyConfiguredReasoningToModels(catalog.models, {
+        applyConfiguredReasoningToModels(catalogModels, {
           reasoningCli: params.reasoningCli,
           nativeReasoning: params.nativeReasoning,
         }),
@@ -2447,6 +2446,7 @@ async function handleRequest(
           decodeLaunchSpec(request.params.providerOptions),
           modelPicker,
         ),
+        decodeDialectId(request.params.providerOptions),
       );
       return;
     }
