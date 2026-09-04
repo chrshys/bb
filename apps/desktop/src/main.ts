@@ -139,6 +139,10 @@ import {
 } from "./desktop-auto-update.js";
 import { mergeDesktopUpdateInfo } from "./desktop-update-info.js";
 import {
+  applySfBbPendingUpdate,
+  readSfBbPendingUpdateVersion,
+} from "./sf-bb-pending-update.js";
+import {
   BB_DESKTOP_CHECK_FOR_UPDATES_CHANNEL,
   BB_DESKTOP_GET_INFO_CHANNEL,
   BB_DESKTOP_INFO_CHANGED_CHANNEL,
@@ -442,8 +446,12 @@ function getCurrentDesktopInfo(): BbDesktopInfo | null {
   if (info === null) {
     return null;
   }
+  const currentInfo =
+    info.channel === "custom" && info.platform === "macos"
+      ? applySfBbPendingUpdate(info, readSfBbPendingUpdateVersion(homedir()))
+      : info;
   return {
-    ...info,
+    ...currentInfo,
     serverDaemonLogsAvailable: shouldEnableServerDaemonLogsMenu(),
   };
 }

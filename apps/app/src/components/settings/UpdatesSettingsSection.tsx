@@ -801,6 +801,15 @@ export function BbAppUpdateRows({
         <RowStateCaption state="failed">Download failed</RowStateCaption>,
       );
     }
+    if (!desktopInfo.selfUpdateEnabled && desktopInfo.pendingVersion !== null) {
+      return row(
+        name,
+        <RowStateControl state="restart-required" />,
+        <RowStateCaption state="restart-required">
+          Ready when idle
+        </RowStateCaption>,
+      );
+    }
     if (desktopInfo.updateAvailable) {
       if (!desktopInfo.selfUpdateEnabled) {
         return row(

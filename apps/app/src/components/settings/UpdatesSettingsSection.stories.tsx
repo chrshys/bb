@@ -429,6 +429,24 @@ export function UpdateStates() {
         </State>
 
         <State
+          name="sf-bb ready when idle"
+          note="The verified build is staged and will install after sf-bb becomes idle."
+        >
+          <StoryAppState>
+            <BbAppUpdateRows
+              systemVersion={undefined}
+              desktopInfo={{
+                ...SF_BB_UPDATE,
+                pendingVersion: SF_BB_UPDATE.latestVersion,
+              }}
+              isDesktop
+              onRelaunchDesktop={noop}
+              onRetryDesktop={noop}
+            />
+          </StoryAppState>
+        </State>
+
+        <State
           name="Downloaded — relaunch"
           note="The update is ready and needs one explicit relaunch."
         >

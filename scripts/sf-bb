@@ -11,6 +11,7 @@ deploy_log="${HOME}/Library/Logs/sf-bb-deploy.log"
 release_feed_url="https://github.com/chrshys/bb/releases/download/desktop-sf-bb/desktop-version.json"
 support_dir="${HOME}/Library/Application Support/sf-bb"
 pending_update_file="${support_dir}/pending-update"
+pending_update_info_file="${support_dir}/pending-update-info.json"
 update_lock_dir="${support_dir}/update.lock"
 update_log="${HOME}/Library/Logs/sf-bb-update.log"
 launch_agent_label="dev.bb.desktop.sf-bb.update"
@@ -564,25 +565,44 @@ read_pending_update_path() {
   IFS= read -r pending_path < "${pending_update_file}" || true
   if [[ ! "${pending_path}" =~ ^/Applications/\.sf-bb\.app\.update-[0-9]+-[0-9]+$ ]] || [[ ! -d "${pending_path}" ]]; then
     report_error "Discarding an invalid sf-bb pending-update record."
-    rm -f -- "${pending_update_file}"
+    clear_pending_update_record
     return 1
   fi
   printf '%s' "${pending_path}"
+}
+
+clear_pending_update_record() {
+  rm -f -- "${pending_update_file}" "${pending_update_info_file}"
 }
 
 clear_pending_update() {
   local expected_path="${1:?expected pending path is required}"
   local pending_path=""
   if pending_path="$(read_pending_update_path 2>/dev/null || true)" && [[ "${pending_path}" == "${expected_path}" ]]; then
-    rm -f -- "${pending_update_file}"
+    clear_pending_update_record
   fi
 }
 
 write_pending_update() {
   local staging_path="${1:?staging path is required}"
+  local version="${2:?version is required}"
+  local info_temp="${pending_update_info_file}.tmp.$$"
+  local path_temp="${pending_update_file}.tmp.$$"
+  local existing_path=""
+  [[ "${staging_path}" =~ ^/Applications/\.sf-bb\.app\.update-[0-9]+-[0-9]+$ ]] || return 1
+  compare_semver "${version}" "${version}" >/dev/null || return 1
   mkdir -p "${support_dir}"
   umask 077
-  printf '%s\n' "${staging_path}" > "${pending_update_file}"
+  printf '{"schemaVersion":1,"path":"%s","version":"%s"}\n' "${staging_path}" "${version}" > "${info_temp}"
+  mv "${info_temp}" "${pending_update_info_file}"
+  if [[ -f "${pending_update_file}" ]]; then
+    IFS= read -r existing_path < "${pending_update_file}" || true
+  fi
+  if [[ "${existing_path}" == "${staging_path}" ]]; then
+    return 0
+  fi
+  printf '%s\n' "${staging_path}" > "${path_temp}"
+  mv "${path_temp}" "${pending_update_file}"
 }
 
 max_age_seconds() {
@@ -809,7 +829,7 @@ update_sf_bb() {
     if [[ "${comparison}" != "1" ]]; then
       if [[ -n "${pending_path}" ]]; then
         rm -rf -- "${pending_path}"
-        rm -f -- "${pending_update_file}"
+        clear_pending_update_record
       fi
       announce "sf-bb ${installed_version} is already current."
       return 0
@@ -823,6 +843,7 @@ update_sf_bb() {
     fi
     if [[ "${pending_version}" == "${feed_version}" && "${force}" != "true" ]]; then
       if [[ "${when}" == "idle" ]]; then
+        write_pending_update "${pending_path}" "${feed_version}"
         announce "sf-bb ${feed_version} is already staged, waiting for idle."
         return 0
       fi
@@ -833,7 +854,7 @@ update_sf_bb() {
       return 0
     fi
     rm -rf -- "${pending_path}"
-    rm -f -- "${pending_update_file}"
+    clear_pending_update_record
   fi
 
   download_dir="$(mktemp -d "${TMPDIR:-/tmp}/sf-bb-update.XXXXXX")"
@@ -872,7 +893,7 @@ update_sf_bb() {
   xattr -dr com.apple.quarantine "${staging_path}" 2>/dev/null || true
 
   if [[ "${when}" == "idle" ]] && sf_bb_is_running; then
-    write_pending_update "${staging_path}"
+    write_pending_update "${staging_path}" "${feed_version}"
     cleanup_staging_path=""
     announce "Staged sf-bb ${feed_version}, waiting for idle."
     return 0

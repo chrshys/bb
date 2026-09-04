@@ -1473,6 +1473,39 @@ The canonical release summary.
     expect(openUrlInExternalBrowserMock).toHaveBeenCalledWith(releaseUrl);
   });
 
+  it("shows when an sf-bb update is staged for idle installation", () => {
+    const desktopInfo: BbDesktopInfo = {
+      applicationName: "sf-bb",
+      channel: "custom",
+      lastCheckedAt: null,
+      latestVersion: "0.41.1-sf.2.1",
+      pendingVersion: "0.41.1-sf.2.1",
+      platform: "macos",
+      releaseUrl: "https://github.com/chrshys/bb/releases/tag/desktop-sf-bb",
+      selfUpdateEnabled: false,
+      updateAvailable: true,
+      updateDownloaded: false,
+      version: "0.41.1-sf.1.1",
+    };
+    useDesktopUpdateInfoMock.mockReturnValue({
+      desktopApi: {} as BbDesktopApi,
+      desktopInfo,
+      isDesktop: true,
+    });
+    useUpdateInventoryMock.mockReturnValue(makeInventory({ desktopInfo }));
+
+    renderSection();
+
+    expect(screen.getByText("Ready when idle")).toBeDefined();
+    expect(screen.getByText("0.41.1-sf.2.1")).toBeDefined();
+    expect(screen.queryByText("pnpm sf-bb:update")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Update available · Open the release page in your browser",
+      }),
+    ).toBeNull();
+  });
+
   it("retries a failed desktop download through the desktop bridge", async () => {
     const desktopInfo: BbDesktopInfo = {
       applicationName: "bb",

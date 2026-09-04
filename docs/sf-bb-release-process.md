@@ -80,7 +80,9 @@ pnpm sf-bb:schedule -- status
 The first command exits 0 when the installed bundle is current, 1 when a newer
 release exists, and 2 when state cannot be read. The updater validates the
 feed, download size, SHA-512 digest, code signature, archive root, and bundle
-version before an atomic replacement.
+version before an atomic replacement. When a verified build is staged, the
+installed app shows **Ready when idle** in **Settings → Updates** until the
+update agent can safely install it.
 
 Check the running server and installed bundle independently:
 
