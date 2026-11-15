@@ -1359,6 +1359,26 @@ export interface PluginSidebarThreadActions {
   requestDelete(threadId: string): void;
 }
 
+export interface ExperimentalThreadMessageAppearance {
+  /** Opaque six-digit hex color. Invalid values restore the native background. */
+  humanMessageBackgroundColor: string;
+}
+
+export interface ExperimentalThreadMessageAppearanceRegistration {
+  id: string;
+  /**
+   * Runs once per mounted timeline in plugin context, isolated between panes.
+   * Return null while unavailable. Use hooks to subscribe to source refreshes.
+   * The first registration in deterministic slot order wins; null or
+   * invalid values do not fall through to another provider. Thread changes,
+   * removal and reload clear the prior value. Throws fall back to native colors.
+   * This presentation hint never changes author identity or approval policy.
+   */
+  useAppearance: (context: {
+    threadId: string;
+  }) => ExperimentalThreadMessageAppearance | null;
+}
+
 /**
  * Render a plugin component in the thread header's action row.
  *
@@ -2173,6 +2193,14 @@ export interface PluginAppSlots {
    * docs/api_to_audit.md for what to audit before the prefix drops.
    */
   experimental_threadList(registration: PluginThreadListRegistration): void;
+  /**
+   * Provide per-thread human message colors in native timelines and ThreadChat.
+   * The first registration wins; null, invalid hex and errors use native colors.
+   * Only explicit human presentation with a user initiator is eligible.
+   */
+  experimental_threadMessageAppearance(
+    registration: ExperimentalThreadMessageAppearanceRegistration,
+  ): void;
   /**
    * Render a component in the thread header's action row (see
    * {@link PluginThreadHeaderActionRegistration}). Experimental: see

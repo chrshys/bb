@@ -28,6 +28,7 @@ import type {
   PluginSidebarFooterActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
+  ExperimentalThreadMessageAppearanceRegistration,
   PluginThreadActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
   PluginThreadListRegistration,
@@ -354,6 +355,7 @@ export interface CollectedPluginAppRegistrations {
   experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  threadMessageAppearances: ExperimentalThreadMessageAppearanceRegistration[];
   threadActions: PluginThreadActionRegistration<unknown>[];
   browserToolbarActions: ExperimentalPluginBrowserToolbarActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];
@@ -479,6 +481,7 @@ export function collectPluginAppRegistrations(
     experimentalSidebarFooterItems: [],
     threadLists: [],
     threadHeaderActions: [],
+    threadMessageAppearances: [],
     threadActions: [],
     browserToolbarActions: [],
     fileOpeners: [],
@@ -508,6 +511,7 @@ export function collectPluginAppRegistrations(
     sidebarFooterItem: new Set<string>(),
     threadList: new Set<string>(),
     threadHeaderAction: new Set<string>(),
+    threadMessageAppearance: new Set<string>(),
     threadAction: new Set<string>(),
     browserToolbarAction: new Set<string>(),
     fileOpener: new Set<string>(),
@@ -779,6 +783,18 @@ export function collectPluginAppRegistrations(
             registration,
           ),
         );
+      },
+      experimental_threadMessageAppearance(registration) {
+        const kind = "slots.experimental_threadMessageAppearance";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.threadMessageAppearance, id);
+        if (typeof registration.useAppearance !== "function") {
+          throw new Error(`${kind}: "useAppearance" must be a function`);
+        }
+        collected.threadMessageAppearances.push({
+          id,
+          useAppearance: registration.useAppearance,
+        });
       },
       experimental_threadHeaderAction(registration) {
         const kind = "slots.experimental_threadHeaderAction";

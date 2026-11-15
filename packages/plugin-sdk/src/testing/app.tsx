@@ -69,6 +69,7 @@ import {
   type PluginSidebarThreadsState,
   type PluginSourceCodeRendererRegistration,
   type PluginThreadHeaderActionRegistration,
+  type ExperimentalThreadMessageAppearanceRegistration,
   type PluginThreadActionEntry,
   type PluginThreadActionRegistration,
   type PluginThreadActionRegistrationInfo,
@@ -1501,6 +1502,7 @@ export interface CapturedPluginApp {
   experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  threadMessageAppearances: ExperimentalThreadMessageAppearanceRegistration[];
   threadActions: PluginThreadActionRegistration<unknown>[];
   browserToolbarActions: ExperimentalPluginBrowserToolbarActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];

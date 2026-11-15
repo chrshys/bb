@@ -215,14 +215,19 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       },
       {
         id: "timeline-renderers",
-        title: "Timeline entry content",
+        title: "Timeline content and appearance",
         summary:
           "Add rich detail to the timeline entries your plugin creates. With this, a plugin can:",
         bullets: [
           "Draw custom content under each entry while bb keeps its header and controls",
+          "Color explicitly human-presented messages per thread while bb keeps rendering and controls",
+          "Use native colors for unknown authorship, invalid colors, missing or failed appearance providers",
           "Fall back to bb's default view if the plugin is off or crashes",
         ],
         apiSymbols: [
+          "ExperimentalThreadMessageAppearance",
+          "ExperimentalThreadMessageAppearanceRegistration",
+          "PluginAppSlots.experimental_threadMessageAppearance",
           "PluginTimelineRendererRegistration",
           "PluginTimelineRendererProps",
         ],

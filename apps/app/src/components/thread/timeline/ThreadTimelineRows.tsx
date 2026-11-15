@@ -987,6 +987,10 @@ const ConversationRowContent = memo(function ConversationRowContent({
       <ConversationMessageContent
         attachments={row.attachments}
         initiator={row.initiator}
+        humanMessagePresentation={
+          "humanMessagePresentation" in row &&
+          row.humanMessagePresentation === true
+        }
         mentions={row.mentions}
         mobileActionDisplay={mobileActionDisplay}
         onAddToChat={onSelectionAddToChat}

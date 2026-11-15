@@ -4083,3 +4083,27 @@ Stabilization requires exercising reconnect/reload, concurrent deduplication, ro
 `hosts.experimental_discoverRepos({ hostId })` asks the machine for git repositories under the user's home directory with local activity in the last 30 days, newest first, capped at 10. Each entry has `path`, `name`, `lastActivityAt`, `originUrl`, and `projectId` (the bb project already bound to that path on that machine, or null). `truncated` is true when the three-second walk budget ran out. The walk stops at each repository root, skips dot-directories, common build directories, scratch directories (`tmp`, `temp`, `tmp-*`, `Downloads`), linked worktrees, and submodules. The first-run setup guide and `bb project discover` use it. Host-daemon wire change: the `host.discover_repos` command (protocol 230).
 
 Stabilize after deciding whether depth, recency window, and limit should be caller options, and after exercising slow or network-mounted home directories and Windows hosts.
+
+## Thread message appearance
+
+`app.slots.experimental_threadMessageAppearance({ id, useAppearance })` mounts a
+plugin hook once per visible `ThreadTimelineSurface`, including SDK `ThreadChat`.
+The hook receives `{ threadId }` and returns
+`{ humanMessageBackgroundColor: "#RRGGBB" }` or null. The host validates opaque
+six-digit hex and chooses contrasting foreground colors. The first registration
+in deterministic slot order wins; absent, invalid, failed or removed providers
+restore native rendering. Each pane owns its hook state; thread changes and
+plugin reloads reset it. Providers own subscriptions and their cleanup.
+
+Core `ConversationMessageContent` consumes the same context and applies the
+background only to explicit native composer human presentation metadata with `initiator=user`.
+Unknown legacy authorship, agent and system messages retain native styling.
+Message rendering, attachments and actions remain native. No server/daemon wire
+changes belong to this frontend extension. CLI-authored plugin registrations use
+the same runtime; no additional color preference or setter is introduced.
+
+Stabilization requires validation of precedence, split panes, failed providers,
+reload and removal, thread changes, presentation metadata projection, and readable
+text, links, mentions, code and selection across light/dark themes and saturated
+colors. Review the hook/result contract and registration naming before removing
+the experimental prefix.

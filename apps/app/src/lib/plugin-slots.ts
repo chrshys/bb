@@ -18,6 +18,7 @@ import type {
   PluginSidebarFooterActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
+  ExperimentalThreadMessageAppearanceRegistration,
   PluginThreadActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
   PluginThreadListRegistration,
@@ -46,6 +47,7 @@ export interface PluginRegistrationSet {
   sidebarFooterActions: readonly PluginSidebarFooterActionRegistration[];
   experimentalSidebarFooterItems?: readonly CollectedExperimentalSidebarFooterItem[];
   threadLists?: readonly PluginThreadListRegistration[];
+  threadMessageAppearances?: readonly ExperimentalThreadMessageAppearanceRegistration[];
   threadHeaderActions?: readonly PluginThreadHeaderActionRegistration[];
   threadActions?: readonly PluginThreadActionRegistration<unknown>[];
   browserToolbarActions?: readonly ExperimentalPluginBrowserToolbarActionRegistration[];
@@ -87,6 +89,8 @@ export type PluginSidebarFooterItemSlot = CollectedSidebarFooterItem &
   PluginSlotBase;
 export interface PluginThreadListSlot
   extends PluginThreadListRegistration, PluginSlotBase {}
+export interface PluginThreadMessageAppearanceSlot
+  extends ExperimentalThreadMessageAppearanceRegistration, PluginSlotBase {}
 interface PluginThreadHeaderActionSlot
   extends PluginThreadHeaderActionRegistration, PluginSlotBase {}
 export interface PluginThreadActionSlot
@@ -126,6 +130,7 @@ export interface PluginSlotSnapshot {
   pendingInteractions: readonly PluginPendingInteractionSlot[];
   sidebarFooterItems: readonly PluginSidebarFooterItemSlot[];
   threadLists: readonly PluginThreadListSlot[];
+  threadMessageAppearances: readonly PluginThreadMessageAppearanceSlot[];
   threadHeaderActions: readonly PluginThreadHeaderActionSlot[];
   threadActions: readonly PluginThreadActionSlot[];
   browserToolbarActions: readonly PluginBrowserToolbarActionSlot[];
@@ -153,6 +158,7 @@ export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
   pendingInteractions: [],
   sidebarFooterItems: [],
   threadLists: [],
+  threadMessageAppearances: [],
   threadHeaderActions: [],
   threadActions: [],
   browserToolbarActions: [],
@@ -187,6 +193,7 @@ const SLOT_KINDS: readonly SlotKind[] = [
   "pendingInteractions",
   "sidebarFooterItems",
   "threadLists",
+  "threadMessageAppearances",
   "threadHeaderActions",
   "threadActions",
   "browserToolbarActions",
@@ -245,6 +252,7 @@ function flattenRegistrations(
     pendingInteractions: stamp(set.pendingInteractions),
     sidebarFooterItems: stamp<CollectedSidebarFooterItem>(sidebarFooterItems),
     threadLists: stamp(set.threadLists),
+    threadMessageAppearances: stamp(set.threadMessageAppearances),
     threadHeaderActions: stamp(set.threadHeaderActions),
     threadActions: stamp(set.threadActions),
     browserToolbarActions: stamp(set.browserToolbarActions),
