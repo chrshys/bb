@@ -37,6 +37,7 @@ function userRow(args: {
     createdAt: args.createdAt,
     kind: "conversation",
     role: "user",
+    humanMessagePresentation: false,
     initiator: "user",
     senderThreadId: null,
     systemMessageKind: "unlabeled",

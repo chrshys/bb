@@ -68,6 +68,7 @@ function userMessage(args: UserMessageArgs): EventProjectionUserMessage {
     ...messageBase(args),
     kind: "user",
     messageSeq: args.seq,
+    humanMessagePresentation: false,
     initiator: args.initiator ?? "user",
     senderThreadId: null,
     systemMessageKind: "unlabeled",

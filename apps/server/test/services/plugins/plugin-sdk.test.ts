@@ -27,6 +27,7 @@ import {
   seedPrimaryHost,
   seedProjectWithSource,
   seedThreadRuntimeState,
+  seedThread,
 } from "../../helpers/seed.js";
 import {
   reportQueuedCommandSuccess,
@@ -1042,6 +1043,43 @@ describe("plugin bb.sdk against a running server", () => {
         { whoami },
       );
       const callerSdk = requireApi(server.pluginService, "caller").sdk;
+      const { host } = seedHostSession(server.deps);
+      const { project } = seedProjectWithSource(server.deps, {
+        hostId: host.id,
+        path: "/tmp/plugin-system-send",
+      });
+      const environment = seedEnvironment(server.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/plugin-system-send",
+      });
+      const thread = seedThread(server.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+        status: "idle",
+      });
+      seedThreadRuntimeState(server.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "plugin-system-provider",
+      });
+      const sendSystem = () =>
+        callerSdk.threads.experimental_sendSystem({
+          threadId: thread.id,
+          input: [{ type: "text", text: "background", mentions: [] }],
+          mode: "queue-if-active",
+          sendAt: Date.now() + 60_000,
+        });
+      await expect(sendSystem()).resolves.toMatchObject({
+        delivery: "queued",
+        queuedMessage: {
+          initiator: "system",
+          senderThreadId: null,
+          humanMessagePresentation: false,
+        },
+      });
+
       const callWhoami = () =>
         callerSdk.plugins.callRpc({
           pluginId: "callee",
@@ -1085,6 +1123,7 @@ describe("plugin bb.sdk against a running server", () => {
 
       await server.pluginService.reload("caller");
       await expect(callWhoami()).rejects.toMatchObject({ status: 403 });
+      await expect(sendSystem()).rejects.toMatchObject({ status: 403 });
       await expect(
         requireApi(server.pluginService, "caller").sdk.plugins.callRpc({
           pluginId: "callee",

@@ -231,6 +231,9 @@ interface BuildAcceptedPromptHistoryEntryArgs {
 }
 
 interface BuildOptimisticUserMessageRowParams {
+  initiator: ThreadQueuedMessage["initiator"];
+  humanMessagePresentation: boolean;
+  senderThreadId: string | null;
   createdAt: number;
   input: SendThreadMessageMutationRequest["input"];
   mode: SendThreadMessageMutationRequest["mode"];
@@ -651,6 +654,9 @@ function requestWillOptimisticallyQueue(
 }
 
 function buildOptimisticUserMessageRow({
+  initiator,
+  humanMessagePresentation,
+  senderThreadId,
   createdAt,
   input,
   mode,
@@ -692,8 +698,9 @@ function buildOptimisticUserMessageRow({
     text,
     mentions: [],
     attachments: timelineAttachments,
-    initiator: "user",
-    senderThreadId: null,
+    humanMessagePresentation: humanMessagePresentation && initiator === "user",
+    initiator,
+    senderThreadId,
     systemMessageKind: "unlabeled",
     systemMessageSubject: null,
     turnRequest: {
@@ -900,8 +907,9 @@ export function applyCreateThreadResult({
   const cachedHostId =
     environmentId === null
       ? null
-      : (queryClient.getQueryData<Environment>(environmentQueryKey(environmentId))
-          ?.hostId ?? null);
+      : (queryClient.getQueryData<Environment>(
+          environmentQueryKey(environmentId),
+        )?.hostId ?? null);
   const selectedHostId =
     request.environment.type === "provider" &&
     request.environment.machine?.type === "existing"
@@ -979,6 +987,9 @@ export async function beginSendThreadMessageTransaction({
   const optimisticRow = buildOptimisticUserMessageRow({
     createdAt: optimisticCreatedAt,
     input: request.input,
+    initiator: request.senderThreadId === undefined ? "user" : "agent",
+    humanMessagePresentation: request.senderThreadId === undefined,
+    senderThreadId: request.senderThreadId ?? null,
     mode: request.mode,
     threadId: request.id,
     threadStatus: previousThread?.status ?? null,
@@ -1093,6 +1104,9 @@ export function applySendThreadMessageSuccess({
         buildOptimisticUserMessageRow({
           createdAt: optimisticCreatedAt,
           input: request.input,
+          initiator: request.senderThreadId === undefined ? "user" : "agent",
+          humanMessagePresentation: request.senderThreadId === undefined,
+          senderThreadId: request.senderThreadId ?? null,
           mode: request.mode,
           threadId: request.id,
           threadStatus: transaction.previousThreadStatus,
@@ -1355,6 +1369,9 @@ export async function beginSendQueuedMessageTransaction({
   const optimisticRow = buildOptimisticUserMessageRow({
     createdAt: optimisticCreatedAt,
     input: queuedMessage.content,
+    initiator: queuedMessage.initiator,
+    humanMessagePresentation: queuedMessage.humanMessagePresentation === true,
+    senderThreadId: queuedMessage.senderThreadId,
     mode: request.mode,
     threadId: request.id,
     threadStatus: previousThread?.status ?? null,

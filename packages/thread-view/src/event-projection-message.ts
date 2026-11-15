@@ -103,6 +103,7 @@ export interface EventProjectionUserMessage extends EventProjectionMessageBase {
   messageSeq: number;
   initiator: ThreadTurnInitiator;
   senderThreadId: string | null;
+  humanMessagePresentation: boolean;
   systemMessageKind: SystemMessageKind;
   systemMessageSubject: SystemMessageSubject | null;
   turnRequest: EventProjectionTurnRequest;

@@ -89,6 +89,7 @@ type SendThreadMessagePayload = SendMessageRequest & {
 };
 
 interface SendThreadMessageArgs {
+  systemInitiated?: boolean;
   beforeAppendInTransaction?: SendThreadMessageTransactionPreflight;
   /**
    * Present only when this send re-submits a failed turn. Marks the turn event
@@ -145,6 +146,7 @@ interface SendThreadMessageQueueRequest {
 }
 
 interface AppendAndQueueSendThreadMessageArgs {
+  humanMessagePresentation?: boolean;
   /** Retry provenance; absent for an original dispatch. */
   retryOf?: TurnRequestRetryMarker;
   beforeAppendInTransaction?: SendThreadMessageTransactionPreflight;
@@ -403,6 +405,7 @@ function appendAndQueueSendThreadMessageInTransaction({
   db,
   environmentId,
   execution,
+  humanMessagePresentation,
   initiator,
   input,
   inputGroups,
@@ -429,6 +432,7 @@ function appendAndQueueSendThreadMessageInTransaction({
             ...(inputGroups !== undefined ? { inputGroups } : {}),
             execution,
             initiator,
+            humanMessagePresentation,
             senderThreadId,
             requestMethod: "turn/start",
             source: "tell",
@@ -558,6 +562,7 @@ async function sendThreadMessageWithoutContextClear(
   // however many times the provider happened to be rate limited.
   const { initiator } = resolveDispatchAuthor({
     retrying: args.retryOf !== undefined,
+    systemInitiated: args.systemInitiated,
     senderThreadId,
     startedOnBehalfOf: null,
   });
@@ -604,6 +609,7 @@ async function sendThreadMessageWithoutContextClear(
       environment,
       execution,
       initiator,
+      humanMessagePresentation: payload.humanMessagePresentation,
       input,
       inputGroups,
       senderThreadId,
@@ -684,6 +690,7 @@ async function sendThreadMessageWithoutContextClear(
       environmentId: thread.environmentId,
       execution,
       initiator,
+      humanMessagePresentation: payload.humanMessagePresentation,
       input,
       inputGroups,
       queueInTransaction: ({ tx }) => {
@@ -777,6 +784,7 @@ async function sendThreadMessageWithoutContextClear(
     environmentId: thread.environmentId,
     execution,
     initiator,
+    humanMessagePresentation: payload.humanMessagePresentation,
     input,
     inputGroups,
     queueInTransaction: () => {

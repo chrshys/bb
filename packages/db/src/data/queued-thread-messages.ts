@@ -57,6 +57,8 @@ export interface CreateQueuedThreadMessageInput {
   threadId: string;
   content: PromptInput[];
   senderThreadId?: string | null;
+  humanMessagePresentation?: boolean;
+  systemInitiated?: boolean;
   /**
    * How the dispatch this row is queued from was requested, and the plugin
    * that requested it, so a drained re-attempt carries the provenance its
@@ -367,6 +369,7 @@ function queuedMessageGroupingEnvelopeMatches(
   return (
     firstQueuedMessage !== null &&
     queuedMessage.senderThreadId === firstQueuedMessage.senderThreadId &&
+    queuedMessage.systemInitiated === firstQueuedMessage.systemInitiated &&
     queuedMessage.model === firstQueuedMessage.model &&
     queuedMessage.reasoningLevel === firstQueuedMessage.reasoningLevel &&
     queuedMessage.permissionMode === firstQueuedMessage.permissionMode &&
@@ -558,7 +561,8 @@ function applyQueuedThreadMessageGroupBoundary(
     const groupedMessages = queuedMessages.slice(0, boundaryIndex + 1);
     const hasMixedSender = groupedMessages.some(
       (queuedMessage) =>
-        queuedMessage.senderThreadId !== firstQueuedMessage?.senderThreadId,
+        queuedMessage.senderThreadId !== firstQueuedMessage?.senderThreadId ||
+        queuedMessage.systemInitiated !== firstQueuedMessage?.systemInitiated,
     );
     if (hasMixedSender) {
       return { kind: "invalid_sender" };
@@ -648,6 +652,8 @@ export function createQueuedThreadMessageInTransaction(
       threadId: input.threadId,
       content: JSON.stringify(input.content),
       senderThreadId: input.senderThreadId ?? null,
+      humanMessagePresentation: input.humanMessagePresentation ?? null,
+      systemInitiated: input.systemInitiated ?? false,
       origin: input.origin ?? null,
       originPluginId: input.originPluginId ?? null,
       requestedByInitiator: input.requestedBy?.initiator ?? null,

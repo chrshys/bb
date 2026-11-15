@@ -62,6 +62,8 @@ export interface SettleQueueRowArgs {
 
 /** The message a queued row will carry, as the queueing site supplies it. */
 export interface QueuedDispatchMessage {
+  humanMessagePresentation?: boolean;
+  systemInitiated?: boolean;
   input: PromptInput[];
   execution: ResolvedThreadExecutionOptions;
   senderThreadId: string | null;
@@ -125,6 +127,8 @@ export function recordQueuedMessageWait(
           threadId: args.thread.id,
           content: args.message.input,
           senderThreadId: args.message.senderThreadId,
+          humanMessagePresentation: args.message.humanMessagePresentation,
+          systemInitiated: args.message.systemInitiated,
           origin: args.message.origin,
           originPluginId: args.message.originPluginId,
           requestedBy: args.message.requestedBy,

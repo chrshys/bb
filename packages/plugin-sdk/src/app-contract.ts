@@ -3165,6 +3165,8 @@ export interface ExperimentalPermissionModePickerProps {
  * composer props.
  */
 export interface NewThreadRequest {
+  /** Native composer presentation intent; not authenticated identity or permission authority. Forward unchanged to spawn. */
+  humanMessagePresentation?: boolean;
   /**
    * The selected project id. Choosing "Don't work in a project" submits BB's
    * personal-project id (not `null`) together with a `personal` workspace

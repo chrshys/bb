@@ -138,6 +138,7 @@ function buildOptimisticUserRow(id: string): TimelineRow {
     createdAt: 0,
     kind: "conversation",
     role: "user",
+    humanMessagePresentation: false,
     initiator: "user",
     senderThreadId: null,
     systemMessageKind: "unlabeled",
@@ -252,6 +253,7 @@ function conversationRowFromStep(
     return {
       ...base,
       role: "user",
+      humanMessagePresentation: false,
       initiator: "user",
       senderThreadId: null,
       systemMessageKind: "unlabeled",
@@ -370,6 +372,7 @@ function AssistantContentStreaming({
     createdAt: 0,
     kind: "conversation",
     role: "user",
+    humanMessagePresentation: false,
     initiator: "user",
     mentions: [],
     senderThreadId: null,

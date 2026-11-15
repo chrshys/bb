@@ -123,6 +123,7 @@ function makeUserRow(
     text: "hello",
     mentions: [],
     attachments: null,
+    humanMessagePresentation: false,
     initiator: "user",
     senderThreadId: null,
     systemMessageKind: "unlabeled",

@@ -90,6 +90,7 @@ export const turnRequestEventDataSchema = z.object({
   source: z.enum(["spawn", "tell"]),
   initiator: threadTurnInitiatorSchema,
   senderThreadId: z.string().nullable(),
+  humanMessagePresentation: z.boolean().optional(),
   systemMessageKind: systemMessageKindSchema.optional(),
   systemMessageSubject: systemMessageSubjectSchema.nullable().optional(),
   input: z.array(promptInputSchema),

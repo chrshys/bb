@@ -1,3 +1,11 @@
+import { Hono } from "hono";
+import { threadTimelineResponseSchema } from "@bb/server-contract";
+import { registerThreadActionRoutes } from "../../src/routes/threads/actions.js";
+import {
+  createPluginRpcCallerRegistry,
+  PLUGIN_RPC_CALLER_HEADER,
+  PLUGIN_SYSTEM_SEND_HEADER,
+} from "../../src/services/plugins/plugin-rpc-caller.js";
 import {
   createQueuedThreadMessage,
   getThread,
@@ -1345,6 +1353,308 @@ describe("message.dispatch hooks on the queue drain", () => {
       expect(
         listQueuedThreadCommands(harness, "turn.submit", thread.id),
       ).toEqual([]);
+    });
+  });
+});
+
+describe("message presentation provenance", () => {
+  it.each([false, true])(
+    "preserves plugin-hosted composer start intent with scheduled=%s",
+    async (scheduled) => {
+      await withTestHarness(async (harness) => {
+        const { environment, project } = seedDispatchFixture(
+          harness,
+          "host-composer-start",
+        );
+        const thread = await createThreadFromRequest(harness.deps, {
+          environment: { type: "reuse", environmentId: environment.id },
+          input: [
+            ...textInput("composer start"),
+            {
+              type: "text",
+              text: "plugin context",
+              mentions: [],
+              visibility: "agent-only",
+            },
+          ],
+          humanMessagePresentation: true,
+          origin: "plugin",
+          originPluginId: "test-composer",
+          projectId: project.id,
+          providerId: "codex",
+          startedOnBehalfOf: null,
+          ...(scheduled ? { sendAt: Date.now() + 60_000 } : {}),
+        });
+        if (scheduled) {
+          const queued = onlyQueuedRow(harness, thread.id);
+          expect(queued.humanMessagePresentation).toBe(true);
+          await sendQueuedMessage(harness.deps, {
+            threadId: thread.id,
+            queuedMessageId: queued.id,
+            mode: "auto",
+            claimPolicy: { kind: "explicit-send" },
+          });
+        }
+        const timeline = threadTimelineResponseSchema.parse(
+          await (
+            await harness.app.request(`/api/v1/threads/${thread.id}/timeline`)
+          ).json(),
+        );
+        expect(
+          timeline.rows.find(
+            (row) =>
+              row.kind === "conversation" &&
+              row.role === "user" &&
+              row.text === "composer start",
+          ),
+        ).toMatchObject({ humanMessagePresentation: true, initiator: "user" });
+      });
+    },
+  );
+
+  it.each([
+    { name: "composer", human: true, agent: false, expected: true },
+    { name: "generic sender", human: undefined, agent: false, expected: false },
+    {
+      name: "agent declaring presentation",
+      human: true,
+      agent: true,
+      expected: false,
+    },
+  ])(
+    "preserves $name through immediate and scheduled native sends",
+    async ({ human, agent, expected }) => {
+      await withTestHarness(async (harness) => {
+        for (const scheduled of [false, true]) {
+          const { thread, project, environment } = seedRunnableThread(harness, {
+            hostId: `host-provenance-${scheduled}`,
+            status: "idle",
+          });
+          const sender = agent
+            ? seedThread(harness.deps, {
+                projectId: project.id,
+                environmentId: environment.id,
+              })
+            : null;
+          const response = await harness.app.request(
+            `/api/v1/threads/${thread.id}/send`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                input: textInput("presentation input"),
+                mode: "auto",
+                humanMessagePresentation: human,
+                senderThreadId: sender?.id,
+                ...(scheduled ? { sendAt: Date.now() + 60_000 } : {}),
+              }),
+            },
+          );
+          expect(response.status).toBe(200);
+          if (scheduled) {
+            const queued = onlyQueuedRow(harness, thread.id);
+            expect(queued.humanMessagePresentation).toBe(expected);
+            await sendQueuedMessage(harness.deps, {
+              threadId: thread.id,
+              queuedMessageId: queued.id,
+              mode: "auto",
+              claimPolicy: { kind: "explicit-send" },
+            });
+          }
+          const timelineResponse = await harness.app.request(
+            `/api/v1/threads/${thread.id}/timeline`,
+          );
+          expect(timelineResponse.status).toBe(200);
+          const timeline = threadTimelineResponseSchema.parse(
+            await timelineResponse.json(),
+          );
+          const message = timeline.rows.find(
+            (row) =>
+              row.kind === "conversation" &&
+              row.role === "user" &&
+              row.text.includes("presentation input"),
+          );
+          expect(message).toMatchObject({
+            humanMessagePresentation: expected,
+            initiator: agent ? "agent" : "user",
+          });
+        }
+      });
+    },
+  );
+
+  it.each([false, true])(
+    "requires a live plugin credential and preserves system policy with scheduled=%s",
+    async (scheduled) => {
+      await withTestHarness(async (harness) => {
+        const callers = createPluginRpcCallerRegistry();
+        const credential = callers.issue("background-test");
+        const app = new Hono();
+        app.onError((error) =>
+          error instanceof ApiError
+            ? error.toResponse()
+            : new Response(String(error), { status: 500 }),
+        );
+        registerThreadActionRoutes(app, harness.deps, {
+          resolveRpcCaller: callers.resolve,
+        });
+        const { thread } = seedRunnableThread(harness, {
+          hostId: "host-system-provenance",
+          status: "idle",
+        });
+        const send = (token: string | undefined, extra: object = {}) =>
+          app.request(`/threads/${thread.id}/send`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              [PLUGIN_SYSTEM_SEND_HEADER]: "true",
+              ...(token === undefined
+                ? {}
+                : { [PLUGIN_RPC_CALLER_HEADER]: token }),
+            },
+            body: JSON.stringify({
+              input: textInput("background input"),
+              mode: "auto",
+              permissionMode: "auto",
+              ...(scheduled ? { sendAt: Date.now() + 60_000 } : {}),
+              ...extra,
+            }),
+          });
+        expect((await send(undefined)).status).toBe(403);
+        expect((await send("forged")).status).toBe(403);
+        expect(
+          (await send(credential.token, { humanMessagePresentation: true }))
+            .status,
+        ).toBe(400);
+        expect(
+          (await send(credential.token, { senderThreadId: thread.id })).status,
+        ).toBe(400);
+        expect((await send(credential.token)).status).toBe(200);
+        const queued = scheduled ? onlyQueuedRow(harness, thread.id) : null;
+        if (queued)
+          expect(queued).toMatchObject({
+            initiator: "system",
+            humanMessagePresentation: false,
+            senderThreadId: null,
+          });
+        credential.revoke();
+        expect((await send(credential.token)).status).toBe(403);
+        if (queued)
+          await sendQueuedMessage(harness.deps, {
+            threadId: thread.id,
+            queuedMessageId: queued.id,
+            mode: "auto",
+            claimPolicy: { kind: "explicit-send" },
+          });
+        const timelineResponse = await harness.app.request(
+          `/api/v1/threads/${thread.id}/timeline`,
+        );
+        const timeline = threadTimelineResponseSchema.parse(
+          await timelineResponse.json(),
+        );
+        expect(
+          timeline.rows.find(
+            (row) =>
+              row.kind === "conversation" &&
+              row.role === "user" &&
+              row.text === "background input",
+          ),
+        ).toMatchObject({
+          initiator: "system",
+          humanMessagePresentation: false,
+        });
+        const command = listQueuedThreadCommands(
+          harness,
+          "turn.submit",
+          thread.id,
+        ).at(-1);
+        expect(command).toMatchObject({
+          options: { permissionEscalation: "deny" },
+        });
+      });
+    },
+  );
+
+  it("keeps mixed human and undeclared queued groups neutral and refuses system grouping", async () => {
+    await withTestHarness(async (harness) => {
+      const { thread } = seedRunnableThread(harness, {
+        hostId: "host-mixed-presentation",
+        status: "idle",
+      });
+      for (const humanMessagePresentation of [true, undefined]) {
+        await acceptThreadSendRequest(harness.deps, {
+          thread,
+          payload: {
+            input: textInput("group input"),
+            mode: "auto",
+            humanMessagePresentation,
+            sendAt: Date.now() + 60_000,
+          },
+        });
+      }
+      const rows = listQueuedThreadMessages(harness.db, thread.id);
+      expect(
+        setQueuedThreadMessageGroupBoundary({
+          db: harness.db,
+          notifier: harness.deps.hub,
+          threadId: thread.id,
+          groupBoundaryQueuedMessageId: rows[1]!.id,
+          expectedGroupedPrefixQueuedMessageIds: rows.map((row) => row.id),
+        }).kind,
+      ).toBe("updated");
+      await sendQueuedMessage(harness.deps, {
+        threadId: thread.id,
+        queuedMessageId: rows[0]!.id,
+        mode: "auto",
+        claimPolicy: { kind: "explicit-send" },
+      });
+      const timeline = threadTimelineResponseSchema.parse(
+        await (
+          await harness.app.request(`/api/v1/threads/${thread.id}/timeline`)
+        ).json(),
+      );
+      const messages = timeline.rows.filter(
+        (row) =>
+          row.kind === "conversation" &&
+          row.role === "user" &&
+          row.text === "group input",
+      );
+      expect(messages).toHaveLength(2);
+      expect(messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ humanMessagePresentation: false }),
+        ]),
+      );
+      expect(
+        messages.every(
+          (row) =>
+            row.kind === "conversation" &&
+            row.role === "user" &&
+            !row.humanMessagePresentation,
+        ),
+      ).toBe(true);
+      for (const systemInitiated of [false, true]) {
+        await acceptThreadSendRequest(harness.deps, {
+          thread: getThread(harness.db, thread.id)!,
+          systemInitiated,
+          payload: {
+            input: textInput("separate input"),
+            mode: "queue-if-active",
+            humanMessagePresentation: !systemInitiated,
+            sendAt: Date.now() + 60_000,
+          },
+        });
+      }
+      const separate = listQueuedThreadMessages(harness.db, thread.id);
+      expect(
+        setQueuedThreadMessageGroupBoundary({
+          db: harness.db,
+          notifier: harness.deps.hub,
+          threadId: thread.id,
+          groupBoundaryQueuedMessageId: separate[1]!.id,
+          expectedGroupedPrefixQueuedMessageIds: separate.map((row) => row.id),
+        }).kind,
+      ).toBe("invalid_sender");
     });
   });
 });

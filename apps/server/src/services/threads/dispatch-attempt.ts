@@ -226,6 +226,7 @@ export type DispatchAttemptSource =
     };
 
 export interface DispatchAttemptArgs {
+  systemInitiated?: boolean;
   thread: Thread;
   payload: SendMessageRequest & { inputGroups?: PromptInput[][] };
   source: DispatchAttemptSource;
@@ -349,6 +350,7 @@ async function runDispatchAttempt(
         };
   const author = resolveDispatchAuthor({
     retrying: args.retryOf !== undefined,
+    systemInitiated: args.systemInitiated,
     senderThreadId,
     startedOnBehalfOf: args.startedOnBehalfOf,
   });
@@ -368,6 +370,8 @@ async function runDispatchAttempt(
     input: payload.input,
     execution,
     senderThreadId,
+    systemInitiated: args.systemInitiated,
+    humanMessagePresentation: payload.humanMessagePresentation,
     origin: args.origin,
     originPluginId: args.originPluginId,
     requestedBy: args.startedOnBehalfOf,
@@ -513,6 +517,7 @@ async function runDispatchAttempt(
       admitted.value = await admitPendingThread(deps, {
         claimed,
         payload: resolvedPayload,
+        systemInitiated: args.systemInitiated,
         respectManualStopPause,
         startContext: args.startContext ?? retryStartContext,
         thread,
@@ -612,6 +617,7 @@ async function runDispatchAttempt(
       payload: resolvedPayload,
       thread,
       trigger: args.trigger,
+      systemInitiated: args.systemInitiated,
       ...(args.retryOf !== undefined ? { retryOf: args.retryOf } : {}),
       beforeAppendInTransaction: ({ tx }) => {
         if (getThread(tx, thread.id)?.status !== thread.status) {
@@ -689,6 +695,7 @@ function consumeClaimedRows(
 }
 
 interface AdmitPendingThreadArgs {
+  systemInitiated?: boolean;
   claimed: ClaimedQueuedThreadMessageRow[] | null;
   payload: SendMessageRequest & { inputGroups?: PromptInput[][] };
   respectManualStopPause: boolean;
@@ -783,6 +790,8 @@ async function admitPendingThread(
             ? {}
             : { providerInput: startContext.providerInput }),
           startedOnBehalfOf: startContext.startedOnBehalfOf,
+          humanMessagePresentation: args.payload.humanMessagePresentation,
+          systemInitiated: args.systemInitiated,
           titleProvided: startContext.titleProvided,
         });
         return starting;

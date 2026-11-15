@@ -33,6 +33,7 @@ interface DispatchTurnDuringReprovisionArgs {
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
   inputGroups?: PromptInput[][];
+  humanMessagePresentation?: boolean;
   senderThreadId: string | null;
   systemMessageKind?: SystemMessageKind;
   systemMessageSubject?: SystemMessageSubject | null;
@@ -83,6 +84,7 @@ export async function dispatchTurnDuringReprovision(
       environment: args.environment,
       execution: args.execution,
       initiator: args.initiator,
+      humanMessagePresentation: args.humanMessagePresentation,
       input: args.input,
       inputGroups: args.inputGroups,
       senderThreadId: args.senderThreadId,

@@ -347,6 +347,7 @@ function wrapSdkForPlugin(
   sdk: BbSdk,
   pluginId: string,
   rpcCallerSdk: BbSdk,
+  systemSendSdk: BbSdk,
 ): PluginBbSdk {
   return {
     ...sdk,
@@ -358,6 +359,9 @@ function wrapSdkForPlugin(
     },
     threads: {
       ...sdk.threads,
+      experimental_sendSystem(args) {
+        return systemSendSdk.threads.send(args);
+      },
       async getPluginMetadata(
         args: Omit<ThreadPluginMetadataArgs, "pluginId"> & {
           pluginId?: string;
@@ -1360,6 +1364,11 @@ export function createPluginApi(options: {
         createPluginRpcCallerSdk({
           baseUrl: loopbackBaseUrl,
           token: rpcCaller.token,
+        }),
+        createPluginRpcCallerSdk({
+          baseUrl: loopbackBaseUrl,
+          token: rpcCaller.token,
+          systemSend: true,
         }),
       );
       return wrappedSdk;

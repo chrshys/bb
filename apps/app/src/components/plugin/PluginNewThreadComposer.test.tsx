@@ -948,7 +948,10 @@ describe("PluginNewThreadComposer seeding", () => {
     await submit();
 
     expect(submitted).toHaveLength(1);
-    expect(submitted[0]).toEqual(STORED_REQUEST);
+    expect(submitted[0]).toEqual({
+      ...STORED_REQUEST,
+      humanMessagePresentation: true,
+    });
     await waitFor(() => {
       expect(latestPromptBoxProps().value).toBe("");
     });
@@ -1126,6 +1129,7 @@ describe("PluginNewThreadComposer seeding", () => {
     expect(submitted).toEqual([
       {
         ...STORED_REQUEST,
+        humanMessagePresentation: true,
         input: [{ type: "text", text: "Background transcript", mentions: [] }],
       },
     ]);
@@ -1315,6 +1319,7 @@ describe("PluginNewThreadComposer seeding", () => {
     expect(submitted).toHaveLength(1);
     expect(submitted[0]).toEqual({
       ...otherRecord,
+      humanMessagePresentation: true,
       environment: {
         type: "provider",
         environmentProviderId: "project-checkout",
@@ -1349,7 +1354,10 @@ describe("PluginNewThreadComposer seeding", () => {
     await submit();
 
     expect(submitted).toHaveLength(1);
-    expect(submitted[0]).toEqual(otherProjectRecord);
+    expect(submitted[0]).toEqual({
+      ...otherProjectRecord,
+      humanMessagePresentation: true,
+    });
   });
 
   it("does not resurrect the seeded inputs after the user leaves and returns to the environment", async () => {

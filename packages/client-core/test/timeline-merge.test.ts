@@ -1,3 +1,4 @@
+import { timelineRowRenderSignature } from "../src/timeline/timelineRowSignatures.js";
 import { describe, expect, it } from "vitest";
 import { applyTimelineDelta } from "@bb/server-contract";
 import type {
@@ -47,6 +48,7 @@ function userRow(args: TimelineTestRowArgs): TimelineUserConversationRow {
     createdAt: args.sequence,
     kind: "conversation",
     role: "user",
+    humanMessagePresentation: false,
     initiator: "user",
     senderThreadId: null,
     systemMessageKind: "unlabeled",
@@ -152,6 +154,19 @@ function makeLoadedTimelineState(
 }
 
 describe("timeline page row merging", () => {
+  it("replaces same-sequence rows and invalidates rendering when presentation changes", () => {
+    const previous = userRow({ id: "message", sequence: 1 });
+    const next = { ...previous, humanMessagePresentation: true };
+    const merged = mergeLoadedTimelineWithLatest({
+      current: makeLoadedTimelineState([previous], null),
+      latestTimeline: makeTimelineResponse([next], null),
+      surfaceKey: "thread-1:default",
+    });
+    expect(merged.rows[0]).toBe(next);
+    expect(timelineRowRenderSignature(next)).not.toBe(
+      timelineRowRenderSignature(previous),
+    );
+  });
   it("prepends older server-ordered rows without sorting by source sequence", () => {
     const olderUser = userRow({ id: "older-user", sequence: 10 });
     const olderCommand = commandRow({ id: "older-command", sequence: 1 });

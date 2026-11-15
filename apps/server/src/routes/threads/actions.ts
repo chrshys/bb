@@ -1,3 +1,8 @@
+import type { PluginService } from "../../services/plugins/plugin-service.js";
+import {
+  PLUGIN_RPC_CALLER_HEADER,
+  PLUGIN_SYSTEM_SEND_HEADER,
+} from "../../services/plugins/plugin-rpc-caller.js";
 import { refreshProviderRetirement } from "../../services/environments/environment-engine.js";
 import {
   deleteQueuedThreadMessage,
@@ -234,16 +239,44 @@ function assertPinnedThreadOrderResult(
   }
 }
 
-export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
+export function registerThreadActionRoutes(
+  app: Hono,
+  deps: AppDeps,
+  plugins?: Pick<PluginService, "resolveRpcCaller">,
+): void {
   const { post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
   const routes = publicApiRoutes.threads;
 
   post(routes.send, async (context, payload) => {
+    const systemInitiated =
+      context.req.header(PLUGIN_SYSTEM_SEND_HEADER) !== undefined;
+    if (systemInitiated) {
+      const caller = plugins?.resolveRpcCaller(
+        context.req.header(PLUGIN_RPC_CALLER_HEADER),
+      );
+      if (!caller?.ok || caller.caller.kind !== "plugin") {
+        throw new ApiError(
+          403,
+          "forbidden",
+          "System sends require a live plugin caller credential",
+        );
+      }
+      if (
+        payload.senderThreadId !== undefined ||
+        payload.humanMessagePresentation === true
+      ) {
+        throw new ApiError(
+          400,
+          "invalid_request",
+          "System sends cannot declare a sender or human presentation",
+        );
+      }
+    }
     const thread = requirePublicThread(deps.db, context.req.param("id"));
     return context.json(
-      await acceptThreadSendRequest(deps, { payload, thread }),
+      await acceptThreadSendRequest(deps, { payload, thread, systemInitiated }),
     );
   });
 

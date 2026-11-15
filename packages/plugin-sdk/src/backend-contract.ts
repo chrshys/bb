@@ -2063,8 +2063,17 @@ export interface PluginStatusApi {
 export type PluginBbSdk = Omit<BbSdk, "threads"> & {
   threads: Omit<
     BbSdk["threads"],
-    "getPluginMetadata" | "updatePluginMetadata" | "experimental_listPluginMetadata"
+    | "getPluginMetadata"
+    | "updatePluginMetadata"
+    | "experimental_listPluginMetadata"
   > & {
+    /** Sends plugin background work as system input through native admission and queueing. Sender impersonation and human presentation are prohibited. */
+    experimental_sendSystem(
+      args: Omit<
+        Parameters<BbSdk["threads"]["send"]>[0],
+        "senderThreadId" | "humanMessagePresentation"
+      >,
+    ): ReturnType<BbSdk["threads"]["send"]>;
     getPluginMetadata(
       args: Omit<ThreadPluginMetadataArgs, "pluginId"> & { pluginId?: string },
     ): Promise<ThreadPluginMetadataResult>;

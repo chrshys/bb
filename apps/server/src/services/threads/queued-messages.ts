@@ -269,6 +269,7 @@ export async function createQueuedMessageForThread(
               : { kind: "thread-busy" },
           sendAt: null,
           payload: { kind: "inline" },
+          humanMessagePresentation: payload.humanMessagePresentation,
           systemNotice: null,
         });
         return { currentThread, hasProviderSession, queuedMessage };
@@ -452,7 +453,10 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendClaimedQueuedMessageForThreadArgs,
 ): Promise<ThreadQueuedMessage | null> {
-  if (args.mode !== "auto") {
+  if (
+    args.mode !== "auto" ||
+    args.queuedMessages.some((row) => row.payloadKind === "retry")
+  ) {
     return null;
   }
   // This fast path dispatches straight to the daemon, bypassing the dispatch
@@ -504,8 +508,13 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
     args.mode,
     senderThreadId,
   );
-  const initiator: ThreadTurnInitiator =
-    senderThreadId === null ? "user" : "agent";
+  const initiator: ThreadTurnInitiator = args.queuedMessages.some(
+    (row) => row.systemInitiated,
+  )
+    ? "system"
+    : senderThreadId === null
+      ? "user"
+      : "agent";
   // A retry row's model is provenance — the failed attempt's tuple, replayed —
   // not a model the user picked for this row, so it must not become the
   // thread's sticky override the way a composed queued message's choice does.
@@ -562,6 +571,9 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
         environmentId: thread.environmentId,
         execution,
         initiator,
+        humanMessagePresentation: args.queuedMessages.every(
+          (row) => row.humanMessagePresentation === true,
+        ),
         input,
         ...(inputGroups.length > 1 ? { inputGroups } : {}),
         requestMethod: "turn/start",
@@ -708,6 +720,9 @@ async function sendClaimedQueuedMessageForThread(
         args.mode,
         lead.senderThreadId,
       ),
+      humanMessagePresentation: args.queuedMessages.every(
+        (row) => row.humanMessagePresentation === true,
+      ),
       ...(inputGroups.length > 1 ? { inputGroups } : {}),
     },
     source: {
@@ -716,6 +731,7 @@ async function sendClaimedQueuedMessageForThread(
       respectManualStopPause: respectsManualStopPause(args),
       sendNow: args.sendNow,
     },
+    systemInitiated: args.queuedMessages.some((row) => row.systemInitiated),
     queuePayload: queuedMessage.payload,
     pluginSubmission: null,
     ...(queuedMessage.payload.kind === "retry"

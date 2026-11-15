@@ -744,6 +744,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         title: "Data & platform",
         surfaceIds: [
           "storage",
+          "thread-message-provenance",
           "bb-sdk",
           "thread-plugin-metadata",
           "desktop-browsers",
@@ -1231,6 +1232,23 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Thread list",
           "Workflows",
         ],
+      },
+      {
+        id: "thread-message-provenance",
+        title: "Background thread messages",
+        summary:
+          "Use native thread delivery for background work. With this, a plugin can:",
+        bullets: [
+          "Send system input through native admission and persistent queues",
+          "Keep system permission policy after queueing and plugin reloads",
+          "Reject sender impersonation and revoked backend plugin credentials",
+          "Forward native composer intent for presentation only, without granting identity or permissions",
+        ],
+        apiSymbols: [
+          "PluginBbSdk.threads.experimental_sendSystem",
+          "NewThreadRequest",
+        ],
+        experimental: true,
       },
       {
         id: "bb-sdk",

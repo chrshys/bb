@@ -1671,6 +1671,7 @@ export function NewThreadComposer({
         ...seededExecutionInputSources,
       };
       const request: NewThreadComposerSubmission = {
+        humanMessagePresentation: true,
         projectId,
         providerId: selectedProviderId,
         model: selectedThreadModel,

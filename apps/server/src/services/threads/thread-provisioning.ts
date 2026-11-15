@@ -56,6 +56,8 @@ import { runtimeErrorLogFields } from "../lib/error-log-fields.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 
 interface RequestThreadProvisionArgs {
+  systemInitiated?: boolean;
+  humanMessagePresentation?: boolean;
   environmentIntent: ThreadProvisionEnvironmentIntent;
   execution: ResolvedThreadExecutionOptions;
   fork: ThreadForkDescriptor | null;
@@ -72,6 +74,7 @@ interface RequestThreadTargetReprovisionArgs {
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
   inputGroups?: PromptInput[][];
+  humanMessagePresentation?: boolean;
   initiator: ThreadTurnInitiator;
   senderThreadId: string | null;
   systemMessageKind?: SystemMessageKind;
@@ -279,7 +282,7 @@ async function startThreadIfEnvironmentReady(
     requestId: args.context.request.clientRequestId,
     execution,
     permissionEscalation: resolvePermissionEscalation({
-      initiator: "user",
+      initiator: args.context.request.systemInitiated ? "system" : "user",
     }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
@@ -294,6 +297,7 @@ export function requestThreadProvision(
   return deps.db.transaction(() => {
     const { initiator, senderThreadId } = resolveDispatchAuthor({
       retrying: false,
+      systemInitiated: args.systemInitiated,
       senderThreadId: null,
       startedOnBehalfOf: args.startedOnBehalfOf,
     });
@@ -303,6 +307,7 @@ export function requestThreadProvision(
       environmentId: args.thread.environmentId,
       type: "client/turn/requested",
       input: args.input,
+      humanMessagePresentation: args.humanMessagePresentation,
       execution: args.execution,
       initiator,
       senderThreadId,
@@ -389,6 +394,7 @@ export function requestThreadTargetReprovision(
   return deps.db.transaction(() => {
     const request = appendReprovisionTurnRequest(deps, args);
     const context = createThreadStartup({
+      systemInitiated: args.initiator !== "user",
       clientRequestId: request.requestId,
       environmentIntent:
         args.environment.status === "error" &&
@@ -445,6 +451,7 @@ function appendReprovisionTurnRequest(
               : {}),
             execution: args.execution,
             initiator: args.initiator,
+            humanMessagePresentation: args.humanMessagePresentation,
             senderThreadId: args.senderThreadId,
             systemMessageKind: args.systemMessageKind,
             systemMessageSubject: args.systemMessageSubject,

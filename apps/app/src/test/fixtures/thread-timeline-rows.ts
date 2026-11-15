@@ -482,6 +482,7 @@ export function conversationRow({
       text,
       mentions: [],
       attachments,
+      humanMessagePresentation: false,
       initiator: resolvedInitiator,
       senderThreadId:
         senderThreadId !== undefined
