@@ -220,3 +220,5 @@ For review or fix pipelines, get the environment ID from
   same scope, size, and title. It does not replay the original launch command.
 
 Clearing a thread's parent with `bb thread update --clear-parent-thread` inherits the former parent's section unless the update explicitly supplies a section. Children released by environment archiving also inherit their former parent's section.
+
+Plugin-protected conversations reject archive/delete with `thread_close_protected` and a reason. An affected protected descendant also rejects the entire bulk operation before changes. The same rule applies to project deletion and environment bulk archive. Stop, compact, idle and closing a view remain available. Protection applies while its owning plugin is loaded.

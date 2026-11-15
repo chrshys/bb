@@ -732,6 +732,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "background",
           "wire",
           "thread-events",
+          "thread-close-protection",
           "dispatch-hook",
           "environment-providers",
           "machine-providers",
@@ -968,6 +969,24 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Tasks",
           "Workflows",
         ],
+      },
+      {
+        id: "thread-close-protection",
+        title: "Thread close protection",
+        summary:
+          "Provide lifecycle protection for persistent conversations. With this, a plugin can:",
+        bullets: [
+          "Prevent archive or delete with a reason shown in native actions",
+          "Reject an entire subtree or bulk operation before any changes",
+          "Keep protection active across reloads and release it when the plugin unloads",
+          "Allow normal stop, compact, idle and view dismissal",
+        ],
+        apiSymbols: [
+          "BbPluginApi.experimental_threadCloseProtection",
+          "experimental_ThreadCloseProtection",
+          "experimental_ThreadCloseProtectionDeclaration",
+        ],
+        experimental: true,
       },
       {
         id: "dispatch-hook",

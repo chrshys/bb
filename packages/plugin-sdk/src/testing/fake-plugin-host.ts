@@ -985,6 +985,10 @@ function createFakePluginHostInternal(
     return { dispose };
   }
 
+  const closeProtections = new Map<
+    string,
+    Parameters<BbPluginApi["experimental_threadCloseProtection"]["register"]>[0]
+  >();
   const aiServiceRegistrations: PluginAiServiceDeclaration[] = [];
   const experimental_aiServices: PluginAiServices = {
     register(declaration) {
@@ -1534,6 +1538,33 @@ function createFakePluginHostInternal(
     server,
     hosts,
     experimental_aiServices,
+    experimental_threadCloseProtection: {
+      register(declaration) {
+        assertLive();
+        if (
+          typeof declaration.id !== "string" ||
+          declaration.id.trim().length === 0 ||
+          typeof declaration.resolve !== "function"
+        ) {
+          throw new Error(
+            "Thread close protection requires an id and synchronous resolver",
+          );
+        }
+        if (closeProtections.has(declaration.id))
+          throw new Error(
+            `Thread close protection "${declaration.id}" is already registered`,
+          );
+        closeProtections.set(declaration.id, declaration);
+        let disposed = false;
+        const dispose = () => {
+          if (disposed) return;
+          disposed = true;
+          closeProtections.delete(declaration.id);
+        };
+        disposeHooks.push(dispose);
+        return { dispose };
+      },
+    },
     get sdk() {
       assertLive();
       return sdk;

@@ -1,3 +1,4 @@
+import { registerThreadCloseProtection } from "../threads/thread-close-protection.js";
 import {
   environmentCompositionSchema,
   validateServerAccessProviderDeclaration,
@@ -254,6 +255,7 @@ type PluginSettingsListener = (
 
 export interface PluginApiHandle {
   api: BbPluginApi;
+  activateCloseProtection(): void;
   disposeHooks: Array<() => void | Promise<void>>;
   /** Handlers recorded by `bb.onInstall`; run once after a fresh install. */
   installHandlers: Array<() => void | Promise<void>>;
@@ -417,6 +419,7 @@ function createStagedRegistrations<
 }): {
   register(declaration: TDeclaration): { dispose(): void };
   flush(): void;
+  clear(): void;
   values(): TNormalized[];
 } {
   const entries = new Map<
@@ -468,6 +471,13 @@ function createStagedRegistrations<
           );
         }
       }
+    },
+    clear() {
+      for (const entry of entries.values()) {
+        entry.disposed = true;
+        entry.disposer?.dispose();
+      }
+      entries.clear();
     },
     values() {
       return [...entries.values()].map((entry) => entry.declaration);
@@ -1322,7 +1332,37 @@ export function createPluginApi(options: {
     register: aiServiceRegistrations.register,
   };
 
+  const closeProtectionRegistrations = createStagedRegistrations({
+    validate: (
+      declaration: Parameters<
+        BbPluginApi["experimental_threadCloseProtection"]["register"]
+      >[0],
+    ) => {
+      if (
+        typeof declaration.id !== "string" ||
+        declaration.id.trim().length === 0 ||
+        typeof declaration.resolve !== "function"
+      ) {
+        throw new Error(
+          "Thread close protection requires an id and synchronous resolver",
+        );
+      }
+      return { id: declaration.id, resolve: declaration.resolve };
+    },
+    bind: () => null,
+    registerLive: (declaration) =>
+      registerThreadCloseProtection(options.db, declaration),
+    alreadyRegisteredMessage: (id) =>
+      `Thread close protection "${id}" is already registered`,
+    assertLive,
+    isActivated: () => activated,
+    disposeHooks,
+  });
+
   const api: BbPluginApi = {
+    experimental_threadCloseProtection: {
+      register: closeProtectionRegistrations.register,
+    },
     pluginId,
     log,
     settings,
@@ -1379,6 +1419,7 @@ export function createPluginApi(options: {
 
   return {
     api,
+    activateCloseProtection: closeProtectionRegistrations.flush,
     disposeHooks,
     installHandlers,
     settings: settingsRecord,
@@ -1416,6 +1457,7 @@ export function createPluginApi(options: {
       );
       providerRegistrations.flush();
       aiServiceRegistrations.flush();
+      closeProtectionRegistrations.flush();
       activated = true;
       const cliWarning = cliRecord.registration
         ? pluginCliCollisionWarning(pluginId, cliRecord.registration.name)
@@ -1447,6 +1489,7 @@ export function createPluginApi(options: {
       }
     },
     invalidate() {
+      closeProtectionRegistrations.clear();
       invalidated = true;
       rpcCaller.revoke();
     },

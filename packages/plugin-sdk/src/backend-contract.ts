@@ -2063,7 +2063,9 @@ export interface PluginStatusApi {
 export type PluginBbSdk = Omit<BbSdk, "threads"> & {
   threads: Omit<
     BbSdk["threads"],
-    "getPluginMetadata" | "updatePluginMetadata" | "experimental_listPluginMetadata"
+    | "getPluginMetadata"
+    | "updatePluginMetadata"
+    | "experimental_listPluginMetadata"
   > & {
     getPluginMetadata(
       args: Omit<ThreadPluginMetadataArgs, "pluginId"> & { pluginId?: string },
@@ -2086,7 +2088,36 @@ export type PluginBbSdk = Omit<BbSdk, "threads"> & {
  * the BB server; this contract is what plugin `server.ts` files compile
  * against.
  */
+export interface experimental_ThreadCloseProtectionDeclaration {
+  id: string;
+  /** Pure synchronous lookup. Return a nonempty reason to prevent archive/delete. */
+  resolve(threadId: string): string | null;
+}
+
+export interface experimental_ThreadCloseProtection {
+  /**
+   * Register a pure synchronous resolver during factory initialization. Return a
+   * nonempty reason to veto archive/delete, or null to allow. All affected
+   * threads are checked before any mutation, including descendants, lifecycle
+   * dependents, environment bulk archive and project deletion. Exceptions and
+   * invalid results fail closed. Keep lookup state current and synchronous.
+   *
+   * Registration is staged until successful loading. Replacement protections
+   * overlap old disposal; failed factory loading keeps the previous protections.
+   * Explicit dispose() is idempotent. Unloading removes protection, so this is
+   * loaded-plugin policy, not durable protection when disabled or uninstalled.
+   *
+   * Native actions obtain reasons through sdk.threads.childSummary. CLI and SDK
+   * mutation requests receive HTTP 409 with code thread_close_protected. Stop,
+   * native compact, idle and view-only pane dismissal are unaffected.
+   */
+  register(declaration: experimental_ThreadCloseProtectionDeclaration): {
+    dispose(): void;
+  };
+}
+
 export interface BbPluginApi {
+  readonly experimental_threadCloseProtection: experimental_ThreadCloseProtection;
   /** The plugin's own id (namespaces storage, routes, commands). */
   readonly pluginId: string;
   /** Leveled, plugin-scoped logger. */

@@ -1867,6 +1867,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
         disposed: false,
       })),
     };
+    handle.activateCloseProtection();
     if (previous !== undefined) {
       await disposePluginInstance(row.id, previous);
       const hungAfterDispose = hungServices.get(row.id);

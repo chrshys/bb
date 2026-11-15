@@ -1,10 +1,12 @@
+import { sdk } from "@/lib/sdk";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { useAtomValue } from "jotai";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   experimental_THREAD_ACTION_GROUPS as GROUPS,
   type PluginThreadActionRegistration,
   type PluginThreadActionTarget,
+  type PluginThreadActionDataInput,
 } from "@get-bb/plugin-sdk";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { useThreadActions } from "@/components/thread/ThreadActionsProvider";
@@ -40,7 +42,9 @@ function useSplitAvailability(): SplitAvailability {
   const layout = useAtomValue(splitLayoutAtom);
   const { threadId } = useRouteState();
   const panes =
-    layout !== null && countPanes(layout.root) > 1 ? listPanes(layout.root) : [];
+    layout !== null && countPanes(layout.root) > 1
+      ? listPanes(layout.root)
+      : [];
   const focusedPane = panes.find(
     (pane) => pane.paneId === layout?.focusedPaneId,
   );
@@ -74,11 +78,39 @@ function afterMenuCloses(run: () => void): void {
 }
 
 interface LifecycleHandlers {
+  protection: ReadonlyMap<
+    string,
+    {
+      archiveProtectionReason: string | null;
+      deleteProtectionReason: string | null;
+    }
+  >;
   archive: (threadId: string) => Promise<void>;
   requestDelete: (threadId: string) => Promise<void>;
 }
 
-function useLifecycleHandlers(): LifecycleHandlers {
+function useLifecycleHandlers({
+  threadIds,
+}: PluginThreadActionDataInput): LifecycleHandlers {
+  const summaries = useQueries({
+    queries: threadIds.map((threadId) => ({
+      queryKey: ["thread-close-protection", threadId],
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        sdk.threads.childSummary({ threadId, signal }),
+      refetchInterval: 10_000,
+      staleTime: 0,
+    })),
+  });
+  const protection = useMemo(
+    () =>
+      new Map(
+        threadIds.flatMap((id, index) => {
+          const summary = summaries[index]?.data;
+          return summary ? [[id, summary] as const] : [];
+        }),
+      ),
+    [summaries, threadIds],
+  );
   const actions = useThreadActions();
   const queryClient = useQueryClient();
   const latest = useRef(actions);
@@ -87,6 +119,7 @@ function useLifecycleHandlers(): LifecycleHandlers {
   });
   return useMemo(
     () => ({
+      protection,
       archive: async (threadId: string) => {
         try {
           latest.current.requestArchive(
@@ -112,7 +145,7 @@ function useLifecycleHandlers(): LifecycleHandlers {
         }
       },
     }),
-    [queryClient],
+    [queryClient, protection],
   );
 }
 
@@ -258,6 +291,13 @@ export const CORE_THREAD_ACTIONS: readonly PluginThreadActionRegistration<unknow
         const isArchived = thread.archivedAt !== null;
         return {
           label: isArchived ? "Unarchive" : "Archive",
+          disabled:
+            !isArchived &&
+            Boolean(data.protection.get(thread.id)?.archiveProtectionReason),
+          detail: !isArchived
+            ? (data.protection.get(thread.id)?.archiveProtectionReason ??
+              undefined)
+            : undefined,
           icon: isArchived ? "ArchiveRestore" : "Archive",
           run: async () => {
             if (!isArchived) {
@@ -284,6 +324,11 @@ export const CORE_THREAD_ACTIONS: readonly PluginThreadActionRegistration<unknow
       useData: useLifecycleHandlers,
       item: ({ thread, data }) => ({
         label: "Delete",
+        disabled: Boolean(
+          data.protection.get(thread.id)?.deleteProtectionReason,
+        ),
+        detail:
+          data.protection.get(thread.id)?.deleteProtectionReason ?? undefined,
         icon: "Trash2",
         variant: "destructive",
         run: () => afterMenuCloses(() => void data.requestDelete(thread.id)),

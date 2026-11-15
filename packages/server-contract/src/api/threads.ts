@@ -702,6 +702,8 @@ export type ThreadQueuedMessageListResponse = z.infer<
 >;
 
 export const threadChildSummaryResponseSchema = z.object({
+  archiveProtectionReason: z.string().nullable(),
+  deleteProtectionReason: z.string().nullable(),
   nonDeletedChildCount: z.number().int().nonnegative(),
   unarchivedDescendantCount: z.number().int().nonnegative(),
 });

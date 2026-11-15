@@ -4083,3 +4083,9 @@ Stabilization requires exercising reconnect/reload, concurrent deduplication, ro
 `hosts.experimental_discoverRepos({ hostId })` asks the machine for git repositories under the user's home directory with local activity in the last 30 days, newest first, capped at 10. Each entry has `path`, `name`, `lastActivityAt`, `originUrl`, and `projectId` (the bb project already bound to that path on that machine, or null). `truncated` is true when the three-second walk budget ran out. The walk stops at each repository root, skips dot-directories, common build directories, scratch directories (`tmp`, `temp`, `tmp-*`, `Downloads`), linked worktrees, and submodules. The first-run setup guide and `bb project discover` use it. Host-daemon wire change: the `host.discover_repos` command (protocol 230).
 
 Stabilize after deciding whether depth, recency window, and limit should be caller options, and after exercising slow or network-mounted home directories and Windows hosts.
+
+## Thread close protection
+
+`BbPluginApi.experimental_threadCloseProtection`, `experimental_ThreadCloseProtection`, and `experimental_ThreadCloseProtectionDeclaration` register synchronous per-thread veto resolvers. Core archive trees, environment bulk archive, thread delete and project deletion consult the same resolver before effects; native action controls read those reasons through `threads.childSummary`. Plugin activation stages registrations, successful replacement overlaps protections before disposing the old instance, and unload removes them. Resolver exceptions or invalid results fail closed. This is loaded-plugin policy, not durable protection while a plugin is disabled.
+
+Stabilization requires lifecycle/reload, atomic subtree/bulk rejection and UI/CLI/SDK parity coverage, review of synchronous resolver cost and availability, and an explicit decision on durable policy. No daemon wire fields change.

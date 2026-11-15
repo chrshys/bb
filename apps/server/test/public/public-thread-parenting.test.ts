@@ -339,6 +339,8 @@ describe("public thread parenting routes", () => {
         await readJson(response),
       );
       expect(summary).toEqual({
+        archiveProtectionReason: null,
+        deleteProtectionReason: null,
         nonDeletedChildCount: 3,
         unarchivedDescendantCount: 1,
       });
@@ -368,6 +370,8 @@ describe("public thread parenting routes", () => {
       expect(
         threadChildSummaryResponseSchema.parse(await readJson(response)),
       ).toEqual({
+        archiveProtectionReason: null,
+        deleteProtectionReason: null,
         nonDeletedChildCount: 1,
         unarchivedDescendantCount: 1,
       });

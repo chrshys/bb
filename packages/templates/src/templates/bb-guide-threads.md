@@ -499,3 +499,5 @@ directories are inside that storage before removing files, including dev
 servers in nested checkouts. On macOS and Linux this uses the same SIGTERM
 grace period and SIGKILL fallback as worktree removal. Windows does not
 enumerate process working directories.
+
+Plugin-protected conversations reject archive/delete with `thread_close_protected` and a reason. An affected protected descendant also rejects the entire bulk operation before changes. The same rule applies to project deletion and environment bulk archive. Stop, compact, idle and closing a view remain available. Protection applies while its owning plugin is loaded.

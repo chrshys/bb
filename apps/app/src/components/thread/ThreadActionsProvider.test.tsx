@@ -176,6 +176,8 @@ beforeEach(() => {
     ok: true,
   });
   vi.mocked(sdk.threads.childSummary).mockResolvedValue({
+    archiveProtectionReason: null,
+    deleteProtectionReason: null,
     nonDeletedChildCount: 1,
     unarchivedDescendantCount: 1,
   });
@@ -229,6 +231,8 @@ describe("ThreadActionsProvider archive confirmation", () => {
     "optimistically removes the sidebar row during the child check and handles %s",
     async (outcome) => {
       let resolveSummary!: (summary: {
+        archiveProtectionReason: string | null;
+        deleteProtectionReason: string | null;
         nonDeletedChildCount: number;
         unarchivedDescendantCount: number;
       }) => void;
@@ -268,6 +272,8 @@ describe("ThreadActionsProvider archive confirmation", () => {
         rejectSummary(new Error("Could not check children"));
       } else {
         resolveSummary({
+          archiveProtectionReason: null,
+          deleteProtectionReason: null,
           nonDeletedChildCount: outcome === "confirmation" ? 1 : 0,
           unarchivedDescendantCount: outcome === "confirmation" ? 1 : 0,
         });
@@ -304,6 +310,8 @@ describe("ThreadActionsProvider archive confirmation", () => {
 
   it("does not restore another archived row when a delayed child check requires confirmation", async () => {
     let resolveSummary!: (summary: {
+      archiveProtectionReason: string | null;
+      deleteProtectionReason: string | null;
       nonDeletedChildCount: number;
       unarchivedDescendantCount: number;
     }) => void;
@@ -315,6 +323,8 @@ describe("ThreadActionsProvider archive confirmation", () => {
           }),
       )
       .mockResolvedValueOnce({
+        archiveProtectionReason: null,
+        deleteProtectionReason: null,
         nonDeletedChildCount: 0,
         unarchivedDescendantCount: 0,
       });
@@ -357,7 +367,12 @@ describe("ThreadActionsProvider archive confirmation", () => {
         threadId: second.id,
       }),
     );
-    resolveSummary({ nonDeletedChildCount: 1, unarchivedDescendantCount: 1 });
+    resolveSummary({
+      archiveProtectionReason: null,
+      deleteProtectionReason: null,
+      nonDeletedChildCount: 1,
+      unarchivedDescendantCount: 1,
+    });
     await screen.findByRole("button", { name: "Cancel" });
     expect(getCachedSidebarNavigationThreads(queryClient)).toEqual([
       first,
@@ -368,6 +383,8 @@ describe("ThreadActionsProvider archive confirmation", () => {
 
   it("archives without confirmation when its only child is already archived", async () => {
     vi.mocked(sdk.threads.childSummary).mockResolvedValue({
+      archiveProtectionReason: null,
+      deleteProtectionReason: null,
       nonDeletedChildCount: 1,
       unarchivedDescendantCount: 0,
     });
@@ -391,6 +408,8 @@ describe("ThreadActionsProvider archive confirmation", () => {
 
   it("reports child threads and archives nothing before confirmation", async () => {
     vi.mocked(sdk.threads.childSummary).mockResolvedValue({
+      archiveProtectionReason: null,
+      deleteProtectionReason: null,
       nonDeletedChildCount: 6,
       unarchivedDescendantCount: 4,
     });
