@@ -3099,6 +3099,12 @@ reimplementing it, and `indicatorLabel` carries the matching accessible string.
 
 **Kept experimental (2026-08-22).** zero consumers; item 1 (merging behind one registration with `bb.ui.registerThreadAction`) is cheapest to decide before the first one.
 
+**First consumer (2026-11-16).** Bots Sidebar renders the bot's avatar button there
+(`plugins/bots-sidebar/components/bot-panel-surfaces.tsx`), opening its `bot`
+thread panel tab. It also uses the mounted control to open that tab on behalf of
+its sidebar, because `useBbNavigate().openThreadPanel` declines outside a thread
+view; that hand-off is a workaround, not a contract this slot should promise.
+
 **What it does.** Renders a plugin component in the thread header's action row.
 The frontend sibling of the backend `bb.ui.registerThreadAction`, which renders
 a host-owned button and runs server-side: use that one for "do a thing", and
