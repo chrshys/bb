@@ -127,7 +127,13 @@ or reintroduce hover toolbars when making unrelated changes.
   controls back to the row. The null/default section is Main and has no sidebar
   heading. Preserve explicit custom sections. The Section dropdown includes
   Create New… (not a separate always-visible creation button).
-- Keep Create/Edit compact: small avatar beside name/role, Setup / Instructions /
+- Create new bot is its own small dialog: live avatar preview, one centred name
+  input, the shape grid, the colour swatches, Cancel / Create. Nothing else belongs
+  in it. Defaults at creation: first connected host (else the first host), role
+  Assistant, Main section, empty SOUL/memory/settings, no projects. With no host,
+  show the inline message rather than an unexplained disabled button. It reuses the
+  pickers exported by `components/avatar-appearance.tsx`; do not fork them.
+- Keep Edit compact: small avatar beside name/role, Setup / Instructions /
   State / Projects / Appearance tabs, one logical file editor at a time, and a fixed visible
   Save/Cancel footer. Do not bring back the tall stretching avatar panel or stack
   all settings in one long form. Preserve drafts across tabs. Storage is private
@@ -173,6 +179,8 @@ or reintroduce hover toolbars when making unrelated changes.
   may be reconciled by the host composer, never silently claim same-host success.
 - Editors require an explicit Save click. Enter in text inputs must not submit;
   SOUL.md must accept normal newlines. The bot editor can create a section.
+  The one exception is Create new bot: Enter in its name field creates the bot
+  when the name is valid.
 - Do not restore Move main or Make main. Keep existing histories and legacy pointers.
 - Keep the later additions: worktree composer, conversation/Chats menus and
   rename/archive, older unassigned Chats grouped under N Other, and status icons.

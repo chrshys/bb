@@ -24,7 +24,7 @@ Demo data only: [Sidebar](docs/screenshots/sidebar.png) ·
 [Edit bot](docs/screenshots/bot-editor.png) ·
 [Project roles](docs/screenshots/bot-projects.png) ·
 [Create menu](docs/screenshots/create-menu.png) ·
-[Project during bot creation](docs/screenshots/bot-new-project.png) ·
+[Project from Edit bot](docs/screenshots/bot-new-project.png) ·
 [State in Edit bot](docs/screenshots/bot-state.png) ·
 [Appearance choices](docs/screenshots/bot-appearance.png)
 
@@ -84,10 +84,18 @@ opt in. Role changes are atomic and survive reloads.
 The **+** in the Bots header opens **Bot / Section / Project**. Standalone project
 creation opens that work project without creating a bot.
 
-You can also create a work project directly inside a new or existing bot's
+**Bot** opens a small **Create new bot** dialog with a live avatar preview, a name
+field, a grid of shapes and a row of colours. **Create** stays disabled until the
+bot has a name; pressing Enter in the name field also creates it. Everything else
+starts from a default: the first connected machine (otherwise the first machine),
+the role "Assistant", the Main section, empty instructions, memory and settings,
+no projects, and a random expression and idle motion. If BB has no machine at all,
+the dialog says so and cannot create a bot. Change any of these later in **Edit bot**.
+
+You can also create a work project directly inside an existing bot's
 **Projects** tab. Choose a machine and folder (or use **Browse…**). Missing folders
 are created; existing files are not changed. The new project is selected as
-**Owner** in the bot draft; click **Create bot / Save bot** to save that link.
+**Owner** in the bot draft; click **Save bot** to save that link.
 
 **Create project** is an explicit, immediate action. Cancelling the bot afterwards
 does not delete that project or its files. Unsaved project forms create nothing.
@@ -173,8 +181,9 @@ in bot state.
   then smaller gray dots. Reduced motion disables all activity animations.
 - **Main** is the invisible default section. Explicit custom sections retain their
   headings. Drag bots to reorder/move; the Section picker includes **Create New…**.
-- Create/Edit stays compact: small avatar, name/role, Setup / Instructions / State /
-  Projects / Appearance tabs, one file editor, and an always-visible footer.
+- Creating a bot asks only for a name, a shape and a colour. Edit stays compact:
+  small avatar, name/role, Setup / Instructions / State / Projects / Appearance
+  tabs, one file editor, and an always-visible footer.
   New bots get a random appearance once per draft; existing bots stay unchanged.
   Appearance offers **8 shapes, 16 expressions, 3 idle motions, and 14 coloured
   presets**, with no black/white/neutral presets. **Randomize appearance** rerolls
@@ -290,7 +299,7 @@ attribution and asynchronous handling instructions. No custom timeline renderer 
 
 ## Default projects and coordinators
 
-Edit bot → Projects → Default project chooses the starting project for new conversations and the coordinator. Membership is sufficient; choosing a default does not claim project ownership. New bots use their first linked project, or a personal workspace when none is linked. Existing histories, project ownership and legacy main pointers are preserved. Users can change execution choices in BB's composer before sending.
+Edit bot → Projects → Default project chooses the starting project for new conversations and the coordinator. Membership is sufficient; choosing a default does not claim project ownership. New bots start with no linked project and use a personal workspace until one is linked. Existing histories, project ownership and legacy main pointers are preserved. Users can change execution choices in BB's composer before sending.
 
 Bot composers start with Codex / GPT-6.1 Sol / Medium reasoning. Clicking a bot name opens its saved coordinator. On the first click, write a first message in the coordinator composer; creation happens when you send. The coordinator persists across sidebar reordering and uses BB's native threads and asynchronous messaging to coordinate that bot's conversations. The saved coordinator is never silently replaced. An explicit new message restores an archived coordinator through native unarchive; a deleted or unavailable coordinator reports an error. Closing a view does not delete its conversation. With a BB core exposing `experimental_threadCloseProtection`, archive/delete controls and CLI/SDK requests are protected, including ancestor and bulk operations. Older cores log the missing capability and cannot enforce the close veto. Stop and native provider compaction remain available; an idle coordinator does not consume model turns.
 
