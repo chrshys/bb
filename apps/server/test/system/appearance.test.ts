@@ -39,13 +39,14 @@ async function writeCustomTheme(
 }
 
 describe("appearance settings", () => {
-  it("defaults appearance to the default palette in /system/config", async () => {
+  it("ships grok-minimal for a fresh install in /system/config", async () => {
     await withTestHarness(async (harness) => {
       const response = await harness.app.request("/api/v1/system/config");
       expect(response.status).toBe(200);
       const body = systemConfigResponseSchema.parse(await readJson(response));
-      expect(body.appearance).toEqual(defaultAppTheme);
-      expect(body.customThemes).toEqual([]);
+      expect(body.appearance.themeId).toBe("grok-minimal");
+      expect(body.appearance.customCss).toContain("--canvas: #ffffff");
+      expect(body.customThemes).toEqual(["grok-minimal"]);
       expect(body.pluginThemes).toEqual([]);
     });
   });
@@ -98,7 +99,7 @@ describe("appearance settings", () => {
         customCss: css,
         faviconColor: "teal",
       });
-      expect(config.customThemes).toEqual(["midnight"]);
+      expect(config.customThemes).toEqual(["grok-minimal", "midnight"]);
     });
   });
 
@@ -187,9 +188,9 @@ describe("appearance settings", () => {
         await readJson(response),
       );
       expect(catalog.dir).toBe(join(harness.config.dataDir, "theme"));
-      expect(catalog.custom).toEqual(["amber", "zephyr"]);
+      expect(catalog.custom).toEqual(["amber", "grok-minimal", "zephyr"]);
       expect(catalog.plugins).toEqual([]);
-      expect(catalog.active).toEqual(defaultAppTheme);
+      expect(catalog.active.themeId).toBe("grok-minimal");
     });
   });
 
@@ -284,7 +285,7 @@ describe("appearance settings", () => {
       );
       expect(getStoredThemeId(harness.db)).toBe("ghost");
       expect(config.appearance).toEqual(defaultAppTheme);
-      expect(config.customThemes).toEqual([]);
+      expect(config.customThemes).toEqual(["grok-minimal"]);
     });
   });
 

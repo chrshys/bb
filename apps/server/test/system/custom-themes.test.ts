@@ -34,7 +34,7 @@ describe("custom themes service", () => {
     await mkdir(join(themeRoot, "no-css"), { recursive: true });
     await writeFile(join(themeRoot, "loose.css"), ":root {}", "utf8");
 
-    expect(listCustomThemeNames(themeRoot)).toEqual(["aurora", "solar"]);
+    expect(listCustomThemeNames(themeRoot)).toEqual(["aurora", "grok-minimal", "solar"]);
   });
 
   it("falls back to default palette but keeps the favicon tint for a missing or unsafe selection", () => {

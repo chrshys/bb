@@ -604,3 +604,7 @@ stops the sampler and flushes the in-flight profile; existing files remain.
 The launch flag only grants permission and still requires a restart to change.
 
 Storage cleanup can run in the background with `bb storage cleanup --machine HOST_ID --kind orphans|development|worktrees --yes`. Inspect `maintenance` with `bb storage usage`; failures release the machine lock and can be retried. Archived storage cleanup waits through the archive undo grace and rechecks eligibility before each batch.
+
+BBC fresh installs select the bundled `grok-minimal` theme. Existing saved
+selections and custom theme files are preserved. Use `bb theme set default`
+to select the stock palette, or `bb theme set grok-minimal` to return.

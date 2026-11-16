@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import {
-  defaultAppTheme,
   defaultFaviconColor,
   type FaviconColorPreference,
 } from "@bb/domain";
@@ -16,7 +15,7 @@ export function getStoredThemeId(db: DbConnection): string {
     .where(eq(appTheme.id, APP_THEME_ROW_ID))
     .get();
 
-  return row?.themeId ?? defaultAppTheme.themeId;
+  return row?.themeId ?? "grok-minimal";
 }
 
 export function getStoredFaviconColor(db: DbConnection): FaviconColorPreference {

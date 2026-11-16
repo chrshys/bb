@@ -9,6 +9,7 @@ import {
   type AppTheme,
   type FaviconColorPreference,
 } from "@bb/domain";
+import { grokMinimalThemeCss } from "./grok-minimal.js";
 import { readCustomThemeCodeTheme } from "./code-themes.js";
 
 const THEME_DIR_NAME = "theme";
@@ -30,14 +31,20 @@ export function listCustomThemeNames(themeRoot: string): string[] {
   try {
     entries = readdirSync(themeRoot, { withFileTypes: true });
   } catch {
-    return [];
+    return ["grok-minimal"];
   }
-  return entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .filter((name) => customThemeNameSchema.safeParse(name).success)
-    .filter((name) => existsSync(resolveCustomThemeCssPath(themeRoot, name)))
-    .sort((a, b) => a.localeCompare(b));
+  return [
+    ...new Set([
+      "grok-minimal",
+      ...entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .filter((name) => customThemeNameSchema.safeParse(name).success)
+        .filter((name) =>
+          existsSync(resolveCustomThemeCssPath(themeRoot, name)),
+        ),
+    ]),
+  ].sort((a, b) => a.localeCompare(b));
 }
 
 export function readCustomThemeCss(
@@ -49,7 +56,7 @@ export function readCustomThemeCss(
   try {
     css = readFileSync(resolveCustomThemeCssPath(themeRoot, name), "utf8");
   } catch {
-    return null;
+    return name === "grok-minimal" ? grokMinimalThemeCss : null;
   }
   if (css.length > CUSTOM_THEME_CSS_MAX_LENGTH) return null;
   return css;
