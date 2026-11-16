@@ -220,7 +220,8 @@ import {
 import {
   deliverAppFixedTabTarget,
   openAppFixedTabFromDestinations,
-  registerThreadFixedTabSurface,
+  getThreadFixedTabSurfaceKey,
+  registerFixedTabSurface,
 } from "@/lib/app-fixed-tab-navigation";
 import { getFileBasename } from "@/lib/live-file-navigation";
 import { getFilePreviewLineRangeStart } from "@bb/client-core";
@@ -1257,7 +1258,11 @@ function ThreadDetailViewInternal(
     [fixedTabDestinations],
   );
   useEffect(
-    () => registerThreadFixedTabSurface(threadId, openFixedTab),
+    () =>
+      registerFixedTabSurface(
+        getThreadFixedTabSurfaceKey(threadId),
+        openFixedTab,
+      ),
     [openFixedTab, threadId],
   );
   const openThreadInfo = useCallback(

@@ -144,7 +144,10 @@ target? })`. Inside the fixed-tab component,
   returns to its untargeted state. Selection persists through the host's
   ordinary panel state, while targets remain memory-only and disappear on app
   refresh. Invalid, unavailable, untargeted, or other-plugin references return
-  false without changing valid panel state.
+  false without changing valid panel state. From a surface outside the page,
+  such as the sidebar, pass `surface: { kind: "navPanel", panelId, subPath? }`
+  instead: BB navigates to that page of the same plugin and selects the tab
+  once the page is ready.
 
   `experimental_sidebarAccessory` is a no-props, presentational component for
   a live count or short status beside the panel's navigation entry. The SDK

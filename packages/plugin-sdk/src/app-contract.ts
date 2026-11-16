@@ -3508,8 +3508,15 @@ export interface ExperimentalFileLinkProps extends Omit<
   location?: ExperimentalFileLocation | null;
 }
 
-/** The panel surface resolved by the component making the request. */
-export type ExperimentalAppPanelSurface = { kind: "current" };
+/**
+ * Where a nav-panel fixed tab should open. `current` is the page the calling
+ * component is mounted in. `navPanel` names one of the calling plugin's own
+ * pages from any surface, including the sidebar: BB navigates to it (with
+ * `subPath` when given) and selects the tab once the page is ready.
+ */
+export type ExperimentalAppPanelSurface =
+  | { kind: "current" }
+  | { kind: "navPanel"; panelId: string; subPath?: string };
 
 /**
  * The owning fixed tab's current memory-only target. It survives tab, panel,

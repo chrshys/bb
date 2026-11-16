@@ -42,7 +42,10 @@ import { getPluginPagePanelStateId } from "./plugin-page-panel-state";
 import { useAppNavigationHost } from "@/lib/app-navigation-host";
 import { makeTerminalSession } from "@/test/fixtures/terminal-sessions";
 import {
+  getNavPanelFixedTabSurfaceKey,
   getPluginFixedTabOwnerId,
+  openAppFixedTabOnSurface,
+  resetFixedTabSurfacesForTest,
   useAppFixedTabTarget,
 } from "@/lib/app-fixed-tab-navigation";
 import {
@@ -1200,6 +1203,48 @@ describe("PluginPanelRightPanelHost", () => {
       (_, index) => localStorage.getItem(localStorage.key(index) ?? "") ?? "",
     ).join("\n");
     expect(persistedValues).not.toContain("issue-42");
+  });
+
+  it("selects a fixed tab requested from outside before the page was on screen", async () => {
+    fixedTabState.registrations = [
+      {
+        panelId: "board",
+        id: "navigation",
+        title: "Navigation",
+        icon: "PanelRight",
+        component: () => <div data-testid="navigation-content">Navigation</div>,
+      },
+      {
+        panelId: "board",
+        id: "details",
+        title: "Details",
+        icon: "Info",
+        component: () => <div data-testid="details-content">Details</div>,
+      },
+    ];
+    const navigateToSurface = vi.fn();
+    expect(
+      openAppFixedTabOnSurface({
+        intent: {
+          surface: { kind: "current" },
+          tab: {
+            ownerId: getPluginFixedTabOwnerId("demo", "board"),
+            tabId: "details",
+          },
+        },
+        isSurfaceFocused: false,
+        navigateToSurface,
+        surfaceKey: getNavPanelFixedTabSurfaceKey("demo", "board"),
+      }),
+    ).toBe(true);
+    expect(navigateToSurface).toHaveBeenCalledOnce();
+
+    const view = renderHost();
+    expect(await screen.findByTestId("details-content")).toBeTruthy();
+    expect(screen.queryByTestId("navigation-content")).toBeNull();
+
+    view.unmount();
+    resetFixedTabSurfacesForTest();
   });
 
   it("opens every explicit live-file identity through the shared panel host", async () => {

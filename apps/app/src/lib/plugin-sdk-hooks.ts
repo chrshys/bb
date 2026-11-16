@@ -89,8 +89,10 @@ import { pluginSdkSettingsQueryKey } from "@/hooks/queries/query-keys";
 import { useAppNavigationHost } from "@/lib/app-navigation-host";
 import { normalizeExperimentalFileOpenOptions } from "@/lib/live-file-navigation";
 import {
+  getNavPanelFixedTabSurfaceKey,
   getPluginFixedTabOwnerId,
   getPluginPinnedTabOwnerId,
+  openAppFixedTabOnSurface,
   resolveOwnerValidatedFixedTabTarget,
   useAppFixedTabTarget,
 } from "@/lib/app-fixed-tab-navigation";
@@ -496,6 +498,8 @@ export function useBbNavigate(): BbNavigate {
 function useExperimentalAppPanel(): ExperimentalAppPanel {
   const pluginId = usePluginId();
   const appNavigation = useAppNavigationHost();
+  const navigate = useNavigate();
+  const location = useLocation();
   const openFixedTab = useCallback<ExperimentalAppPanel["openFixedTab"]>(
     (options) => {
       const targetResult =
@@ -503,6 +507,50 @@ function useExperimentalAppPanel(): ExperimentalAppPanel {
           ? null
           : jsonValueSchema.safeParse(options.target);
       if (targetResult !== null && !targetResult.success) return false;
+      const { surface } = options;
+      if (surface.kind === "navPanel") {
+        const panel = getPluginSlotSnapshot().navPanels.find(
+          (candidate) =>
+            candidate.pluginId === pluginId && candidate.id === surface.panelId,
+        );
+        const registration =
+          options.tab.panelId === surface.panelId
+            ? panel?.fixedTabs?.find(
+                (candidate) => candidate.id === options.tab.id,
+              )
+            : undefined;
+        if (panel === undefined || registration === undefined) return false;
+        const resolved =
+          targetResult === null
+            ? null
+            : resolveOwnerValidatedFixedTabTarget(
+                registration.experimental_target,
+                targetResult.data,
+              );
+        if (resolved !== null && !resolved.accepted) return false;
+        const route = getPluginPanelRoutePath({
+          pluginId,
+          path: panel.path,
+          ...(surface.subPath !== undefined
+            ? { subPath: surface.subPath }
+            : {}),
+        });
+        return openAppFixedTabOnSurface({
+          intent: {
+            surface: { kind: "current" },
+            tab: {
+              ownerId: getPluginFixedTabOwnerId(pluginId, surface.panelId),
+              tabId: registration.id,
+            },
+            ...(resolved?.accepted === true ? { target: resolved.target } : {}),
+          },
+          isSurfaceFocused: location.pathname === route,
+          navigateToSurface: () => {
+            void navigate(route);
+          },
+          surfaceKey: getNavPanelFixedTabSurfaceKey(pluginId, surface.panelId),
+        });
+      }
       return appNavigation.openFixedTab({
         surface: options.surface,
         tab: {
@@ -514,7 +562,7 @@ function useExperimentalAppPanel(): ExperimentalAppPanel {
           : {}),
       });
     },
-    [appNavigation, pluginId],
+    [appNavigation, location.pathname, navigate, pluginId],
   );
   const openThreadFixedTab = useOpenThreadFixedTab();
   const openThreadPinnedTab = useCallback<

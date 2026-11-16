@@ -5,7 +5,10 @@ import { useStore } from "jotai";
 import type { JsonValue } from "@get-bb/plugin-sdk";
 import { getThreadConversationCollapsedAtom } from "@/components/secondary-panel/threadSecondaryPanelAtoms";
 import { useRouteState } from "@/hooks/useRouteState";
-import { openAppFixedTabOnThread } from "@/lib/app-fixed-tab-navigation";
+import {
+  getThreadFixedTabSurfaceKey,
+  openAppFixedTabOnSurface,
+} from "@/lib/app-fixed-tab-navigation";
 import type { AppFixedTabReference } from "@/lib/app-navigation-host";
 import { lookupCachedThread } from "@/lib/plugin-sidebar-hooks";
 import { getThreadRoutePath } from "@/lib/route-paths";
@@ -26,14 +29,14 @@ export function useOpenThreadFixedTab(): OpenThreadFixedTab {
   const { threadId: routeThreadId } = useRouteState();
   return useCallback<OpenThreadFixedTab>(
     ({ tab, target, threadId }) =>
-      openAppFixedTabOnThread({
+      openAppFixedTabOnSurface({
         intent: {
           surface: { kind: "current" },
           tab,
           ...(target === undefined ? {} : { target }),
         },
-        isThreadFocused: routeThreadId === threadId,
-        navigateToThread: () => {
+        isSurfaceFocused: routeThreadId === threadId,
+        navigateToSurface: () => {
           const open = (projectId: string) => {
             store.set(getThreadConversationCollapsedAtom(threadId), false);
             void navigate(getThreadRoutePath({ projectId, threadId }));
@@ -48,7 +51,7 @@ export function useOpenThreadFixedTab(): OpenThreadFixedTab {
             .then((thread) => open(thread.projectId))
             .catch(() => navigate(`/threads/${threadId}`));
         },
-        threadId,
+        surfaceKey: getThreadFixedTabSurfaceKey(threadId),
       }),
     [navigate, queryClient, routeThreadId, store],
   );

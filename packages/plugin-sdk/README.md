@@ -67,7 +67,9 @@ to its untargeted state. The host validates JSON before the owner's type guard,
 persists only selection, and returns false for an unavailable tab or invalid
 target. The frontend harness records accepted requests in
 `experimental_fixedTabOpenCalls`, accepts an `experimental_openFixedTab`
-behavior, and can seed `experimental_fixedTabTarget` state.
+behavior, and can seed `experimental_fixedTabTarget` state. From outside the
+page, pass `surface: { kind: "navPanel", panelId, subPath? }` to navigate to
+one of the plugin's own pages and select the tab there.
 
 `app.slots.experimental_threadPinnedTab` pins a non-closable tab in every
 thread's right panel, shown as an icon after BB's Info and Changes. Its

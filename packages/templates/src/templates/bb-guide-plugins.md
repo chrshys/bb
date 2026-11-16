@@ -794,7 +794,9 @@ select it with `experimental_useAppPanel().openFixedTab({ surface: { kind:
 with `experimental_useFixedTabTarget(tab)`. Target state survives tab, panel,
 and route remounts for the current app session; call `clear()` when returning to
 the tab's untargeted state. Selection persists across refreshes, but targets do
-not. A plugin can address only its own eligible tab on the current nav panel.
+not. A plugin can address only its own eligible tab on the current nav panel,
+or, with `surface: { kind: "navPanel", panelId, subPath? }`, on one of its own
+pages from any surface; BB navigates there first.
 `app.slots.experimental_threadPinnedTab({ id, title, icon, component, layout?,
 experimental_target? })` pins a non-closable tab in every thread's right panel,
 shown as an icon after Info and Changes; the component receives `{ threadId,

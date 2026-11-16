@@ -16,13 +16,15 @@ import type { JsonValue } from "@get-bb/plugin-sdk";
 import {
   createOwnerValidatedFixedTabDestination,
   deliverAppFixedTabTarget,
+  getNavPanelFixedTabSurfaceKey,
   getPluginFixedTabOwnerId,
   getPluginPinnedTabOwnerId,
   openAppFixedTabFromDestinations,
-  openAppFixedTabOnThread,
-  PENDING_THREAD_FIXED_TAB_TTL_MS,
-  registerThreadFixedTabSurface,
-  resetThreadFixedTabSurfacesForTest,
+  openAppFixedTabOnSurface,
+  PENDING_FIXED_TAB_TTL_MS,
+  getThreadFixedTabSurfaceKey,
+  registerFixedTabSurface,
+  resetFixedTabSurfacesForTest,
   useAppFixedTabTarget,
 } from "@/lib/app-fixed-tab-navigation";
 import type {
@@ -83,7 +85,7 @@ afterEach(() => {
   apiMocks.updateThreadTabs.mockReset();
   resetPluginSlotStoreForTest();
   resetAllCrashedPluginSlotsForTest();
-  resetThreadFixedTabSurfacesForTest();
+  resetFixedTabSurfacesForTest();
   resetFixedPanelTabsStateForTest();
   vi.restoreAllMocks();
   window.localStorage.clear();
@@ -367,6 +369,44 @@ const FIXED_TAB_SURFACES: readonly [string, FixedTabSurfaceFactory][] = [
     },
   ],
   [
+    "plugin page fixed tab opened from outside for a page on screen",
+    (validator) => {
+      const delivered: JsonValue[] = [];
+      let selections = 0;
+      const tab = {
+        ownerId: getPluginFixedTabOwnerId("bots", "coordinator"),
+        tabId: "bot",
+      };
+      const destination = createOwnerValidatedFixedTabDestination({
+        deliverTarget: (target) => delivered.push(target),
+        select: () => {
+          selections += 1;
+        },
+        tab,
+        validator,
+      });
+      const surfaceKey = getNavPanelFixedTabSurfaceKey("bots", "coordinator");
+      registerFixedTabSurface(surfaceKey, (intent) =>
+        openAppFixedTabFromDestinations([destination], intent),
+      );
+      return {
+        delivered: () => delivered,
+        open: (target) =>
+          openAppFixedTabOnSurface({
+            intent: {
+              surface: { kind: "current" },
+              tab,
+              ...(target === undefined ? {} : { target }),
+            },
+            isSurfaceFocused: true,
+            navigateToSurface: () => {},
+            surfaceKey,
+          }),
+        selections: () => selections,
+      };
+    },
+  ],
+  [
     "thread pinned tab in the current thread",
     (validator) => {
       registerValidatedPlugin(validator);
@@ -386,17 +426,17 @@ const FIXED_TAB_SURFACES: readonly [string, FixedTabSurfaceFactory][] = [
       registerValidatedPlugin(validator);
       const { delivered, host, selected } = createRecordingHost();
       const destinations = pinnedDestinations(host);
-      registerThreadFixedTabSurface("thr_a", (intent) =>
+      registerFixedTabSurface(getThreadFixedTabSurfaceKey("thr_a"), (intent) =>
         openAppFixedTabFromDestinations(destinations, intent),
       );
       return {
         delivered: () => delivered.map((entry) => entry.target),
         open: (target) =>
-          openAppFixedTabOnThread({
+          openAppFixedTabOnSurface({
             intent: threadIntent(target),
-            isThreadFocused: true,
-            navigateToThread: () => {},
-            threadId: "thr_a",
+            isSurfaceFocused: true,
+            navigateToSurface: () => {},
+            surfaceKey: getThreadFixedTabSurfaceKey("thr_a"),
           }),
         selections: () => selected.length,
       };
@@ -468,20 +508,20 @@ describe.each(FIXED_TAB_SURFACES)("fixed tab contract: %s", (_name, create) => {
 describe("opening a fixed tab for a thread from outside its view", () => {
   it("navigates and holds the request until that thread's view can take it", () => {
     registerBotsPlugin();
-    const navigateToThread = vi.fn();
+    const navigateToSurface = vi.fn();
     expect(
-      openAppFixedTabOnThread({
+      openAppFixedTabOnSurface({
         intent: threadIntent({ botId: "atlas" }),
-        isThreadFocused: false,
-        navigateToThread,
-        threadId: "thr_other",
+        isSurfaceFocused: false,
+        navigateToSurface,
+        surfaceKey: getThreadFixedTabSurfaceKey("thr_other"),
       }),
     ).toBe(true);
-    expect(navigateToThread).toHaveBeenCalledOnce();
+    expect(navigateToSurface).toHaveBeenCalledOnce();
 
     const notReady = vi.fn(() => false);
-    const releaseNotReady = registerThreadFixedTabSurface(
-      "thr_other",
+    const releaseNotReady = registerFixedTabSurface(
+      getThreadFixedTabSurfaceKey("thr_other"),
       notReady,
     );
     expect(notReady).toHaveBeenCalledOnce();
@@ -492,7 +532,10 @@ describe("opening a fixed tab for a thread from outside its view", () => {
     const ready = vi.fn((intent: AppFixedTabOpenIntent) =>
       openAppFixedTabFromDestinations(destinations, intent),
     );
-    const releaseReady = registerThreadFixedTabSurface("thr_other", ready);
+    const releaseReady = registerFixedTabSurface(
+      getThreadFixedTabSurfaceKey("thr_other"),
+      ready,
+    );
     expect(delivered.map((entry) => entry.target)).toEqual([
       { botId: "atlas" },
     ]);
@@ -500,73 +543,74 @@ describe("opening a fixed tab for a thread from outside its view", () => {
     releaseReady();
 
     const later = vi.fn(() => true);
-    registerThreadFixedTabSurface("thr_other", later);
+    registerFixedTabSurface(getThreadFixedTabSurfaceKey("thr_other"), later);
     expect(later).not.toHaveBeenCalled();
   });
 
   it("does not deliver a held request to a different thread", () => {
-    openAppFixedTabOnThread({
+    openAppFixedTabOnSurface({
       intent: threadIntent(undefined),
-      isThreadFocused: false,
-      navigateToThread: () => {},
-      threadId: "thr_other",
+      isSurfaceFocused: false,
+      navigateToSurface: () => {},
+      surfaceKey: getThreadFixedTabSurfaceKey("thr_other"),
     });
     const opener = vi.fn(() => true);
-    registerThreadFixedTabSurface("thr_unrelated", opener);
+    registerFixedTabSurface(
+      getThreadFixedTabSurfaceKey("thr_unrelated"),
+      opener,
+    );
     expect(opener).not.toHaveBeenCalled();
   });
 
   it("forgets a held request that no view picked up in time", () => {
     const now = Date.now();
-    openAppFixedTabOnThread({
+    openAppFixedTabOnSurface({
       intent: threadIntent(undefined),
-      isThreadFocused: false,
-      navigateToThread: () => {},
-      threadId: "thr_other",
+      isSurfaceFocused: false,
+      navigateToSurface: () => {},
+      surfaceKey: getThreadFixedTabSurfaceKey("thr_other"),
     });
-    vi.spyOn(Date, "now").mockReturnValue(
-      now + PENDING_THREAD_FIXED_TAB_TTL_MS + 1,
-    );
+    vi.spyOn(Date, "now").mockReturnValue(now + PENDING_FIXED_TAB_TTL_MS + 1);
     const opener = vi.fn(() => true);
-    registerThreadFixedTabSurface("thr_other", opener);
+    registerFixedTabSurface(getThreadFixedTabSurfaceKey("thr_other"), opener);
     expect(opener).not.toHaveBeenCalled();
   });
 
   it("opens at once in a thread that is on screen and focuses it only when it is not the focused thread", () => {
     const opener = vi.fn(() => true);
-    registerThreadFixedTabSurface("thr_split", opener);
-    const navigateToThread = vi.fn();
+    registerFixedTabSurface(getThreadFixedTabSurfaceKey("thr_split"), opener);
+    const navigateToSurface = vi.fn();
     expect(
-      openAppFixedTabOnThread({
+      openAppFixedTabOnSurface({
         intent: threadIntent(undefined),
-        isThreadFocused: true,
-        navigateToThread,
-        threadId: "thr_split",
+        isSurfaceFocused: true,
+        navigateToSurface,
+        surfaceKey: getThreadFixedTabSurfaceKey("thr_split"),
       }),
     ).toBe(true);
-    expect(navigateToThread).not.toHaveBeenCalled();
-    openAppFixedTabOnThread({
+    expect(navigateToSurface).not.toHaveBeenCalled();
+    openAppFixedTabOnSurface({
       intent: threadIntent(undefined),
-      isThreadFocused: false,
-      navigateToThread,
-      threadId: "thr_split",
+      isSurfaceFocused: false,
+      navigateToSurface,
+      surfaceKey: getThreadFixedTabSurfaceKey("thr_split"),
     });
-    expect(navigateToThread).toHaveBeenCalledOnce();
+    expect(navigateToSurface).toHaveBeenCalledOnce();
     expect(opener).toHaveBeenCalledTimes(2);
   });
 
   it("reports a decline from a thread that is on screen without navigating", () => {
-    registerThreadFixedTabSurface("thr_a", () => false);
-    const navigateToThread = vi.fn();
+    registerFixedTabSurface(getThreadFixedTabSurfaceKey("thr_a"), () => false);
+    const navigateToSurface = vi.fn();
     expect(
-      openAppFixedTabOnThread({
+      openAppFixedTabOnSurface({
         intent: threadIntent(undefined),
-        isThreadFocused: false,
-        navigateToThread,
-        threadId: "thr_a",
+        isSurfaceFocused: false,
+        navigateToSurface,
+        surfaceKey: getThreadFixedTabSurfaceKey("thr_a"),
       }),
     ).toBe(false);
-    expect(navigateToThread).not.toHaveBeenCalled();
+    expect(navigateToSurface).not.toHaveBeenCalled();
   });
 });
 
@@ -575,7 +619,7 @@ describe("pinned tab requests on the thread-open signal", () => {
     registerBotsPlugin();
     const { delivered, host, selected } = createRecordingHost();
     const destinations = pinnedDestinations(host);
-    registerThreadFixedTabSurface("thr_cli", (intent) =>
+    registerFixedTabSurface(getThreadFixedTabSurfaceKey("thr_cli"), (intent) =>
       openAppFixedTabFromDestinations(destinations, intent),
     );
 
@@ -635,8 +679,9 @@ describe("pinned tab requests on the thread-open signal", () => {
     ).toBe(true);
     const { host, selected } = createRecordingHost();
     const destinations = pinnedDestinations(host);
-    registerThreadFixedTabSurface("thr_later", (intent) =>
-      openAppFixedTabFromDestinations(destinations, intent),
+    registerFixedTabSurface(
+      getThreadFixedTabSurfaceKey("thr_later"),
+      (intent) => openAppFixedTabFromDestinations(destinations, intent),
     );
     expect(selected.map((tab) => tab.id)).toEqual([
       createPluginPinnedFixedPanelTab({

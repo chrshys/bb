@@ -1798,10 +1798,14 @@ the `experimental_fixedTabOpenCalls` inspection list.
    panel, and route remounts, refresh, and compact drawer animation. Targets
    must survive remounts in the current app session, never survive refresh, and
    never reappear after their owner clears them.
-9. Resolved for threads (2026-11-16): a cross-thread open navigates first and
-   resolves through the same destinations; see "Pinned thread tabs" below.
-   `openFixedTab` for nav-panel tabs still supports only `{ kind: "current" }`.
-   Decide whether nav-panel fixed tabs need the same reach.
+9. Resolved (2026-11-16): an open addressed to a surface that is not on screen
+   navigates first, is held for up to 30 seconds, and resolves through that
+   surface's own destinations. Threads use it for pinned tabs (see "Pinned
+   thread tabs" below). Nav-panel tabs use it through
+   `surface: { kind: "navPanel", panelId, subPath? }`, which a plugin can pass
+   from any surface for its own pages; Bots Sidebar is the one consumer.
+   Confirm that a held request returning true before the tab is known to open
+   is the right contract.
 10. Keep core and plugin destinations on the same resolver and verify the
     controller never learns Changes, file, task, or document target shapes.
 

@@ -79,8 +79,10 @@ import {
   AppFixedTabTargetProvider,
   createOwnerValidatedFixedTabDestination,
   deliverAppFixedTabTarget,
+  getNavPanelFixedTabSurfaceKey,
   getPluginFixedTabOwnerId,
   openAppFixedTabFromDestinations,
+  registerFixedTabSurface,
   useScopedAppFixedTabTargetState,
   type AppFixedTabDestination,
 } from "@/lib/app-fixed-tab-navigation";
@@ -459,6 +461,17 @@ export function PluginPanelRightPanelHost({
     (intent: Parameters<typeof openAppFixedTabFromDestinations>[1]) =>
       openAppFixedTabFromDestinations(fixedTabDestinations, intent),
     [fixedTabDestinations],
+  );
+  const registeredPanelId = panel?.id ?? null;
+  useEffect(
+    () =>
+      registeredPanelId === null
+        ? undefined
+        : registerFixedTabSurface(
+            getNavPanelFixedTabSurfaceKey(pluginId, registeredPanelId),
+            openFixedTab,
+          ),
+    [openFixedTab, pluginId, registeredPanelId],
   );
   const revealPersistedPanel = useCallback(() => {
     selectPersistedPanelTab();

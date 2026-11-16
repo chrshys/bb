@@ -1,7 +1,8 @@
 import type { ThreadOpenPanelTab } from "@bb/server-contract";
 import {
   getPluginPinnedTabOwnerId,
-  openAppFixedTabOnThread,
+  getThreadFixedTabSurfaceKey,
+  openAppFixedTabOnSurface,
 } from "@/lib/app-fixed-tab-navigation";
 import type { AppFixedTabReference } from "@/lib/app-navigation-host";
 import { GIT_DIFF_FIXED_TAB_REFERENCE } from "./git-diff/git-diff-fixed-tab-navigation";
@@ -28,14 +29,14 @@ export function openThreadOpenSignalPanelTab({
   panelTab: ThreadOpenPanelTab;
   threadId: string;
 }): boolean {
-  return openAppFixedTabOnThread({
+  return openAppFixedTabOnSurface({
     intent: {
       surface: { kind: "current" },
       tab: resolveThreadOpenPanelTabReference(panelTab.tab),
       ...(panelTab.target === null ? {} : { target: panelTab.target }),
     },
-    isThreadFocused: true,
-    navigateToThread: () => {},
-    threadId,
+    isSurfaceFocused: true,
+    navigateToSurface: () => {},
+    surfaceKey: getThreadFixedTabSurfaceKey(threadId),
   });
 }

@@ -172,81 +172,86 @@ export function useAppFixedTabTarget(
   return state?.ownerId === ownerId && state.tabId === tabId ? state : null;
 }
 
-export const PENDING_THREAD_FIXED_TAB_TTL_MS = 30_000;
+export const PENDING_FIXED_TAB_TTL_MS = 30_000;
 
-type ThreadFixedTabOpener = (intent: AppFixedTabOpenIntent) => boolean;
+type FixedTabSurfaceOpener = (intent: AppFixedTabOpenIntent) => boolean;
 
-interface PendingThreadFixedTabIntent {
+interface PendingFixedTabIntent {
   intent: AppFixedTabOpenIntent;
   queuedAt: number;
 }
 
-const threadFixedTabOpeners = new Map<string, ThreadFixedTabOpener[]>();
-const pendingThreadFixedTabIntents = new Map<
-  string,
-  PendingThreadFixedTabIntent
->();
+const fixedTabSurfaceOpeners = new Map<string, FixedTabSurfaceOpener[]>();
+const pendingFixedTabIntents = new Map<string, PendingFixedTabIntent>();
 
-function drainPendingThreadFixedTabIntent(
-  threadId: string,
-  opener: ThreadFixedTabOpener,
+export function getThreadFixedTabSurfaceKey(threadId: string): string {
+  return `thread:${threadId}`;
+}
+
+export function getNavPanelFixedTabSurfaceKey(
+  pluginId: string,
+  panelId: string,
+): string {
+  return `nav-panel:${pluginId}:${panelId}`;
+}
+
+function drainPendingFixedTabIntent(
+  surfaceKey: string,
+  opener: FixedTabSurfaceOpener,
 ): void {
-  const pending = pendingThreadFixedTabIntents.get(threadId);
+  const pending = pendingFixedTabIntents.get(surfaceKey);
   if (pending === undefined) return;
-  if (Date.now() - pending.queuedAt > PENDING_THREAD_FIXED_TAB_TTL_MS) {
-    pendingThreadFixedTabIntents.delete(threadId);
+  if (Date.now() - pending.queuedAt > PENDING_FIXED_TAB_TTL_MS) {
+    pendingFixedTabIntents.delete(surfaceKey);
     return;
   }
   if (opener(pending.intent)) {
-    pendingThreadFixedTabIntents.delete(threadId);
+    pendingFixedTabIntents.delete(surfaceKey);
   }
 }
 
-export function registerThreadFixedTabSurface(
-  threadId: string,
-  opener: ThreadFixedTabOpener,
+export function registerFixedTabSurface(
+  surfaceKey: string,
+  opener: FixedTabSurfaceOpener,
 ): () => void {
-  threadFixedTabOpeners.set(threadId, [
-    ...(threadFixedTabOpeners.get(threadId) ?? []),
+  fixedTabSurfaceOpeners.set(surfaceKey, [
+    ...(fixedTabSurfaceOpeners.get(surfaceKey) ?? []),
     opener,
   ]);
-  drainPendingThreadFixedTabIntent(threadId, opener);
+  drainPendingFixedTabIntent(surfaceKey, opener);
   return () => {
-    const remaining = (threadFixedTabOpeners.get(threadId) ?? []).filter(
+    const remaining = (fixedTabSurfaceOpeners.get(surfaceKey) ?? []).filter(
       (candidate) => candidate !== opener,
     );
-    if (remaining.length > 0) threadFixedTabOpeners.set(threadId, remaining);
-    else threadFixedTabOpeners.delete(threadId);
+    if (remaining.length > 0) fixedTabSurfaceOpeners.set(surfaceKey, remaining);
+    else fixedTabSurfaceOpeners.delete(surfaceKey);
   };
 }
 
-export function openAppFixedTabOnThread({
+export function openAppFixedTabOnSurface({
   intent,
-  isThreadFocused,
-  navigateToThread,
-  threadId,
+  isSurfaceFocused,
+  navigateToSurface,
+  surfaceKey,
 }: {
   intent: AppFixedTabOpenIntent;
-  isThreadFocused: boolean;
-  navigateToThread: () => void;
-  threadId: string;
+  isSurfaceFocused: boolean;
+  navigateToSurface: () => void;
+  surfaceKey: string;
 }): boolean {
-  const opener = threadFixedTabOpeners.get(threadId)?.at(-1);
+  const opener = fixedTabSurfaceOpeners.get(surfaceKey)?.at(-1);
   if (opener === undefined) {
-    pendingThreadFixedTabIntents.set(threadId, {
-      intent,
-      queuedAt: Date.now(),
-    });
-    navigateToThread();
+    pendingFixedTabIntents.set(surfaceKey, { intent, queuedAt: Date.now() });
+    navigateToSurface();
     return true;
   }
   if (!opener(intent)) return false;
-  pendingThreadFixedTabIntents.delete(threadId);
-  if (!isThreadFocused) navigateToThread();
+  pendingFixedTabIntents.delete(surfaceKey);
+  if (!isSurfaceFocused) navigateToSurface();
   return true;
 }
 
-export function resetThreadFixedTabSurfacesForTest(): void {
-  threadFixedTabOpeners.clear();
-  pendingThreadFixedTabIntents.clear();
+export function resetFixedTabSurfacesForTest(): void {
+  fixedTabSurfaceOpeners.clear();
+  pendingFixedTabIntents.clear();
 }
