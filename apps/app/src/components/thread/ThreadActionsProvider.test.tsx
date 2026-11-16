@@ -16,6 +16,7 @@ import {
   threadListQueryKey,
 } from "@/hooks/queries/query-keys";
 import { getCachedSidebarNavigationThreads } from "@/hooks/cache-owners/query-cache";
+import { BbHttpError } from "@bb/sdk/browser";
 import { appToast } from "@/components/ui/app-toast";
 import { sdk } from "@/lib/sdk";
 import {
@@ -138,6 +139,15 @@ function ArchiveButton({ thread }: { thread: Thread }) {
   return (
     <button type="button" onClick={() => requestArchive(thread)}>
       Archive
+    </button>
+  );
+}
+
+function DeleteButton({ thread }: { thread: Thread }) {
+  const { requestDelete } = useThreadActions();
+  return (
+    <button type="button" onClick={() => requestDelete(thread)}>
+      Delete
     </button>
   );
 }
@@ -435,6 +445,62 @@ describe("ThreadActionsProvider archive confirmation", () => {
       screen.queryByRole("heading", { name: /Archive \d+ threads\?/ }),
     ).toBeNull();
     expect(sdk.threads.archiveAll).not.toHaveBeenCalled();
+  });
+});
+
+describe("ThreadActionsProvider close protection", () => {
+  const REASON = "Persistent coordinator";
+
+  it("shows the protection reason when the pre-archive check reports it", async () => {
+    vi.mocked(sdk.threads.childSummary).mockResolvedValue({
+      archiveProtectionReason: REASON,
+      deleteProtectionReason: REASON,
+      nonDeletedChildCount: 0,
+      unarchivedDescendantCount: 0,
+    });
+    renderProvider(<ArchiveButton thread={makeThread()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    await vi.waitFor(() =>
+      expect(appToast.error).toHaveBeenCalledWith(
+        "Failed to archive thread and children",
+        { description: REASON },
+      ),
+    );
+    expect(sdk.threads.archiveAll).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's reason when archive is rejected as protected", async () => {
+    mocks.confirmThreadArchive = false;
+    vi.mocked(sdk.threads.archiveAll).mockRejectedValueOnce(
+      new BbHttpError({
+        body: { code: "thread_close_protected", message: REASON },
+        code: "thread_close_protected",
+        message: REASON,
+        status: 409,
+      }),
+    );
+    renderProvider(<ArchiveButton thread={makeThread()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    await vi.waitFor(() =>
+      expect(appToast.error).toHaveBeenCalledWith(
+        "Failed to archive thread and children",
+        { description: REASON },
+      ),
+    );
+    expect(appToast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows the protection reason instead of opening the delete dialog", async () => {
+    vi.mocked(sdk.threads.childSummary).mockResolvedValue({
+      archiveProtectionReason: REASON,
+      deleteProtectionReason: REASON,
+      nonDeletedChildCount: 0,
+      unarchivedDescendantCount: 0,
+    });
+    renderProvider(<DeleteButton thread={makeThread()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await vi.waitFor(() => expect(appToast.error).toHaveBeenCalledWith(REASON));
+    expect(mocks.mutation).not.toHaveBeenCalled();
   });
 });
 

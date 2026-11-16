@@ -27,6 +27,7 @@ import {
 } from "@bb/shared-ui/dropdown-menu";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { CompactLongPressMenu } from "@bb/shared-ui/compact-long-press-menu";
+import { useMarkThreadActionMenuOpen } from "@/lib/thread-actions/thread-action-registry";
 import {
   ThreadActionMenuRows,
   useThreadActionMenuGroups,
@@ -37,6 +38,7 @@ const MENU_LABEL = "Thread actions";
 
 function ThreadActionsMenuItems({
   thread,
+  open,
   inline,
   requestRename,
   surface,
@@ -45,6 +47,7 @@ function ThreadActionsMenuItems({
   onDrawerStepChange,
 }: {
   thread: PluginThreadActionTarget;
+  open: boolean;
   inline?: readonly PluginThreadActionsInlineItem[];
   requestRename?: (threadId: string) => void;
   surface: ThreadActionMenuSurface;
@@ -52,6 +55,7 @@ function ThreadActionsMenuItems({
   drawerStep: string | null;
   onDrawerStepChange: (key: string | null) => void;
 }) {
+  useMarkThreadActionMenuOpen(thread.id, open);
   const groups = useThreadActionMenuGroups({ thread, inline, requestRename });
   return (
     <ThreadActionMenuRows
@@ -108,14 +112,16 @@ const ThreadActionsTriggerSlot = forwardRef<
 
 function useDrawerStep(onOpenChange?: (open: boolean) => void) {
   const [drawerStep, setDrawerStep] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
   const handleOpenChange = useCallback(
     (open: boolean) => {
+      setIsOpen(open);
       if (!open) setDrawerStep(null);
       onOpenChange?.(open);
     },
     [onOpenChange],
   );
-  return { drawerStep, setDrawerStep, handleOpenChange };
+  return { drawerStep, setDrawerStep, isOpen, handleOpenChange };
 }
 
 export function ThreadActionsMenu({
@@ -131,7 +137,7 @@ export function ThreadActionsMenu({
   sideOffset,
 }: PluginThreadActionsMenuProps & { open?: boolean }) {
   const isCompactViewport = useIsCompactViewport();
-  const { drawerStep, setDrawerStep, handleOpenChange } =
+  const { drawerStep, setDrawerStep, isOpen, handleOpenChange } =
     useDrawerStep(onOpenChange);
   return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
@@ -147,6 +153,7 @@ export function ThreadActionsMenu({
       >
         <ThreadActionsMenuItems
           thread={thread}
+          open={open ?? isOpen}
           inline={inline}
           requestRename={requestRename}
           surface="dropdown"
@@ -179,7 +186,7 @@ function ThreadActionsLongPressMenu({
   disabled,
   dragging,
 }: PluginThreadActionsContextMenuProps) {
-  const { drawerStep, setDrawerStep, handleOpenChange } =
+  const { drawerStep, setDrawerStep, isOpen, handleOpenChange } =
     useDrawerStep(onOpenChange);
   return (
     <CompactLongPressMenu
@@ -190,6 +197,7 @@ function ThreadActionsLongPressMenu({
       items={
         <ThreadActionsMenuItems
           thread={thread}
+          open={isOpen}
           inline={inline}
           requestRename={requestRename}
           surface="dropdown"
@@ -237,6 +245,7 @@ function ThreadActionsDesktopContextMenu({
       >
         <ThreadActionsMenuItems
           thread={thread}
+          open={open}
           inline={inline}
           requestRename={requestRename}
           surface="context"

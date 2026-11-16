@@ -174,6 +174,54 @@ function retainThreadId(threadId: string): () => void {
   };
 }
 
+const openMenuThreadCounts = new Map<string, number>();
+let openMenuThreadIds: readonly string[] = [];
+const openMenuListeners = new Set<() => void>();
+
+function subscribeOpenMenuThreadIds(listener: () => void): () => void {
+  openMenuListeners.add(listener);
+  return () => {
+    openMenuListeners.delete(listener);
+  };
+}
+
+function getOpenMenuThreadIds(): readonly string[] {
+  return openMenuThreadIds;
+}
+
+function publishOpenMenuThreadIds(): void {
+  openMenuThreadIds = [...openMenuThreadCounts.keys()].sort();
+  for (const listener of openMenuListeners) listener();
+}
+
+function retainOpenMenuThreadId(threadId: string): () => void {
+  openMenuThreadCounts.set(
+    threadId,
+    (openMenuThreadCounts.get(threadId) ?? 0) + 1,
+  );
+  publishOpenMenuThreadIds();
+  return () => {
+    const count = openMenuThreadCounts.get(threadId) ?? 0;
+    if (count <= 1) openMenuThreadCounts.delete(threadId);
+    else openMenuThreadCounts.set(threadId, count - 1);
+    publishOpenMenuThreadIds();
+  };
+}
+
+export function useMarkThreadActionMenuOpen(
+  threadId: string,
+  open: boolean,
+): void {
+  useEffect(
+    () => (open ? retainOpenMenuThreadId(threadId) : undefined),
+    [open, threadId],
+  );
+}
+
+export function useOpenThreadActionMenuThreadIds(): readonly string[] {
+  return useSyncExternalStore(subscribeOpenMenuThreadIds, getOpenMenuThreadIds);
+}
+
 const ThreadActionSurfaceVisibleContext = createContext(true);
 
 export function ThreadActionSurfaceVisibility({
@@ -195,6 +243,8 @@ export function resetThreadActionRegistryForTest(): void {
   subscribedThreadCounts.clear();
   subscribedThreadIds = [];
   cancelThreadIdsFlush();
+  openMenuThreadCounts.clear();
+  openMenuThreadIds = [];
   setSnapshot({
     records: [],
     collected: new Map(),

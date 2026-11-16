@@ -51,7 +51,7 @@ const hostActions = vi.hoisted(() => ({
   requestDelete: vi.fn(),
 }));
 const sdkThreads = vi.hoisted(() => ({
-  childSummary: vi.fn(async () => ({
+  childSummary: vi.fn(async (_input: { threadId: string }) => ({
     nonDeletedChildCount: 0,
     unarchivedDescendantCount: 0,
     archiveProtectionReason: null as string | null,
@@ -358,6 +358,7 @@ describe.each(SURFACES)("thread actions on the $name", (surface) => {
       deleteProtectionReason: "Persistent coordinator",
     });
     renderSurface(surface, { thread: baseThread });
+    expect(sdkThreads.childSummary).not.toHaveBeenCalled();
     await surface.open();
     for (const label of ["Archive", "Delete"]) {
       const item = await screen.findByRole("menuitem", {
@@ -371,7 +372,26 @@ describe.each(SURFACES)("thread actions on the $name", (surface) => {
     }
     expect(hostActions.requestArchive).not.toHaveBeenCalled();
     expect(hostActions.requestDelete).not.toHaveBeenCalled();
+    expect(sdkThreads.childSummary).toHaveBeenCalledTimes(1);
+    expect(sdkThreads.childSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: baseThread.id }),
+    );
   });
+
+  it("checks close protection once per open and does not poll while open", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderSurface(surface, { thread: baseThread });
+    await surface.open();
+    await screen.findByRole("menuitem", { name: "Archive" });
+    await waitFor(() =>
+      expect(sdkThreads.childSummary).toHaveBeenCalledTimes(1),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(sdkThreads.childSummary).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     {
       state: "a top-level thread",
@@ -847,6 +867,64 @@ describe("thread actions outside bb's own surfaces", () => {
       actionId: "details",
       pluginId: "fixture",
     });
+  });
+});
+
+describe("thread close protection requests", () => {
+  function Row({ id }: { id: string }) {
+    useThreadActionEntries(
+      threadListEntryActionTarget(makeThreadListEntry({ ...baseThread, id })),
+    );
+    return null;
+  }
+
+  const ROW_IDS = ["thr_row_a", "thr_row_b", "thr_row_c"];
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
+
+  it("checks no thread whose action menu is closed", async () => {
+    const [surface] = SURFACES;
+    if (surface === undefined) throw new Error("no surface");
+    renderSurface(
+      {
+        ...surface,
+        render: () => (
+          <>
+            {ROW_IDS.map((id) => (
+              <Row key={id} id={id} />
+            ))}
+          </>
+        ),
+      },
+      { thread: baseThread },
+    );
+    await settle();
+    expect(sdkThreads.childSummary).not.toHaveBeenCalled();
+  });
+
+  it("checks only the thread whose menu is open", async () => {
+    const [surface] = SURFACES;
+    if (surface === undefined) throw new Error("no surface");
+    renderSurface(
+      {
+        ...surface,
+        render: (options) => (
+          <>
+            {ROW_IDS.map((id) => (
+              <Row key={id} id={id} />
+            ))}
+            {surface.render(options)}
+          </>
+        ),
+      },
+      { thread: baseThread },
+    );
+    await settle();
+    await surface.open();
+    await waitFor(() => expect(sdkThreads.childSummary).toHaveBeenCalled());
+    await settle();
+    expect(
+      sdkThreads.childSummary.mock.calls.map(([input]) => input.threadId),
+    ).toEqual([baseThread.id]);
   });
 });
 

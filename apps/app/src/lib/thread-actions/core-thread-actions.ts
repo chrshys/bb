@@ -6,7 +6,6 @@ import {
   experimental_THREAD_ACTION_GROUPS as GROUPS,
   type PluginThreadActionRegistration,
   type PluginThreadActionTarget,
-  type PluginThreadActionDataInput,
 } from "@get-bb/plugin-sdk";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { useThreadActions } from "@/components/thread/ThreadActionsProvider";
@@ -17,6 +16,7 @@ import { resolveThread } from "@/lib/plugin-sidebar-hooks";
 import { getThreadRoutePath } from "@/lib/route-paths";
 import { countPanes, listPanes } from "@/lib/split-layout";
 import { splitLayoutAtom } from "@/lib/split-layout/atoms";
+import { useOpenThreadActionMenuThreadIds } from "@/lib/thread-actions/thread-action-registry";
 
 function coreThreadAction<Data>(
   registration: PluginThreadActionRegistration<Data>,
@@ -89,16 +89,16 @@ interface LifecycleHandlers {
   requestDelete: (threadId: string) => Promise<void>;
 }
 
-function useLifecycleHandlers({
-  threadIds,
-}: PluginThreadActionDataInput): LifecycleHandlers {
+const CLOSE_PROTECTION_STALE_MS = 5_000;
+
+function useLifecycleHandlers(): LifecycleHandlers {
+  const threadIds = useOpenThreadActionMenuThreadIds();
   const summaries = useQueries({
     queries: threadIds.map((threadId) => ({
       queryKey: ["thread-close-protection", threadId],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         sdk.threads.childSummary({ threadId, signal }),
-      refetchInterval: 10_000,
-      staleTime: 0,
+      staleTime: CLOSE_PROTECTION_STALE_MS,
     })),
   });
   const protection = useMemo(
