@@ -180,5 +180,9 @@
   "storage-retention": {
     "category": "tasks-and-workflows",
     "screenshots": []
+  },
+  "bots-sidebar": {
+    "category": "thread-management",
+    "screenshots": []
   }
 }

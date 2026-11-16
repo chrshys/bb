@@ -209,6 +209,11 @@ export const BUILTIN_PLUGINS = [
     pluginId: "workflows",
     defaultEnabled: false,
   },
+  {
+    name: "bots-sidebar",
+    pluginId: "bots-sidebar",
+    defaultEnabled: true,
+  },
 ].map((plugin): BundledPluginDefinition => ({
   ...plugin,
   autoInstall: true,

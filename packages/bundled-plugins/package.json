@@ -13,6 +13,7 @@
     "bb-plugin-automations": "workspace:*",
     "bb-plugin-bb-account": "workspace:*",
     "bb-plugin-bb-guide": "workspace:*",
+    "bb-plugin-bots-sidebar": "workspace:*",
     "bb-plugin-browser-automation": "workspace:*",
     "bb-plugin-concurrency-limit": "workspace:*",
     "bb-plugin-bb-ai": "workspace:*",
