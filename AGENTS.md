@@ -73,7 +73,7 @@ The product goal is a polished knowledge-work harness built on top of BB.
 
 - `custom` is the fork's branch. `main` mirrors `upstream/main` (`get-bb/bb`) and takes no fork commits. `origin` is `chrshys/bb`, which is public.
 - Commit fork work in small, single-purpose commits on `custom`. Never leave fork work only in the working tree or only in BB's plugin cache.
-- Bots Sidebar lives in its own repository at `~/Projects/bb-bots-sidebar` (branch `custom`, `upstream` is `tobi/bb-bots-sidebar`). Edit it there, never under `<data dir>/plugins/cache`.
+- Bots Sidebar lives in its own repository at `~/Projects/bb-bots-sidebar` (branch `custom`). It is an independent fork of `tobi/bb-bots-sidebar` 1.0.0 and takes no upstream updates. BB loads it from that path; edit it there.
 - Core must not reference a plugin's class names, ids, or data. When a plugin needs something from core, add an `experimental_` extension point and have the plugin feature-detect it so it still loads on stock BB.
 - Take upstream changes by merging `upstream/main` into `custom`. Keep fork edits to upstream files minimal and unformatted beyond the lines changed, so merges stay small.
 - `HOST_DAEMON_PROTOCOL_VERSION` tracks upstream. Bump it in the fork only for a wire change the fork makes, and after a merge set it above upstream's value.
