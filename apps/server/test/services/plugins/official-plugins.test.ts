@@ -92,6 +92,28 @@ describe("official plugin registry invariants", () => {
       BUNDLED_PLUGINS.length,
     );
   });
+
+  it("ships Tasks and Docs as optional plugins that are off by default", () => {
+    expect(
+      BUNDLED_PLUGINS.filter(
+        (plugin) =>
+          plugin.pluginId === "tasks" || plugin.pluginId === "simple-notes",
+      ),
+    ).toEqual([
+      {
+        name: "docs",
+        pluginId: "simple-notes",
+        autoInstall: false,
+        defaultEnabled: false,
+      },
+      {
+        name: "tasks",
+        pluginId: "tasks",
+        autoInstall: false,
+        defaultEnabled: false,
+      },
+    ]);
+  });
 });
 
 describe("store-installed official plugins", () => {
@@ -211,6 +233,49 @@ describe("store-installed official plugins", () => {
           status: "running",
         },
       ]);
+    },
+  );
+
+  it.each([
+    { enabledFollowsDefault: true, enabled: false, status: "disabled" },
+    { enabledFollowsDefault: false, enabled: true, status: "running" },
+  ])(
+    "leaves an installed optional plugin whose default is off $status when enabledFollowsDefault is $enabledFollowsDefault",
+    async ({ enabledFollowsDefault, enabled, status }) => {
+      upsertInstalledPlugin(db, {
+        id: "builtin-fixture",
+        source: "builtin:fixture",
+        provenance: {
+          kind: "catalog",
+          marketplace: "bb-official",
+          entryId: "fixture",
+        },
+        sourceIntent: { kind: "builtin", name: "fixture" },
+        exactResolution: { kind: "builtin" },
+        updateState: {
+          lastCheckAt: null,
+          availableCompatibleVersion: null,
+          newestIncompatibleVersion: null,
+          statusDetail: null,
+        },
+        activeArtifactId: null,
+        rootDir: fixtureRoot,
+        version: "0.1.0",
+        enabled: true,
+        enabledFollowsDefault,
+      });
+      service = createService({
+        db,
+        dataDir: join(workDir, "data"),
+        bundled: [officialEntry({ defaultEnabled: false })],
+      });
+
+      await service.start();
+
+      expect(service.list()).toMatchObject([
+        { id: "builtin-fixture", enabled, status },
+      ]);
+      expect(loadCount()).toBe(enabled ? 1 : 0);
     },
   );
 

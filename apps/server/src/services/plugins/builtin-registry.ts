@@ -238,7 +238,7 @@ export const OFFICIAL_PLUGINS = [
   {
     name: "docs",
     pluginId: "simple-notes",
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     name: "memory",
@@ -248,7 +248,7 @@ export const OFFICIAL_PLUGINS = [
   {
     name: "tasks",
     pluginId: "tasks",
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     name: "theme-preview",
