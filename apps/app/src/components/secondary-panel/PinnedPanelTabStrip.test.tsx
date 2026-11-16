@@ -123,6 +123,16 @@ describe("PinnedPanelTabStrip", () => {
     expect(strip.className).toContain("overflow-x-auto");
     expect(strip.className).toContain("max-w-1/2");
     expect(strip.querySelectorAll("button")).toHaveLength(labels.length);
+    expect(strip.hasAttribute("data-overflow-end")).toBe(true);
+    expect(strip.hasAttribute("data-overflow-start")).toBe(false);
+
+    Object.defineProperty(strip, "scrollLeft", {
+      configurable: true,
+      value: 280,
+    });
+    fireEvent.scroll(strip);
+    expect(strip.hasAttribute("data-overflow-start")).toBe(true);
+    expect(strip.hasAttribute("data-overflow-end")).toBe(false);
   });
 
   it("does not scroll when every icon fits", () => {
@@ -130,6 +140,8 @@ describe("PinnedPanelTabStrip", () => {
     HTMLElement.prototype.scrollIntoView = scrollIntoView;
     renderStrip(createItems(["Info", "Diff"], "Diff"));
     expect(scrollIntoView).not.toHaveBeenCalled();
+    const strip = screen.getByRole("group", { name: "Pinned views" });
+    expect(strip.hasAttribute("data-overflow-end")).toBe(false);
   });
 });
 

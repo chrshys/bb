@@ -1,6 +1,8 @@
 import {
   useLayoutEffect,
   useRef,
+  useState,
+  type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -31,6 +33,34 @@ interface PinnedPanelTabStripProps {
 }
 
 const PINNED_TAB_BUTTON_SELECTOR = "[data-pinned-panel-tab] button";
+const EDGE_EPSILON_PX = 1;
+const EDGE_FADE_PX = 20;
+
+interface StripOverflow {
+  end: boolean;
+  start: boolean;
+}
+
+const NO_OVERFLOW: StripOverflow = { end: false, start: false };
+
+function measureOverflow(strip: HTMLElement): StripOverflow {
+  const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
+  if (maxScrollLeft <= EDGE_EPSILON_PX) return NO_OVERFLOW;
+  return {
+    end: strip.scrollLeft < maxScrollLeft - EDGE_EPSILON_PX,
+    start: strip.scrollLeft > EDGE_EPSILON_PX,
+  };
+}
+
+function getEdgeFadeStyle(overflow: StripOverflow): CSSProperties | undefined {
+  if (!overflow.start && !overflow.end) return undefined;
+  const maskImage = `linear-gradient(to right, ${
+    overflow.start ? "transparent" : "black"
+  }, black ${EDGE_FADE_PX}px, black calc(100% - ${EDGE_FADE_PX}px), ${
+    overflow.end ? "transparent" : "black"
+  })`;
+  return { maskImage, WebkitMaskImage: maskImage };
+}
 
 function resolveFocusTarget(
   key: string,
@@ -60,6 +90,30 @@ export function PinnedPanelTabStrip({
 }: PinnedPanelTabStripProps) {
   const stripRef = useRef<HTMLDivElement>(null);
   const activeItemId = items.find((item) => item.isActive)?.id ?? null;
+  const [overflow, setOverflow] = useState(NO_OVERFLOW);
+  const itemCount = items.length;
+
+  useLayoutEffect(() => {
+    const strip = stripRef.current;
+    if (strip === null) return;
+    const update = () => {
+      const next = measureOverflow(strip);
+      setOverflow((current) =>
+        current.start === next.start && current.end === next.end
+          ? current
+          : next,
+      );
+    };
+    update();
+    strip.addEventListener("scroll", update, { passive: true });
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(strip);
+    return () => {
+      strip.removeEventListener("scroll", update);
+      observer?.disconnect();
+    };
+  }, [itemCount]);
 
   useLayoutEffect(() => {
     if (activeItemId === null) return;
@@ -102,6 +156,9 @@ export function PinnedPanelTabStrip({
       aria-label="Pinned views"
       data-pinned-panel-tab-strip=""
       data-no-secondary-panel-swipe=""
+      data-overflow-start={overflow.start ? "" : undefined}
+      data-overflow-end={overflow.end ? "" : undefined}
+      style={getEdgeFadeStyle(overflow)}
       className={cn(
         "no-scrollbar flex max-w-1/2 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden overscroll-x-contain",
         className,
