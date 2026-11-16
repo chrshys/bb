@@ -17,6 +17,7 @@ import {
   experimental_useSidebarThreadSplit,
   experimental_useSidebarThreads,
   experimental_useAppPanel,
+  experimental_useNativeFolderPicker,
   useBbNavigate,
 } from "@get-bb/plugin-sdk/app";
 import type {
@@ -47,7 +48,7 @@ import { AssignConversationDialog } from "@/components/assign-conversation-dialo
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ProjectCreateDialog } from "./components/project-create-dialog";
-import type { ProjectCreationActions } from "./components/project-create-form";
+import type { ProjectCreationActions } from "./components/folder-chooser";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { conversationLaunchProjectId, defaultConversationProjectId, projectLaunchEnvironment, worktreeLaunchEnvironment, worktreeLaunchHostId } from "./lib/worktree-launch";
 import { BotCreateDialog } from "./components/bot-create-dialog";
@@ -382,6 +383,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
   const actions = experimental_useSidebarThreadActions();
   const navigate = useBbNavigate();
   const appPanel = experimental_useAppPanel();
+  const nativeFolderPicker = experimental_useNativeFolderPicker();
   const portalScope = usePortalScopeProps();
   function openConversation(target: ConversationTarget) {
     navigate.toPluginPanel("conversation", { subPath: conversationPanelPath(target) });
@@ -399,6 +401,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
   const projectActions: ProjectCreationActions = {
     onCreateProject: async (input) => { const project = await rpc.call("project_create", input); void refresh(); return project; },
     onBrowseProjects: (input) => rpc.call("project_browse", input),
+    nativeFolderPicker,
   };
   const [sectionName, setSectionName] = useState("");
   const [sectionPending, setSectionPending] = useState(false);

@@ -5,18 +5,19 @@ import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { rpcContract, type BotMetadata } from "../contract";
 import { AVATAR_COLORS, AVATAR_EXPRESSIONS, AVATAR_MOTIONS, AVATAR_SHAPES } from "../lib/appearance";
 import { bot, personalProjectId } from "./fixtures";
-import { selectOption } from "./select-helper";
 
 const app = await loadPluginApp(() => import("../app"));
 afterEach(cleanup);
 
 type Host = { id: string; name: string; connected: boolean };
-async function mount({ hosts = [{ id: "offline", name: "Offline", connected: false }, { id: "online", name: "Online", connected: true }], existing = [], createFailures = 0, projectFailures = 0, projectOwners = [] }: { hosts?: Host[]; existing?: BotMetadata[]; createFailures?: number; projectFailures?: number; projectOwners?: { projectId: string; botId: string }[] } = {}) {
+type NativePicker = { hostId: string | null; pickFolder: () => Promise<string | null> };
+async function mount({ hosts = [{ id: "offline", name: "Offline", connected: false }, { id: "online", name: "Online", connected: true }], existing = [], createFailures = 0, projectFailures = 0, projectOwners = [], nativeFolderPicker, noProjects = false }: { hosts?: Host[]; existing?: BotMetadata[]; createFailures?: number; projectFailures?: number; projectOwners?: { projectId: string; botId: string }[]; nativeFolderPicker?: NativePicker; noProjects?: boolean } = {}) {
   const bots = [...existing];
-  const projects = [{ id: "project", name: "Shared project" }];
+  const projects = noProjects ? [] : [{ id: "project", name: "Shared project" }];
   const requests = new Map<string, { id: string; name: string }>();
   const slot = renderSlot(app.threadLists[0]!, { activeThreadId: null, activeProjectId: null, isCompactViewport: false, onNavigate: vi.fn(), searchQuery: "" }, {
     sidebarThreads: { projects: [], threads: [] },
+    nativeFolderPicker,
     rpc: {
       bots_list: () => ({ bots, hosts, sections: [{ id: "team", name: "Team", order: 0 }], projects, personalProjectId, warnings: [], threadBindings: [], projectOwners }),
       project_browse: (raw) => { const input = rpcContract.project_browse.input.parse(raw); return { directory: input.path ?? `/home/${input.hostId}`, parent: "/", entries: [{ name: "work", path: "/work" }], truncated: false }; },
@@ -46,16 +47,28 @@ async function openCreate(slot: Awaited<ReturnType<typeof mount>>) {
 }
 const calls = (slot: Awaited<ReturnType<typeof mount>>, method: string) => slot.inspection.rpcCalls.filter((call) => call.method === method);
 const created = (slot: Awaited<ReturnType<typeof mount>>) => calls(slot, "bot_create");
-const folderControl = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Project folder" });
-async function chooseFolder(dialog: HTMLElement, option = "Choose a folder…") {
-  selectOption(folderControl(dialog), option);
-  const step = await within(dialog).findByRole("group", { name: "New project folder" });
-  fireEvent.click(within(step).getByRole("button", { name: "Browse…" }));
-  fireEvent.click(await within(step).findByRole("button", { name: "work" }));
-  await within(step).findByText("/work");
-  fireEvent.click(within(step).getByRole("button", { name: "Use this folder" }));
-  return step;
+const folderRow = (dialog: HTMLElement) => within(dialog).getByRole("group", { name: "Project folder" });
+const folderButton = (dialog: HTMLElement) => within(folderRow(dialog)).getByRole<HTMLButtonElement>("button", { name: /^(Choose a|Change the) project folder$/ });
+const createButton = (dialog: HTMLElement) => within(dialog).getByRole<HTMLButtonElement>("button", { name: "Create" });
+async function folderMenu(dialog: HTMLElement) {
+  fireEvent.keyDown(folderButton(dialog), { key: "ArrowDown" });
+  return within(await within(document.body).findByRole("menu"));
 }
+async function pickFromMenu(dialog: HTMLElement, item: string) {
+  fireEvent.click((await folderMenu(dialog)).getByRole("menuitem", { name: item }));
+}
+async function browseToWork(dialog: HTMLElement) {
+  await pickFromMenu(dialog, "Choose a folder…");
+  const browser = within(await within(dialog).findByRole("group", { name: "Choose a folder" }));
+  fireEvent.click(await browser.findByRole("button", { name: "work" }));
+  await browser.findByText("/work");
+  return browser;
+}
+async function chooseWork(dialog: HTMLElement) {
+  fireEvent.click((await browseToWork(dialog)).getByRole("button", { name: "Use this folder" }));
+  await within(dialog).findByRole("group", { name: "Project folder" });
+}
+const nativeOnly = (pickFolder: NativePicker["pickFolder"]) => ({ hosts: [{ id: "online", name: "Online", connected: true }], nativeFolderPicker: { hostId: "online", pickFolder } });
 
 it("asks only for a name, a shape and a color, with one project folder field left at no project", async () => {
   const slot = await mount();
@@ -63,10 +76,10 @@ it("asks only for a name, a shape and a color, with one project folder field lef
   expect(within(dialog).getAllByRole("textbox")).toHaveLength(1);
   expect((within(dialog).getByRole("textbox", { name: "Bot name" }) as HTMLInputElement).placeholder).toBe("Name your bot");
   expect(within(dialog).queryAllByRole("tab")).toHaveLength(0);
-  expect(within(dialog).getAllByRole("combobox")).toHaveLength(1);
-  expect(folderControl(dialog).textContent).toBe("No project folder");
-  expect(within(dialog).getByText("The bot works in your personal workspace.")).toBeTruthy();
-  expect(within(dialog).queryByRole("group", { name: "New project folder" })).toBeNull();
+  expect(within(dialog).queryAllByRole("combobox")).toHaveLength(0);
+  expect(folderRow(dialog).textContent).toBe("No project folderChoose…");
+  expect(within(folderRow(dialog)).getAllByRole("button")).toHaveLength(1);
+  expect(within(dialog).queryByRole("group", { name: "Choose a folder" })).toBeNull();
   expect(dialog.querySelector("textarea, input[type=color]")).toBeNull();
   expect(within(within(dialog).getByRole("group", { name: "Shape" })).getAllByRole("button")).toHaveLength(AVATAR_SHAPES.length);
   expect(within(within(dialog).getByRole("group", { name: "Color" })).getAllByRole("button")).toHaveLength(AVATAR_COLORS.length);
@@ -182,82 +195,152 @@ it("links an existing project as a member and makes it the default project", asy
   const other = { ...bot, id: "other", name: "Owner bot", mainThreadId: null, linkedProjectIds: ["project"] };
   const slot = await mount({ existing: [other], projectOwners: [{ projectId: "project", botId: "other" }] });
   const dialog = await openCreate(slot);
-  selectOption(folderControl(dialog), "Shared project");
-  expect(folderControl(dialog).textContent).toBe("Shared project");
-  expect(within(dialog).getByText("Owned by Owner bot. This bot joins as a member.")).toBeTruthy();
+  await pickFromMenu(dialog, "Shared project");
+  expect(within(folderRow(dialog)).getByText("Shared project")).toBeTruthy();
+  expect(within(folderRow(dialog)).getByText("Owned by Owner bot. This bot joins as a member.")).toBeTruthy();
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  fireEvent.click(createButton(dialog));
   await waitFor(() => expect(created(slot)).toHaveLength(1));
   expect(created(slot)[0]!.input).toMatchObject({ hostId: "online", linkedProjectIds: ["project"], ownedProjectIds: [], defaultProjectId: "project" });
   expect(calls(slot, "project_create")).toHaveLength(0);
 });
 
-it("returns to no project after picking one", async () => {
+it("returns to no project when the choice is cleared", async () => {
   const slot = await mount();
   const dialog = await openCreate(slot);
-  selectOption(folderControl(dialog), "Shared project");
-  selectOption(folderControl(dialog), "No project folder");
+  await pickFromMenu(dialog, "Shared project");
+  fireEvent.click(within(folderRow(dialog)).getByRole("button", { name: "Clear the project folder" }));
+  expect(folderRow(dialog).textContent).toBe("No project folderChoose…");
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  fireEvent.click(createButton(dialog));
   await waitFor(() => expect(created(slot)).toHaveLength(1));
   expect(created(slot)[0]!.input).toMatchObject({ linkedProjectIds: [], ownedProjectIds: [], defaultProjectId: null });
 });
 
-it("creates a project for a chosen folder only on Create, then links it as owner and default", async () => {
+it("takes the folder from the system picker in one step and names the project after it", async () => {
+  const pickFolder = vi.fn(async () => "/Users/me/Projects/client-app");
+  const slot = await mount({ ...nativeOnly(pickFolder), noProjects: true });
+  const dialog = await openCreate(slot);
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
+  fireEvent.click(folderButton(dialog));
+  expect(await within(folderRow(dialog)).findByText("client-app")).toBeTruthy();
+  expect(within(folderRow(dialog)).getByText("~/Projects/client-app").getAttribute("title")).toBe("/Users/me/Projects/client-app");
+  expect(pickFolder).toHaveBeenCalledOnce();
+  expect(within(dialog).queryByRole("group", { name: "Choose a folder" })).toBeNull();
+  expect(within(dialog).getAllByRole("textbox")).toHaveLength(1);
+  expect(within(dialog).getAllByRole("button", { name: /^(Cancel|Create)$/ })).toHaveLength(2);
+  expect(calls(slot, "project_browse")).toHaveLength(0);
+  expect(calls(slot, "project_create")).toHaveLength(0);
+  fireEvent.click(createButton(dialog));
+  await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
+  expect(calls(slot, "project_create").map((call) => call.input)).toEqual([{ requestId: expect.any(String), name: "client-app", hostId: "online", path: "/Users/me/Projects/client-app" }]);
+  expect(created(slot)[0]!.input).toMatchObject({ hostId: "online", linkedProjectIds: ["folder-1"], ownedProjectIds: ["folder-1"], defaultProjectId: "folder-1" });
+});
+
+it("keeps the previous choice when the system picker is cancelled", async () => {
+  const pickFolder = vi.fn(async () => null);
+  const slot = await mount(nativeOnly(pickFolder));
+  const dialog = await openCreate(slot);
+  await pickFromMenu(dialog, "Shared project");
+  await pickFromMenu(dialog, "Choose a folder…");
+  await waitFor(() => expect(pickFolder).toHaveBeenCalledOnce());
+  await waitFor(() => expect(folderButton(dialog).disabled).toBe(false));
+  expect(within(folderRow(dialog)).getByText("Shared project")).toBeTruthy();
+  expect(within(dialog).queryByRole("group", { name: "Choose a folder" })).toBeNull();
+});
+
+it("falls back to the folder list when the system picker cannot be shown", async () => {
+  const slot = await mount(nativeOnly(async () => { throw new Error("No display"); }));
+  const dialog = await openCreate(slot);
+  await pickFromMenu(dialog, "Choose a folder…");
+  const browser = within(await within(dialog).findByRole("group", { name: "Choose a folder" }));
+  expect(await browser.findByText("/home/online")).toBeTruthy();
+  expect(browser.queryByRole("alert")).toBeNull();
+});
+
+it("lists folders in one step when there is no system picker, without a name, a machine or a second Cancel", async () => {
   const slot = await mount();
   const dialog = await openCreate(slot);
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  const step = await chooseFolder(dialog);
-  expect((within(step).getByRole("textbox", { name: "Project name" }) as HTMLInputElement).value).toBe("Scout");
-  expect((within(step).getByRole("textbox", { name: "Project folder" }) as HTMLInputElement).value).toBe("/work");
-  expect(within(step).getByRole("combobox", { name: "Project machine" }).textContent).toBe("Online");
-  expect((within(dialog).getByRole("button", { name: "Create" }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(within(step).getByRole("button", { name: "Set project folder" }));
-  expect(folderControl(dialog).textContent).toBe("Scout (new project)");
-  expect(within(dialog).getByText("Creates a project in /work when you create the bot.")).toBeTruthy();
+  const browser = await browseToWork(dialog);
+  expect(within(dialog).getAllByRole("textbox")).toHaveLength(1);
+  expect(within(dialog).queryAllByRole("combobox")).toHaveLength(0);
+  expect(within(dialog).getAllByRole("button", { name: /cancel/i })).toHaveLength(1);
+  expect(createButton(dialog).disabled).toBe(false);
+  fireEvent.click(browser.getByRole("button", { name: "Use this folder" }));
+  await within(dialog).findByRole("group", { name: "Project folder" });
+  expect(within(folderRow(dialog)).getByText("work")).toBeTruthy();
+  expect(within(folderRow(dialog)).getByText("/work")).toBeTruthy();
   expect(calls(slot, "project_browse").map((call) => call.input)).toEqual([{ hostId: "online" }, { hostId: "online", path: "/work" }]);
   expect(calls(slot, "project_create")).toHaveLength(0);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  fireEvent.click(createButton(dialog));
   await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
-  expect(calls(slot, "project_create").map((call) => call.input)).toEqual([expect.objectContaining({ name: "Scout", hostId: "online", path: "/work" })]);
+  expect(calls(slot, "project_create").map((call) => call.input)).toEqual([expect.objectContaining({ name: "work", hostId: "online", path: "/work" })]);
   expect(created(slot)).toHaveLength(1);
   expect(created(slot)[0]!.input).toMatchObject({ hostId: "online", linkedProjectIds: ["folder-1"], ownedProjectIds: ["folder-1"], defaultProjectId: "folder-1" });
+});
+
+it("asks for the machine only when several are connected, and the bot follows the folder's machine", async () => {
+  const pickFolder = vi.fn(async () => "/Users/me/client-app");
+  const slot = await mount({ hosts: [{ id: "online", name: "Online", connected: true }, { id: "second", name: "Second", connected: true }], nativeFolderPicker: { hostId: "online", pickFolder } });
+  const dialog = await openCreate(slot);
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
+  await pickFromMenu(dialog, "Choose a folder…");
+  const browser = within(await within(dialog).findByRole("group", { name: "Choose a folder" }));
+  expect(pickFolder).not.toHaveBeenCalled();
+  HTMLElement.prototype.scrollIntoView ??= () => {};
+  fireEvent.keyDown(browser.getByRole("combobox", { name: "Machine" }), { key: "ArrowDown" });
+  fireEvent.click(within(document.body).getByRole("option", { name: "Second" }));
+  await browser.findByText("/home/second");
+  fireEvent.click(browser.getByRole("button", { name: "work" }));
+  await browser.findByText("/work");
+  fireEvent.click(browser.getByRole("button", { name: "Use this folder" }));
+  await within(dialog).findByRole("group", { name: "Project folder" });
+  expect(within(folderRow(dialog)).getByText("/work on Second")).toBeTruthy();
+  fireEvent.click(createButton(dialog));
+  await waitFor(() => expect(created(slot)).toHaveLength(1));
+  expect(calls(slot, "project_create")[0]!.input).toMatchObject({ hostId: "second", path: "/work" });
+  expect(created(slot)[0]!.input).toMatchObject({ hostId: "second", ownedProjectIds: ["folder-1"] });
 });
 
 it("creates no project when the dialog is cancelled after choosing a folder", async () => {
   const slot = await mount();
   const dialog = await openCreate(slot);
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  fireEvent.click(within(await chooseFolder(dialog)).getByRole("button", { name: "Set project folder" }));
+  await chooseWork(dialog);
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   expect(slot.queryByRole("dialog")).toBeNull();
   expect(calls(slot, "project_create")).toHaveLength(0);
   expect(created(slot)).toHaveLength(0);
 });
 
-it("keeps the previous choice when the folder step is cancelled", async () => {
+it("keeps the previous choice when the folder list is closed, and never blocks Create while it is open", async () => {
   const slot = await mount();
   const dialog = await openCreate(slot);
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  selectOption(folderControl(dialog), "Shared project");
-  const step = await chooseFolder(dialog);
-  fireEvent.click(within(step).getByRole("button", { name: "Cancel" }));
-  expect(folderControl(dialog).textContent).toBe("Shared project");
-  expect((within(dialog).getByRole("button", { name: "Create" }) as HTMLButtonElement).disabled).toBe(false);
+  await pickFromMenu(dialog, "Shared project");
+  const browser = await browseToWork(dialog);
+  expect(createButton(dialog).disabled).toBe(false);
+  fireEvent.click(browser.getByRole("button", { name: "Close folder list" }));
+  expect(within(folderRow(dialog)).getByText("Shared project")).toBeTruthy();
+  fireEvent.click(createButton(dialog));
+  await waitFor(() => expect(created(slot)).toHaveLength(1));
+  expect(created(slot)[0]!.input).toMatchObject({ linkedProjectIds: ["project"], ownedProjectIds: [] });
 });
 
 it("reuses the created folder project when saving the bot fails and is retried", async () => {
   const slot = await mount({ createFailures: 1 });
   const dialog = await openCreate(slot);
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  fireEvent.click(within(await chooseFolder(dialog)).getByRole("button", { name: "Set project folder" }));
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  await chooseWork(dialog);
+  fireEvent.click(createButton(dialog));
   expect((await within(dialog).findByRole("alert")).textContent).toBe("Could not save the bot");
-  expect(folderControl(dialog).textContent).toBe("Scout");
-  expect(within(dialog).getByText("“Scout” is already created and stays if you cancel.")).toBeTruthy();
-  selectOption(folderControl(dialog), "Shared project");
-  selectOption(folderControl(dialog), "Scout");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  expect(within(folderRow(dialog)).getByText("work")).toBeTruthy();
+  expect(within(folderRow(dialog)).getByText("Already created. It stays if you cancel.")).toBeTruthy();
+  await pickFromMenu(dialog, "Shared project");
+  await pickFromMenu(dialog, "work");
+  expect(within(folderRow(dialog)).getByText("Already created. It stays if you cancel.")).toBeTruthy();
+  fireEvent.click(createButton(dialog));
   await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
   expect(calls(slot, "project_create")).toHaveLength(1);
   expect(created(slot)).toHaveLength(2);
@@ -268,12 +351,12 @@ it("does not create the bot when the folder project cannot be created, and retri
   const slot = await mount({ projectFailures: 1 });
   const dialog = await openCreate(slot);
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  fireEvent.click(within(await chooseFolder(dialog)).getByRole("button", { name: "Set project folder" }));
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  await chooseWork(dialog);
+  fireEvent.click(createButton(dialog));
   expect((await within(dialog).findByRole("alert")).textContent).toBe("This folder is already registered as “Other”. Choose a different folder.");
   expect(created(slot)).toHaveLength(0);
-  expect(folderControl(dialog).textContent).toBe("Scout (new project)");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  expect(within(folderRow(dialog)).getByText("/work")).toBeTruthy();
+  fireEvent.click(createButton(dialog));
   await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
   const requests = calls(slot, "project_create").map((call) => (call.input as { requestId: string }).requestId);
   expect(requests).toHaveLength(2);
@@ -282,15 +365,13 @@ it("does not create the bot when the folder project cannot be created, and retri
 });
 
 it("offers existing projects but no folder choice when no machine is connected", async () => {
-  HTMLElement.prototype.scrollIntoView ??= () => {};
   const slot = await mount({ hosts: [{ id: "first", name: "First", connected: false }] });
   const dialog = await openCreate(slot);
-  fireEvent.keyDown(folderControl(dialog), { key: "ArrowDown" });
-  const folder = within(document.body).getByRole("option", { name: "Choose a folder… (no machine connected)" });
-  expect(folder.getAttribute("aria-disabled")).toBe("true");
-  fireEvent.click(within(document.body).getByRole("option", { name: "Shared project" }));
+  const menu = await folderMenu(dialog);
+  expect(menu.getByRole("menuitem", { name: "Choose a folder… (no machine connected)" }).getAttribute("aria-disabled")).toBe("true");
+  fireEvent.click(menu.getByRole("menuitem", { name: "Shared project" }));
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Scout" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+  fireEvent.click(createButton(dialog));
   await waitFor(() => expect(created(slot)).toHaveLength(1));
   expect(created(slot)[0]!.input).toMatchObject({ hostId: "first", linkedProjectIds: ["project"], defaultProjectId: "project" });
   expect(calls(slot, "project_browse")).toHaveLength(0);

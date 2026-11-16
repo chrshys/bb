@@ -133,9 +133,9 @@ export function writes(slot: { inspection: { rpcCalls: { method: string; input: 
   return slot.inspection.rpcCalls.filter((call) => !["bots_list", "thread_bot", "state_read", "project_browse"].includes(call.method));
 }
 
-export async function mountBotPanel(backend: PanelBackend, { botId = "bot", threadId = "thread" }: { botId?: string | null; threadId?: string } = {}) {
+export async function mountBotPanel(backend: PanelBackend, { botId = "bot", threadId = "thread", nativeFolderPicker }: { botId?: string | null; threadId?: string; nativeFolderPicker?: { hostId: string | null; pickFolder: () => Promise<string | null> } } = {}) {
   if (botId !== null) backend.world.threadBots.set(threadId, botId);
-  const slot = renderSlot(botsPinnedTab, { threadId, projectId: "project" }, { rpc: backend.rpc });
+  const slot = renderSlot(botsPinnedTab, { threadId, projectId: "project" }, { rpc: backend.rpc, nativeFolderPicker });
   if (botId !== null) await slot.findByRole("region", { name: `${backend.bot(botId).name} bot settings` });
   return slot;
 }

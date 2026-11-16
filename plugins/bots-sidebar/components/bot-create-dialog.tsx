@@ -1,13 +1,16 @@
 import { useRef, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { experimental_Icon as Icon } from "@get-bb/plugin-sdk/app";
 import type { BotAvatar, BotMetadata, ProjectCreateInput, ProjectOwner } from "../contract";
 import { randomAvatar } from "../lib/appearance";
+import { usePortalScopeProps } from "../lib/portal-scope";
+import { cn, formatHomePathForDisplay } from "../lib/utils";
 import { AvatarColorSwatches, AvatarShapePicker } from "./avatar-appearance";
 import { BotIcon } from "./bot-icon";
-import { ProjectCreateForm, type ProjectChoice, type ProjectCreationActions, type ProjectHost } from "./project-create-form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { useFolderChooser, type ProjectChoice, type ProjectCreationActions, type ProjectHost } from "./folder-chooser";
+import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input } from "./ui/input";
 
 export type NewBotFields = Pick<BotMetadata, "hostId" | "name" | "role" | "avatar" | "sectionId" | "linkedProjectIds" | "soul" | "memory" | "settings"> & { ownedProjectIds: string[]; defaultProjectId: string | null };
 
@@ -17,12 +20,9 @@ type ProjectFolderChoice =
   | { kind: "folder"; input: ProjectCreateInput }
   | { kind: "created"; project: ProjectChoice; hostId: string };
 
-const NO_PROJECT = "none";
-const NEW_FOLDER = "folder";
-const CHOOSE_FOLDER = "choose-folder";
-const existingValue = (projectId: string) => `project:${projectId}`;
+const MENU_ITEM_CLASS = "bot-menu-item cursor-default select-none truncate rounded-sm px-2 py-1.5 text-xs outline-none data-[disabled]:opacity-40";
 
-export function BotCreateDialog({ hosts, projects, owners, botNames, onClose, onCreate, onCreateProject, onBrowseProjects }: ProjectCreationActions & {
+export function BotCreateDialog({ hosts, projects, owners, botNames, onClose, onCreate, onCreateProject, onBrowseProjects, nativeFolderPicker }: ProjectCreationActions & {
   hosts: ProjectHost[];
   projects: ProjectChoice[];
   owners: ProjectOwner[];
@@ -33,31 +33,29 @@ export function BotCreateDialog({ hosts, projects, owners, botNames, onClose, on
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState<BotAvatar>(() => randomAvatar());
   const [choice, setChoice] = useState<ProjectFolderChoice>({ kind: "none" });
-  const [choosingFolder, setChoosingFolder] = useState(false);
   const [createdFolder, setCreatedFolder] = useState<{ project: ProjectChoice; hostId: string } | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saving = useRef(false);
+  const portalScope = usePortalScopeProps();
   const hostId = hosts.find((host) => host.connected)?.id ?? hosts[0]?.id ?? null;
-  const canBrowse = hosts.some((host) => host.connected);
-  const ready = Boolean(name.trim()) && hostId !== null && !choosingFolder;
+  const ready = Boolean(name.trim()) && hostId !== null;
+  const chooser = useFolderChooser({ hosts, preferredHostId: hostId, nativeFolderPicker, onBrowseProjects, onChoose: (input) => { setError(null); setChoice({ kind: "folder", input }); } });
   const listed = createdFolder && !projects.some((project) => project.id === createdFolder.project.id) ? [createdFolder.project, ...projects] : projects;
-  const selected = choice.kind === "none" ? NO_PROJECT : choice.kind === "folder" ? NEW_FOLDER : existingValue(choice.project.id);
   const otherOwner = choice.kind === "existing" ? owners.find((owner) => owner.projectId === choice.project.id) : undefined;
-  const hint = choice.kind === "none" ? "The bot works in your personal workspace."
-    : choice.kind === "folder" ? `Creates a project in ${choice.input.path} when you create the bot.`
-    : choice.kind === "created" ? `“${choice.project.name}” is already created and stays if you cancel.`
+  const severalMachines = hosts.filter((host) => host.connected).length > 1;
+  const title = choice.kind === "none" ? "No project folder" : choice.kind === "folder" ? choice.input.name : choice.project.name;
+  const detail = choice.kind === "none" ? (chooser.available ? null : "Connect a machine to choose a folder.")
+    : choice.kind === "folder" ? `${formatHomePathForDisplay(choice.input.path)}${severalMachines ? ` on ${hosts.find((host) => host.id === choice.input.hostId)?.name ?? choice.input.hostId}` : ""}`
+    : choice.kind === "created" ? "Already created. It stays if you cancel."
     : otherOwner ? `Owned by ${botNames.get(otherOwner.botId) ?? "another bot"}. This bot joins as a member.`
-    : "New conversations start in this project.";
-  function select(value: string) {
-    if (value === selected) return;
-    const project = listed.find((entry) => existingValue(entry.id) === value);
-    if (value !== CHOOSE_FOLDER && value !== NO_PROJECT && !project) return;
+    : "Existing project";
+  function selectProject(project: ProjectChoice) {
     setError(null);
-    if (value === CHOOSE_FOLDER) setChoosingFolder(true);
-    else if (project && createdFolder?.project.id === project.id) setChoice({ kind: "created", ...createdFolder });
-    else setChoice(project ? { kind: "existing", project } : { kind: "none" });
+    setChoice(createdFolder?.project.id === project.id ? { kind: "created", ...createdFolder } : { kind: "existing", project });
   }
+  const chooseLabel = choice.kind === "none" ? "Choose…" : "Change";
+  const chooseName = choice.kind === "none" ? "Choose a project folder" : "Change the project folder";
   async function submit() {
     if (saving.current || !ready || hostId === null) return;
     saving.current = true; setPending(true); setError(null);
@@ -94,30 +92,22 @@ export function BotCreateDialog({ hosts, projects, owners, botNames, onClose, on
           }} />
           <AvatarShapePicker avatar={avatar} onChange={setAvatar} size="large" />
           <AvatarColorSwatches avatar={avatar} onChange={setAvatar} size="large" customColor={false} />
-          {choosingFolder ? <div role="group" aria-label="New project folder" className="w-full rounded-md border border-border p-3">
-            <ProjectCreateForm
-              hosts={hosts}
-              defaultHostId={choice.kind === "folder" ? choice.input.hostId : hostId ?? undefined}
-              defaultName={choice.kind === "folder" ? choice.input.name : name.trim()}
-              defaultPath={choice.kind === "folder" ? choice.input.path : ""}
-              onCreateProject={onCreateProject}
-              onBrowseProjects={onBrowseProjects}
-              onCreated={() => {}}
-              onBusyChange={() => {}}
-              onCancel={() => setChoosingFolder(false)}
-              onChoose={(input) => { setChoice({ kind: "folder", input }); setChoosingFolder(false); }}
-            />
-          </div> : <div className="w-full space-y-1.5">
-            <Select value={selected} onValueChange={select} disabled={pending}>
-              <SelectTrigger aria-label="Project folder" className="h-9 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_PROJECT}>No project folder</SelectItem>
-                {choice.kind === "folder" ? <SelectItem value={NEW_FOLDER}>{choice.input.name} (new project)</SelectItem> : null}
-                {listed.map((project) => <SelectItem key={project.id} value={existingValue(project.id)}>{project.name}</SelectItem>)}
-                <SelectItem value={CHOOSE_FOLDER} disabled={!canBrowse}>{canBrowse ? choice.kind === "folder" ? "Choose a different folder…" : "Choose a folder…" : "Choose a folder… (no machine connected)"}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="truncate text-center text-xs text-muted-foreground" title={hint}>{hint}</p>
+          {chooser.browser ?? <div role="group" aria-label="Project folder" className="flex min-h-11 w-full items-center gap-2 rounded-md border border-border py-1 pr-1 pl-2.5 text-left">
+            <Icon name="Folder" className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <p className={cn("truncate text-sm", choice.kind === "none" ? "text-muted-foreground" : "font-medium")} title={title}>{title}</p>
+              {detail ? <p className="truncate text-xs text-muted-foreground" title={choice.kind === "folder" ? choice.input.path : detail}>{detail}</p> : null}
+            </div>
+            {listed.length ? <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild><Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2" aria-label={chooseName} disabled={pending || chooser.busy}>{chooseLabel}<Icon name="ChevronDown" className="text-muted-foreground" aria-hidden="true" /></Button></DropdownMenu.Trigger>
+              <DropdownMenu.Portal><DropdownMenu.Content {...portalScope} align="end" sideOffset={4} className="z-50 max-h-64 max-w-64 min-w-44 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
+                <DropdownMenu.Item className={MENU_ITEM_CLASS} disabled={!chooser.available} onSelect={() => void chooser.choose()}>{chooser.available ? "Choose a folder…" : "Choose a folder… (no machine connected)"}</DropdownMenu.Item>
+                <DropdownMenu.Separator className="-mx-1 my-1 h-px bg-border" />
+                <DropdownMenu.Label className="px-2 py-1 text-xs text-muted-foreground">Existing projects</DropdownMenu.Label>
+                {listed.map((project) => <DropdownMenu.Item key={project.id} className={MENU_ITEM_CLASS} title={project.name} onSelect={() => selectProject(project)}>{project.name}</DropdownMenu.Item>)}
+              </DropdownMenu.Content></DropdownMenu.Portal>
+            </DropdownMenu.Root> : <Button type="button" variant="ghost" size="sm" className="h-7 shrink-0 px-2" aria-label={chooseName} disabled={pending || chooser.busy || !chooser.available} onClick={() => void chooser.choose()}>{chooseLabel}</Button>}
+            {choice.kind === "none" ? null : <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0 text-muted-foreground" aria-label="Clear the project folder" disabled={pending} onClick={() => { setError(null); setChoice({ kind: "none" }); }}><Icon name="X" aria-hidden="true" /></Button>}
           </div>}
         </div>
         {hostId === null ? <p role="status" className="shrink-0 px-5 pb-3 text-center text-xs text-muted-foreground">No machine is available. Connect a machine to BB before creating a bot.</p> : null}

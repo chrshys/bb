@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { experimental_useNativeFolderPicker } from "@get-bb/plugin-sdk/app";
 import type { BotMetadata, BotPatchValues, BotStateFile } from "../contract";
 import { useBotData, type BotData } from "../hooks/use-bot-data";
 import { useDraftField, useSaveSummary, type DraftField } from "../hooks/use-draft-field";
@@ -103,6 +104,7 @@ export type BotPanelSectionRequest = { section: BotPanelSection; shown: () => vo
 
 function BotPanelEditor({ bot, data, sectionRequest }: { bot: BotMetadata; data: BotData; sectionRequest: BotPanelSectionRequest | null }) {
   const { rpc, hosts, sections, projects, projectOwners, bots, refresh, applyBot } = data;
+  const nativeFolderPicker = experimental_useNativeFolderPicker();
   const botId = bot.id;
   const scope = `${botId}/`;
   const latest = useRef(bot);
@@ -328,11 +330,12 @@ function BotPanelEditor({ bot, data, sectionRequest }: { bot: BotMetadata; data:
           <span className="font-normal">New conversations and the coordinator start here. You can change the project before sending.</span>
         </label>
         <BotProjectsPanel
-          projects={projects} owners={projectOwners} botNames={botNames} botId={botId} botName={bot.name} hostId={bot.hostId} hosts={hosts}
+          projects={projects} owners={projectOwners} botNames={botNames} botId={botId} hostId={bot.hostId} hosts={hosts}
           linkedProjectIds={linkedProjectIds} ownedProjectIds={ownedProjectIds} busy={projectsBusy}
           onRoleChange={async (projectId, next) => { setProjectsBusy(true); try { await changeProjectRole(projectId, next); } finally { setProjectsBusy(false); } }}
           onCreateProject={async (input) => { const project = await rpc.call("project_create", input); void refresh(); return project; }}
           onBrowseProjects={(input) => rpc.call("project_browse", input)}
+          nativeFolderPicker={nativeFolderPicker}
         />
       </PanelCard>
     </div>

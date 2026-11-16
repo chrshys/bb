@@ -9,14 +9,14 @@ import { bot, personalProjectId } from "./fixtures";
 
 const app = await loadPluginApp(() => import("../app"));
 afterEach(cleanup);
-async function mount({ offline = false } = {}) {
+async function mount({ offline = false, hosts, nativeFolderPicker }: { offline?: boolean; hosts?: { id: string; name: string; connected: boolean }[]; nativeFolderPicker?: { hostId: string | null; pickFolder: () => Promise<string | null> } } = {}) {
   const bots: BotMetadata[] = [];
   const projects = [{ id: "existing", name: "Existing work" }];
   const sections: { id: string; name: string; order: number }[] = [];
   const onNavigate = vi.fn();
   const slot = renderSlot(app.threadLists[0]!, { activeThreadId: null, activeProjectId: null, isCompactViewport: false, onNavigate, searchQuery: "" }, {
-    sidebarThreads: { projects: [], threads: [] }, rpc: {
-      bots_list: () => ({ bots, projects, sections, hosts: [{ id: "host", name: "Local", connected: !offline }, { id: "remote", name: "Remote", connected: !offline }], personalProjectId, warnings: [], threadBindings: [], projectOwners: [] }),
+    sidebarThreads: { projects: [], threads: [] }, nativeFolderPicker, rpc: {
+      bots_list: () => ({ bots, projects, sections, hosts: hosts ?? [{ id: "host", name: "Local", connected: !offline }, { id: "remote", name: "Remote", connected: !offline }], personalProjectId, warnings: [], threadBindings: [], projectOwners: [] }),
       section_create: (raw) => { const { name } = rpcContract.section_create.input.parse(raw); const section = { id: "section", name, order: 0 }; sections.push(section); return section; },
       project_create: (raw) => { const input = rpcContract.project_create.input.parse(raw); const project = { id: "new-project", name: input.name }; if (!projects.some(entry => entry.id === project.id)) projects.push(project); return project; },
       project_browse: (raw) => { const input = rpcContract.project_browse.input.parse(raw); return { directory: input.path ?? `/home/${input.hostId}`, parent: "/", entries: [{ name: "work", path: "/work" }], truncated: false }; },
@@ -32,12 +32,6 @@ async function choose(slot: Slot, kind: "Bot" | "Section" | "Project") {
   fireEvent.keyDown(slot.getByRole("button", { name: "Create…" }), { key: "ArrowDown" });
   fireEvent.click(await slot.findByRole("menuitem", { name: kind }));
 }
-function fillProject(dialog: HTMLElement) {
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "Project name" }), { target: { value: "Client app" } });
-  selectOption(within(dialog).getByRole("combobox", { name: "Project machine" }), "Remote");
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "Project folder" }), { target: { value: "/work/client-app" } });
-}
-
 it("uses one + menu with Bot, Section, and Project without creating anything on open", async () => {
   const { slot } = await mount();
   expect(slot.queryByText("+ Section")).toBeNull();
@@ -63,38 +57,49 @@ it("creates sections explicitly through the menu and lets their draft be cancell
   expect(slot.inspection.rpcCalls).toContainEqual({ method: "section_create", input: { name: "Team" } });
 });
 
-it("creates a standalone work project on the selected host without making a bot", async () => {
+it("creates a standalone work project in a folder on the selected machine without making a bot", async () => {
   const { slot, bots, onNavigate } = await mount(); await choose(slot, "Project");
-  const dialog = await slot.findByRole("dialog", { name: "Create project" }); fillProject(dialog);
-  expect(fireEvent.keyDown(within(dialog).getByRole("textbox", { name: "Project folder" }), { key: "Enter" })).toBe(false);
+  const dialog = await slot.findByRole("dialog", { name: "Create project" });
+  expect(within(dialog).queryAllByRole("textbox")).toHaveLength(0);
+  selectOption(within(dialog).getByRole("combobox", { name: "Machine" }), "Remote");
+  await within(dialog).findByText("/home/remote");
+  fireEvent.click(within(dialog).getByRole("button", { name: "work" })); await within(dialog).findByText("/work");
+  expect(slot.inspection.rpcCalls.filter(call => call.method === "project_browse").map(call => call.input)).toEqual([{ hostId: "host" }, { hostId: "remote" }, { hostId: "remote", path: "/work" }]);
   expect(slot.inspection.rpcCalls.some(call => call.method === "project_create")).toBe(false);
   fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
   await waitFor(() => expect(slot.queryByRole("dialog")).toBeNull());
-  expect(slot.inspection.rpcCalls).toContainEqual({ method: "project_create", input: { requestId: expect.any(String), name: "Client app", hostId: "remote", path: "/work/client-app" } });
+  expect(slot.inspection.rpcCalls).toContainEqual({ method: "project_create", input: { requestId: expect.any(String), name: "work", hostId: "remote", path: "/work" } });
   expect(bots).toEqual([]); expect(onNavigate).toHaveBeenCalledOnce();
   expect(slot.inspection.navigateCalls).toContainEqual({ method: "toProject", projectId: "new-project" });
 });
 
-
-
-
-
-
-it("browses folders on the chosen machine without creating anything", async () => {
-  const { slot } = await mount(); await choose(slot, "Project"); const dialog = await slot.findByRole("dialog", { name: "Create project" });
-  selectOption(within(dialog).getByRole("combobox", { name: "Project machine" }), "Remote");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Browse…" })); await within(dialog).findByText("/home/remote");
-  fireEvent.click(within(dialog).getByRole("button", { name: "work" })); await within(dialog).findByText("/work");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Use this folder" }));
-  expect((within(dialog).getByRole("textbox", { name: "Project folder" }) as HTMLInputElement).value).toBe("/work");
-  expect(slot.inspection.rpcCalls.filter(call => call.method === "project_browse")).toEqual([{ method: "project_browse", input: { hostId: "remote" } }, { method: "project_browse", input: { hostId: "remote", path: "/work" } }]);
-  expect(slot.inspection.rpcCalls.some(call => call.method === "project_create")).toBe(false);
+it("creates a standalone project straight from the system picker, with no dialog", async () => {
+  const pickFolder = vi.fn(async () => "/Users/me/client-app");
+  const { slot, onNavigate } = await mount({ hosts: [{ id: "host", name: "Local", connected: true }], nativeFolderPicker: { hostId: "host", pickFolder } });
+  await choose(slot, "Project");
+  await waitFor(() => expect(slot.inspection.navigateCalls).toContainEqual({ method: "toProject", projectId: "new-project" }));
+  expect(pickFolder).toHaveBeenCalledOnce();
+  expect(slot.queryByRole("dialog")).toBeNull();
+  expect(slot.inspection.rpcCalls).toContainEqual({ method: "project_create", input: { requestId: expect.any(String), name: "client-app", hostId: "host", path: "/Users/me/client-app" } });
+  expect(onNavigate).toHaveBeenCalledOnce();
 });
 
-it("disables project creation when no machine is connected", async () => {
+it("creates nothing when the standalone project's system picker is cancelled", async () => {
+  const pickFolder = vi.fn(async () => null);
+  const { slot } = await mount({ hosts: [{ id: "host", name: "Local", connected: true }], nativeFolderPicker: { hostId: "host", pickFolder } });
+  await choose(slot, "Project");
+  await waitFor(() => expect(pickFolder).toHaveBeenCalledOnce());
+  expect(slot.queryByRole("dialog")).toBeNull();
+  expect(slot.inspection.rpcCalls.some(call => call.method === "project_create")).toBe(false);
+  await choose(slot, "Project");
+  await waitFor(() => expect(pickFolder).toHaveBeenCalledTimes(2));
+});
+
+it("explains that project creation needs a connected machine", async () => {
   const { slot } = await mount({ offline: true }); await choose(slot, "Project"); const dialog = await slot.findByRole("dialog", { name: "Create project" });
   expect(within(dialog).getByText("Connect a machine to create a project.")).toBeTruthy();
-  expect((within(dialog).getByRole("button", { name: "Create project" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(within(dialog).queryByRole("button", { name: "Create project" })).toBeNull();
+  expect(slot.inspection.rpcCalls.some(call => call.method === "project_browse")).toBe(false);
 });
 
 it("opens the first conversation after saving a bot in the main panel and defers thread creation", async () => {

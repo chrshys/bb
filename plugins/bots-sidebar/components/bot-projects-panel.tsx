@@ -2,13 +2,13 @@ import { useState } from "react";
 import type { ProjectOwner } from "../contract";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import { ProjectCreateForm, type ProjectChoice, type ProjectCreationActions, type ProjectHost } from "./project-create-form";
+import { useFolderChooser, type ProjectChoice, type ProjectCreationActions, type ProjectHost } from "./folder-chooser";
 
-export function BotProjectsPanel({ projects, owners, botNames, botId, botName, hostId, hosts, linkedProjectIds, ownedProjectIds, busy, onRoleChange, onCreateProject, onBrowseProjects }: ProjectCreationActions & {
-  projects: ProjectChoice[]; owners: ProjectOwner[]; botNames: Map<string, string>; botId: string; botName: string; hostId: string; hosts: ProjectHost[];
+export function BotProjectsPanel({ projects, owners, botNames, botId, hostId, hosts, linkedProjectIds, ownedProjectIds, busy, onRoleChange, onCreateProject, onBrowseProjects, nativeFolderPicker }: ProjectCreationActions & {
+  projects: ProjectChoice[]; owners: ProjectOwner[]; botNames: Map<string, string>; botId: string; hostId: string; hosts: ProjectHost[];
   linkedProjectIds: string[]; ownedProjectIds: string[]; busy: boolean; onRoleChange: (projectId: string, role: "none" | "member" | "owner") => void;
 }) {
-  const [mode, setMode] = useState<"linked" | "existing" | "create">("linked");
+  const [mode, setMode] = useState<"linked" | "existing">("linked");
   const [query, setQuery] = useState("");
   const [createdProjects, setCreatedProjects] = useState<ProjectChoice[]>([]);
   const available = [...projects, ...createdProjects.filter((created) => !projects.some((project) => project.id === created.id))];
@@ -16,10 +16,12 @@ export function BotProjectsPanel({ projects, owners, botNames, botId, botName, h
   const candidates = available.filter((project) => !linkedProjectIds.includes(project.id) && project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   function changeMode(next: typeof mode) { setMode(next); setQuery(""); }
   function ownerName(projectId: string) { const owner = owners.find((entry) => entry.projectId === projectId && entry.botId !== botId); return owner ? botNames.get(owner.botId) ?? "another bot" : null; }
-  if (mode === "create") return <ProjectCreateForm hosts={hosts} defaultHostId={hostId} defaultName={botName} forBot onCreateProject={onCreateProject} onBrowseProjects={onBrowseProjects} onCancel={() => changeMode("linked")} onCreated={(project) => {
+  const chooser = useFolderChooser({ hosts, preferredHostId: hostId, nativeFolderPicker, onBrowseProjects, confirmLabel: "Create project", busyLabel: "Creating…", onChoose: async (input) => {
+    const project = await onCreateProject(input);
     setCreatedProjects((current) => [...current.filter((entry) => entry.id !== project.id), project]);
-    onRoleChange(project.id, "owner"); changeMode("linked");
-  }} />;
+    onRoleChange(project.id, "owner");
+  } });
+  if (chooser.browser) return chooser.browser;
   if (mode === "existing") return <div className="space-y-2">
     <div className="flex items-center justify-between"><span className="text-xs font-medium">Add existing project</span><button type="button" className="text-[11px] text-muted-foreground hover:text-foreground" onClick={() => changeMode("linked")}>Back to linked projects</button></div>
     <Input autoFocus className="h-8" aria-label="Search projects" placeholder="Search projects…" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -31,7 +33,7 @@ export function BotProjectsPanel({ projects, owners, botNames, botId, botName, h
     </div>
   </div>;
   return <div className="bot-projects-panel space-y-3">
-    <div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => changeMode("existing")}>Add existing…</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => changeMode("create")}>New project…</Button></div>
+    <div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => changeMode("existing")}>Add existing…</Button><Button type="button" size="sm" variant="outline" disabled={busy || chooser.busy || !chooser.available} onClick={() => void chooser.choose()}>{chooser.busy ? "Creating…" : "New project…"}</Button></div>
     {linked.length ? <div className="divide-y divide-border rounded-md border border-border">{linked.map((project) => {
       const otherOwner = ownerName(project.id);
       return <div key={project.id} className="flex items-center gap-2 px-2 py-1.5"><span className="min-w-0 flex-1 truncate text-xs" title={project.name}>{project.name}{otherOwner ? <span className="block truncate text-[10px] text-muted-foreground">Owned by {otherOwner}</span> : null}</span>
