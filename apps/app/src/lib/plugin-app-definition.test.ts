@@ -526,6 +526,7 @@ describe("collectPluginAppRegistrations", () => {
   it("collects every slot kind as plain data", () => {
     const run = () => {};
     const mount = () => {};
+    const useAppearance = () => null;
     const definition = definePluginApp((app) => {
       app.slots.homepageSection({
         id: "issues",
@@ -586,6 +587,15 @@ describe("collectPluginAppRegistrations", () => {
         icon: "Zap",
         run,
       });
+      app.slots.experimental_threadTimelineFooter({
+        id: "footer",
+        title: "Footer",
+        component: Component,
+      });
+      app.slots.experimental_threadMessageAppearance({
+        id: "appearance",
+        useAppearance,
+      });
       app.composer.customize({
         id: "improve-prompt",
         scopes: ["thread", "new-thread"],
@@ -619,6 +629,7 @@ describe("collectPluginAppRegistrations", () => {
         icon: "columns",
         path: "board",
         component: Component,
+        experimental_showCloseButton: true,
       },
     ]);
     expect(registrations.threadPanelActions).toEqual([
@@ -661,6 +672,12 @@ describe("collectPluginAppRegistrations", () => {
     ]);
     expect(registrations.messageActions).toEqual([
       { id: "summarize", title: "Summarize", icon: "Zap", run },
+    ]);
+    expect(registrations.threadTimelineFooters).toEqual([
+      { id: "footer", title: "Footer", component: Component },
+    ]);
+    expect(registrations.threadMessageAppearances).toEqual([
+      { id: "appearance", useAppearance },
     ]);
     expect(registrations.composerCustomizations).toEqual([
       {

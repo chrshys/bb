@@ -465,10 +465,14 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
   },
   {
     reason:
-      "Queued and follow-up messages omit senderThreadId unless the request originates from another thread.",
+      "Queued and follow-up messages omit senderThreadId unless the request originates from another thread; callers omit humanMessagePresentation unless the message should render as human-authored.",
     fields: [
+      "createQueuedMessageRequestSchema.humanMessagePresentation",
       "createQueuedMessageRequestSchema.senderThreadId",
+      "createThreadRequestSchema.humanMessagePresentation",
+      "sendMessageRequestSchema.humanMessagePresentation",
       "sendMessageRequestSchema.senderThreadId",
+      "sendQueuedMessageResponseSchema.queuedMessage.humanMessagePresentation",
     ],
   },
   {

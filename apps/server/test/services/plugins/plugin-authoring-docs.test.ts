@@ -448,6 +448,7 @@ const NAV_PANEL_REGISTRATION_FIELDS = [
   "fixedTabs",
   "experimental_sidebarAccessory",
   "headerContent",
+  "experimental_showCloseButton",
 ] as const satisfies readonly (keyof PluginNavPanelRegistration)[];
 
 type MissingNavPanelRegistrationField = Exclude<

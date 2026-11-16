@@ -93,7 +93,7 @@ Slot props contracts (versioned, additive-only):
   back/forward then walks panel-internal history (prefer this over hash
   routing).
   Registration:
-  `{ id, title, icon, path, component, fixedTabs?, experimental_sidebarAccessory?, headerContent? }`.
+  `{ id, title, icon, path, component, fixedTabs?, experimental_showCloseButton?, experimental_sidebarAccessory?, headerContent? }`.
   BB automatically wraps every plugin page in the same host-owned App panel
   used by New thread and thread pages. The page component supplies only its
   main body; it must not mount a second panel layout or register Browser and
@@ -150,6 +150,11 @@ target? })`. Inside the fixed-tab component,
   a live count or short status beside the panel's navigation entry. The SDK
   accepts it, but no host surface mounts it, because the navigation rail is
   icon-only. Experimental: see `docs/api_to_audit.md`.
+
+  `experimental_showCloseButton` defaults to true. Set it to `false` to omit
+  only the host title-bar close button for this panel; keyboard pane close and
+  other panel controls keep working. Experimental: see `docs/api_to_audit.md`.
+
   The host renders your compact plugin icon + `title` into the SHARED app
   header (the same title bar as Settings pages) with your optional
   `headerContent` component as the header actions on the right — so do NOT
