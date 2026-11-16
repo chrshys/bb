@@ -1,0 +1,41 @@
+:where(.human-message-native-colors) {
+  --message-native-canvas: var(--canvas);
+  --message-native-ink: var(--ink);
+  --message-native-foreground: var(--foreground);
+  --message-native-muted-foreground: var(--muted-foreground);
+  --message-native-subtle-foreground: var(--subtle-foreground);
+}
+
+:where([data-human-message-appearance]) {
+  --foreground: var(--human-message-foreground);
+  --muted-foreground: var(--human-message-foreground);
+  --subtle-foreground: var(--human-message-foreground);
+}
+
+:where([data-human-message-appearance] a) {
+  color: var(--foreground);
+  text-decoration-line: underline;
+}
+
+:where(
+  [data-human-message-appearance] .bg-surface-recessed,
+  [data-human-message-appearance] .bg-surface-raised,
+  [data-human-message-appearance] .prompt-mention-pill,
+  [data-human-message-appearance] code
+) {
+  --foreground: var(--message-native-foreground);
+  --muted-foreground: var(--message-native-muted-foreground);
+  --subtle-foreground: var(--message-native-subtle-foreground);
+  color: var(--foreground);
+  background-color: color-mix(
+    in oklch,
+    var(--message-native-canvas) 94%,
+    var(--message-native-ink)
+  );
+}
+
+:where([data-human-message-appearance])::selection,
+:where([data-human-message-appearance] *)::selection {
+  color: var(--canvas);
+  background-color: var(--ink);
+}

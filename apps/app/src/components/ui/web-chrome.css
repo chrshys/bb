@@ -1,0 +1,75 @@
+@media (min-width: 768px) {
+  :where([data-floating-chrome]) {
+    --bb-web-chrome-gap: 0.5rem;
+    padding: var(--bb-web-chrome-gap);
+    background: var(--sidebar);
+    background-image: linear-gradient(
+      var(--surface-recessed),
+      var(--surface-recessed)
+    );
+  }
+
+  :where([data-floating-chrome]) [data-sidebar="panel"] {
+    top: var(--bb-web-chrome-gap);
+    bottom: var(--bb-web-chrome-gap);
+    left: var(--bb-web-chrome-gap);
+    height: calc(var(--bb-shell-height) - 2 * var(--bb-web-chrome-gap));
+    border: 0;
+    background: transparent;
+    overflow: clip;
+    border-radius: calc(var(--radius) + 4px);
+  }
+
+  :where([data-floating-chrome]) [data-sidebar="gap"] {
+    margin-right: var(--bb-web-chrome-gap);
+  }
+
+  :where([data-floating-chrome])
+    [data-collapsible="offcanvas"]
+    [data-sidebar="gap"] {
+    margin-right: 0;
+  }
+
+  :where([data-floating-chrome]) [data-sidebar-trigger-overlay] {
+    top: calc(env(safe-area-inset-top) + var(--bb-web-chrome-gap));
+    left: calc(env(safe-area-inset-left) + var(--bb-web-chrome-gap));
+  }
+
+  :where([data-floating-chrome]) [data-sidebar="sidebar"] {
+    overflow: clip;
+    border-radius: var(--radius-xl);
+    outline: 1px solid var(--border-seam);
+    outline-offset: -1px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  :where([data-floating-chrome]) [data-sidebar="inset"] {
+    background: transparent;
+  }
+
+  :where([data-floating-chrome]) [data-app-content-shell],
+  :where([data-floating-chrome]) [data-app-main-panel],
+  :where([data-floating-chrome]) [data-app-secondary-panel] {
+    overflow: clip;
+    border-radius: var(--radius-xl);
+    background: var(--background);
+    outline: 1px solid var(--border-seam);
+    outline-offset: -1px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  :where([data-floating-chrome])
+    [data-app-content-shell]:has([data-app-main-panel]) {
+    overflow: visible;
+    border-radius: 0;
+    background: transparent;
+    outline: none;
+    box-shadow: none;
+  }
+
+  :where([data-floating-chrome])
+    [data-panel-resize-snap-handle]:not(.pointer-events-none) {
+    width: var(--bb-web-chrome-gap);
+    background: transparent;
+  }
+}

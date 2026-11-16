@@ -125,15 +125,16 @@ export function ThreadActionsMenu({
   requestRename,
   onOpenChange,
   onCloseAutoFocus,
+  open,
   side,
   align = "end",
   sideOffset,
-}: PluginThreadActionsMenuProps) {
+}: PluginThreadActionsMenuProps & { open?: boolean }) {
   const isCompactViewport = useIsCompactViewport();
   const { drawerStep, setDrawerStep, handleOpenChange } =
     useDrawerStep(onOpenChange);
   return (
-    <DropdownMenu onOpenChange={handleOpenChange}>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <ThreadActionsTriggerSlot render={trigger} />
       </DropdownMenuTrigger>

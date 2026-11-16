@@ -1,3 +1,5 @@
+import "./human-message-appearance.css";
+import { useHumanMessageAppearance } from "@/components/plugin/ThreadMessageAppearance";
 import { useMemo, useRef, useState, type CSSProperties } from "react";
 import type {
   TimelineConversationAttachments,
@@ -90,6 +92,7 @@ interface ConversationMessageContentUserProps extends ConversationMessageContent
   role: "user";
   mobileActionDisplay?: "inline" | "overflow";
   initiator: TimelineUserConversationRow["initiator"];
+  humanMessagePresentation?: boolean;
   mentions: readonly PromptTextMention[];
   onAddToChat?: ThreadTimelineAddToChatHandler;
   onEdit?: () => void;
@@ -150,6 +153,7 @@ interface UserConversationMessageProps {
   attachmentItems: ConversationAttachmentItems;
   pluginActions?: readonly ThreadTimelinePluginMessageAction[];
   initiator: TimelineUserConversationRow["initiator"];
+  humanMessagePresentation?: boolean;
   mentions: readonly PromptTextMention[];
   mobileActionDisplay: "inline" | "overflow";
   onAddToChat?: ThreadTimelineAddToChatHandler;
@@ -267,6 +271,7 @@ function CollapsibleMessageText({
       ) : null}
       <div
         ref={bodyRef}
+        data-message-body=""
         data-image-gallery-clipped={!isExpanded ? "" : undefined}
         className={cn(
           "break-words",
@@ -277,7 +282,7 @@ function CollapsibleMessageText({
         }
       >
         {collapsedPreview?.parseAsMarkdown === false ? (
-          <span>{body.text}</span>
+          <span className="text-sm leading-relaxed">{body.text}</span>
         ) : (
           <MarkdownPreview
             content={
@@ -332,6 +337,7 @@ function UserConversationMessage({
   addToChatAttachments,
   attachmentItems,
   initiator,
+  humanMessagePresentation = false,
   mentions,
   mobileActionDisplay,
   onAddToChat,
@@ -355,6 +361,9 @@ function UserConversationMessage({
   turnRequest,
   workspaceRootPath,
 }: UserConversationMessageProps) {
+  const appearance = useHumanMessageAppearance(
+    initiator === "user" && humanMessagePresentation,
+  );
   const linkRouting = useMemo(
     () =>
       buildMarkdownMessageLinkRouting({
@@ -440,7 +449,7 @@ function UserConversationMessage({
 
   return (
     <div className="w-full" data-message-column="">
-      <div className="group/message ml-auto flex w-fit max-w-[70%] flex-col items-end">
+      <div className="human-message-native-colors group/message ml-auto flex w-fit max-w-[70%] flex-col items-end">
         {requestLabel ? (
           <div className="mb-1 flex items-center justify-end gap-2">
             <TurnRequestLabel
@@ -450,7 +459,11 @@ function UserConversationMessage({
           </div>
         ) : null}
         <div className="flex w-fit max-w-full flex-col items-end">
-          <div className="max-w-full rounded-xl border border-border-seam bg-surface-recessed px-4 py-2.5 text-sm leading-relaxed text-foreground">
+          <div
+            data-human-message-appearance={appearance ? "" : undefined}
+            style={appearance}
+            className="max-w-full rounded-xl border border-border-seam bg-surface-recessed px-4 py-2.5 text-sm leading-relaxed text-foreground"
+          >
             {messageText ? (
               <CollapsibleMessageText
                 mentions={mentions}
@@ -680,6 +693,7 @@ export function ConversationMessageContent(
         attachmentItems={attachmentItems}
         pluginActions={props.pluginActions}
         initiator={props.initiator}
+        humanMessagePresentation={props.humanMessagePresentation}
         mentions={props.mentions}
         mobileActionDisplay={props.mobileActionDisplay ?? "overflow"}
         onAddToChat={props.onAddToChat}

@@ -67,7 +67,6 @@ import {
   type ContextBannerMergeBaseConfig,
   type ThreadPromptContextBannerExpandedSection,
   type ThreadPromptParentThreadSection,
-  type ThreadPromptChildThreadsSection,
   type ThreadPromptPullRequestSection,
 } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import { ThreadGoalCard } from "@/components/promptbox/banner/ThreadGoalCard";
@@ -233,7 +232,6 @@ interface ThreadDetailPromptAreaProps {
   activeBackgroundCommands: TimelineWorkflowWorkRow[];
   parentThreadSection: ThreadPromptParentThreadSection | null;
   childPendingInteractions: readonly ChildThreadPendingAttention[];
-  childThreadsSection: ThreadPromptChildThreadsSection | null;
   pullRequest: ThreadPullRequest | null;
   sendMessage: SendMessageMutationLike;
   sentMessageEdit?: ThreadDetailSentMessageEdit;
@@ -450,7 +448,6 @@ export function ThreadDetailPromptArea({
   activeBackgroundCommands,
   parentThreadSection,
   childPendingInteractions,
-  childThreadsSection,
   pullRequest,
   sendMessage,
   sentMessageEdit,
@@ -2233,7 +2230,7 @@ export function ThreadDetailPromptArea({
                 }
           }
           parentThreadSection={parentThreadSection}
-          childThreadsSection={childThreadsSection}
+          childThreadsSection={null}
           pullRequestSection={showGitChanges ? pullRequestSection : null}
           gitSection={
             workspaceChangedFilesSection && showGitChanges
@@ -2324,7 +2321,6 @@ export function ThreadDetailPromptArea({
       isBackgroundCommandsExpanded,
       modelFallback,
       parentThreadSection,
-      childThreadsSection,
       pullRequestSection,
       pendingTodos,
       displayedProcessingQueuedMessage,

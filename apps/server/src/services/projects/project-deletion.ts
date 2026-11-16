@@ -1,3 +1,4 @@
+import { assertThreadsMayClose } from "../threads/thread-close-protection.js";
 import {
   requestEnvironmentRemoval,
   sweepProviderEnvironment,
@@ -70,6 +71,7 @@ function tombstoneProjectThreadsForDeletion(
   deps: ProjectDeletionDeps,
   args: ProjectDeletionArgs,
 ): { deletedThreads: Thread[]; projectThreads: ProjectDeletionThread[] } {
+  assertThreadsMayClose(deps.db, listProjectDeletionThreads(deps.db, args));
   const notificationBuffer = new NotificationBuffer();
   const result = deps.db.transaction(
     (tx) => {

@@ -584,6 +584,49 @@ describe("useThreadHostFilePreview", () => {
 });
 
 describe("useChildThreads", () => {
+  it("refreshes idle child status even with a populated sidebar and stops polling when resumed", async () => {
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const active = makeThreadListEntry({
+      id: "child-1",
+      parentThreadId: "parent-1",
+      runtime: { displayStatus: "active" },
+    });
+    const finished = makeThreadListEntry({
+      id: "child-1",
+      parentThreadId: "parent-1",
+      runtime: { displayStatus: "idle" },
+    });
+    queryClient.setQueryData(
+      sidebarNavigationQueryKey(),
+      makeSidebarNavigation([active]),
+    );
+    vi.mocked(sdk.threads.list).mockResolvedValue([active]);
+    const view = renderHook(
+      ({ idle }) =>
+        useChildThreads({
+          enabled: true,
+          parentThreadId: "parent-1",
+          refetchInterval: idle ? 25 : false,
+        }),
+      { wrapper, initialProps: { idle: true } },
+    );
+    try {
+      await waitFor(() => expect(view.result.current.data).toEqual([active]));
+      vi.mocked(sdk.threads.list).mockResolvedValue([finished]);
+      await waitFor(() => expect(view.result.current.data).toEqual([finished]));
+      const calls = vi.mocked(sdk.threads.list).mock.calls.length;
+      expect(calls).toBeGreaterThanOrEqual(2);
+      view.rerender({ idle: false });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 75));
+      });
+      expect(sdk.threads.list).toHaveBeenCalledTimes(calls);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+    }
+  });
+
   it("derives children from the sidebar cache across projects without a list request", async () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const projectChild = makeThreadListEntry({

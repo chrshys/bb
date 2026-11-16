@@ -13,6 +13,7 @@ const pluginNavPanelChromeSchema = z.object({
   path: z.string().min(1),
   title: z.string(),
   icon: z.string(),
+  showCloseButton: z.boolean().default(true),
 });
 
 export type PluginNavPanelChrome = z.infer<typeof pluginNavPanelChromeSchema>;
@@ -38,6 +39,7 @@ function pluginNavPanelChromeOf(
     path: panel.path,
     title: panel.title,
     icon: panel.icon,
+    showCloseButton: panel.experimental_showCloseButton ?? true,
   };
 }
 
@@ -50,9 +52,12 @@ export function readLastKnownPluginNavPanelChrome(): PluginNavPanelChrome[] {
 }
 
 export function writeLastKnownPluginNavPanelChrome(
-  chrome: readonly PluginNavPanelChrome[],
+  chrome: readonly z.input<typeof pluginNavPanelChromeSchema>[],
 ): void {
-  chromeCache.write(CHROME_CACHE_KEY, [...chrome]);
+  chromeCache.write(
+    CHROME_CACHE_KEY,
+    chrome.map((entry) => pluginNavPanelChromeSchema.parse(entry)),
+  );
 }
 
 export function usePluginNavPanelChrome(): PluginNavPanelChromeEntry[] {

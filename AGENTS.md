@@ -57,3 +57,14 @@
 - End every agent-created issue and PR body with `> AGENT GENERATED`.
 - Ground debugging in observed state: logs, database queries, server APIs, or CLI output. For dev ports, data directories, entity IDs, and the local QA launcher, see [docs/debugging-and-qa.md](docs/debugging-and-qa.md).
 - Never tail the production bb connect gate (`bb-connect`) with `wrangler tail` or the dashboard's live logs. Attaching or detaching a tail resets its Durable Objects and drops every connected tunnel. Instead, query stored Workers Logs or the Cloudflare GraphQL Analytics API (`httpRequestsAdaptiveGroups`, `durableObjectsInvocationsAdaptiveGroups`), and reproduce with `wrangler tail --env staging` against `bb-connect-staging`.
+
+## BB customization direction
+
+The product goal is a polished knowledge-work harness built on top of BB.
+
+- Prefer BB's native functionality, host-rendered components, SDK APIs, menus, actions, settings, and interaction patterns before implementing replacements.
+- If BB does not cover the need, look for existing community plugins that can be adapted or modified.
+- Build custom functionality only when native BB capabilities and suitable community plugins do not satisfy the requirement; explain the gap that justifies it.
+- Customize presentation without silently removing native capabilities. Reuse the same underlying actions across right-click menus, overflow menus, keyboard controls, and touch surfaces.
+- Preserve native state, confirmations, permissions, and lifecycle behavior. Avoid parallel implementations of pinning, notifications, archiving, deletion, or other built-in thread actions.
+- Aim for coherent, restrained visual design, accessible controls, and low-friction knowledge work rather than novelty or duplicated features.

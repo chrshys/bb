@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Icon } from "@bb/shared-ui/icon";
+import { Button } from "@bb/shared-ui/button";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   createGitDiffFixedPanelTab,
@@ -20,7 +21,13 @@ import {
 import { ThreadMetadataContent } from "./ThreadMetadataContent";
 import { baseProps as baseMetadataProps } from "./ThreadMetadataContent.fixtures";
 import { FilePreview } from "./FilePreview";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import {
+  Sidebar,
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import { threadListQueryKey } from "@/hooks/queries/query-keys";
 
 export default {
@@ -78,11 +85,13 @@ function StoryFileContent({ path }: { path: string }) {
       state={{
         kind: "ready",
         lineRange: null,
-        textPreviewKind: null,
+        textPreviewKind: path.endsWith(".md") ? "markdown" : null,
         file: {
           cacheKey: `compact-shelf-story:${path}`,
           name: path.split("/").at(-1) ?? path,
-          contents: STORY_FILE_SOURCE,
+          contents: path.endsWith(".md")
+            ? "# Project notes\n\nThe navigation, file controls, and document share one continuous panel surface.\n\n## Working context\n\nKeep references close while the conversation remains visible at the edge. All tab, preview, and file actions remain available."
+            : STORY_FILE_SOURCE,
         },
       }}
     />
@@ -193,7 +202,9 @@ function Stage({ children }: { children: ReactNode }) {
 }
 
 export function FullPage() {
-  const [activeTab, setActiveTab] = useState<SecondaryFixedPanelTab>(fileTab);
+  const [activeTab, setActiveTab] = useState<SecondaryFixedPanelTab>(() =>
+    createStoryFileTab("notes/HANDOFF.md"),
+  );
   const [open, setOpen] = useState(true);
 
   return (
@@ -205,6 +216,7 @@ export function FullPage() {
       >
         <ShelfPanel
           activeTab={activeTab}
+          filePaths={["notes/HANDOFF.md"]}
           onSelectTab={setActiveTab}
           onClose={() => setOpen(false)}
         />
@@ -244,5 +256,72 @@ export function Closed() {
         />
       </CompactSecondaryPanelShelf>
     </Stage>
+  );
+}
+
+function LayeredNavigationPanels() {
+  const [open, setOpen] = useState(false);
+  const { closeMobileSidebar } = useSidebar();
+  return (
+    <>
+      <Sidebar>
+        <div className="flex flex-col gap-6 p-6">
+          <h2 className="text-lg font-medium">Navigation</h2>
+          <button onClick={closeMobileSidebar}>Return to conversation</button>
+        </div>
+      </Sidebar>
+      <SidebarInset>
+        <header className="flex items-center justify-between border-b p-4">
+          <SidebarTrigger />
+          <span>Conversation</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-11 shrink-0"
+            aria-label="Open details"
+            style={{ visibility: open ? "hidden" : undefined }}
+            onClick={() => setOpen(true)}
+          >
+            <Icon name="PanelRight" />
+          </Button>
+        </header>
+        <div className="flex flex-1 flex-col gap-6 p-6">
+          <h1 className="text-xl font-medium">A little room to think</h1>
+          <p className="text-muted-foreground">
+            Open navigation or details to reveal the panel underneath. Tap the
+            visible conversation edge to return.
+          </p>
+          <textarea
+            aria-label="Conversation draft"
+            className="rounded-lg border p-4"
+            placeholder="Keep your train of thought…"
+          />
+        </div>
+      </SidebarInset>
+      <CompactSecondaryPanelShelf
+        open={open}
+        onClose={() => setOpen(false)}
+        srLabel="Details"
+      >
+        <div className="flex flex-col gap-6 p-6">
+          <h2 className="text-lg font-medium">Details</h2>
+          <p className="text-muted-foreground">
+            Files, references, and context live one layer beneath your
+            conversation.
+          </p>
+          <button onClick={() => setOpen(false)}>Return to conversation</button>
+        </div>
+      </CompactSecondaryPanelShelf>
+    </>
+  );
+}
+
+export function LayeredNavigation() {
+  return (
+    <div className="fixed inset-0 bg-sidebar">
+      <SidebarProvider defaultOpen={false}>
+        <LayeredNavigationPanels />
+      </SidebarProvider>
+    </div>
   );
 }

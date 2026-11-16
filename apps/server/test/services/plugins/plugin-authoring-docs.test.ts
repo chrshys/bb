@@ -7,6 +7,8 @@ import * as pluginSdkApp from "@get-bb/plugin-sdk/app";
 import {
   type BbPluginApi,
   type ExperimentalAppOverlayProps,
+  type ExperimentalThreadTimelineFooterProps,
+  type ExperimentalThreadMessageAppearanceRegistration,
   type PluginAppBuilder,
   type PluginAppSlots,
   type PluginContentScriptContext,
@@ -171,6 +173,7 @@ const BB_PLUGIN_API_KEYS = [
   "server",
   "hosts",
   "experimental_aiServices",
+  "experimental_threadCloseProtection",
   "experimental_hooks",
   "experimental_environments",
   "experimental_machines",
@@ -272,6 +275,10 @@ type SlotPropsByName = {
   pendingInteraction: PluginPendingInteractionProps;
   sidebarFooterAction: PluginSidebarFooterActionProps;
   experimental_threadList: PluginThreadListProps;
+  experimental_threadTimelineFooter: ExperimentalThreadTimelineFooterProps;
+  experimental_threadMessageAppearance: Parameters<
+    ExperimentalThreadMessageAppearanceRegistration["useAppearance"]
+  >[0];
   experimental_threadHeaderAction: PluginThreadHeaderActionProps;
   experimental_threadAction: PluginThreadActionItemInput<unknown>;
   experimental_browserToolbarAction: ExperimentalPluginBrowserToolbarActionProps;
@@ -360,6 +367,14 @@ const FRONTEND_SLOT_PROP_FIELDS = {
     "projectId",
     "isCompactViewport",
   ],
+  experimental_threadTimelineFooter: [
+    "threadId",
+    "projectId",
+    "runtimeDisplayStatus",
+    "Original",
+    "ThreadBadge",
+  ],
+  experimental_threadMessageAppearance: ["threadId"],
   experimental_threadAction: ["thread", "data", "sdk", "navigate"],
   experimental_browserToolbarAction: [
     "threadId",

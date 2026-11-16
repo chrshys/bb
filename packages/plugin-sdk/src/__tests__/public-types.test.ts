@@ -21,6 +21,7 @@ type ExpectedBbPluginApiKey =
   | "cli"
   | "events"
   | "experimental_aiServices"
+  | "experimental_threadCloseProtection"
   | "experimental_environments"
   | "experimental_hooks"
   | "experimental_machines"
@@ -42,6 +43,8 @@ type ExpectedBbPluginApiKey =
   | "ui";
 
 const EXPECTED_BACKEND_ROOT_TYPE_EXPORTS = [
+  "experimental_ThreadCloseProtection",
+  "experimental_ThreadCloseProtectionDeclaration",
   "BbPluginApi",
   "MessageDispatchHookContext",
   "MessageDispatchHookDecision",

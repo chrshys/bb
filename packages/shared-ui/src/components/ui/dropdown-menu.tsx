@@ -153,7 +153,7 @@ const DropdownMenuContent = React.forwardRef<
           <div
             ref={ref}
             className={cn(
-              "flex flex-col gap-0.5 overflow-y-auto p-2",
+              "flex flex-col gap-0.5 overflow-y-auto px-3 pt-2 pb-3",
               className,
             )}
             {...domProps}
@@ -255,8 +255,8 @@ const DropdownMenuItem = React.forwardRef<
           aria-disabled={disabled || undefined}
           aria-checked={ariaChecked}
           className={cn(
-            "relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-[0.3125rem] max-md:pointer-coarse:py-2 text-left text-xs outline-none transition-colors focus:bg-state-hover focus:text-foreground active:bg-state-active active:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>[data-icon-root]]:size-4 [&>[data-icon-root]]:shrink-0",
-            inset && "pl-8",
+            "relative flex min-h-13 w-full cursor-default select-none items-center gap-3 rounded-lg px-3 py-2.5 text-left text-base leading-relaxed outline-none transition-colors focus:bg-state-hover focus:text-foreground active:bg-state-active active:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>[data-icon-root]]:size-5 [&>[data-icon-root]]:shrink-0",
+            inset && "pl-11",
             variant === "destructive" && MENU_ITEM_DESTRUCTIVE_TOUCH_CLASS,
             className,
           )}
@@ -345,7 +345,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
           disabled={disabled}
           aria-disabled={disabled || undefined}
           className={cn(
-            "relative flex w-full cursor-default select-none items-center rounded-sm py-[0.3125rem] max-md:pointer-coarse:py-2 pl-2 pr-8 text-left text-xs outline-none transition-colors focus:bg-state-hover focus:text-foreground active:bg-state-active active:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            "relative flex min-h-13 w-full cursor-default select-none items-center rounded-lg py-2.5 pl-3 pr-11 text-left text-base leading-relaxed outline-none transition-colors focus:bg-state-hover focus:text-foreground active:bg-state-active active:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
             className,
           )}
           data-disabled={disabled ? "" : undefined}
@@ -361,7 +361,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
         >
           <span
             className={cn(
-              "absolute right-2 flex items-center justify-center",
+              "absolute right-3 flex items-center justify-center",
               COARSE_POINTER_CHECK_SLOT_CLASS,
             )}
           >
@@ -486,7 +486,7 @@ const DropdownMenuLabel = React.forwardRef<
       <div
         ref={ref}
         className={cn(
-          "px-2 py-[0.3125rem] max-md:pointer-coarse:py-1.5 text-xs font-medium text-muted-foreground",
+          "px-3 py-2 text-sm font-medium text-muted-foreground",
           inset && "pl-8",
           className,
         )}
@@ -522,7 +522,10 @@ const DropdownMenuSeparator = React.forwardRef<
     return (
       <hr
         ref={ref as React.RefCallback<HTMLHRElement> | null}
-        className={cn("-mx-1 my-1 h-px border-0 bg-muted", className)}
+        className={cn(
+          "mx-3 my-2 h-px shrink-0 border-0 bg-border-seam",
+          className,
+        )}
       />
     );
   }

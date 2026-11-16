@@ -1,4 +1,5 @@
 import * as React from "react";
+import "./mobile-panel-depth.css";
 import { flushSync } from "react-dom";
 import { Slot } from "@radix-ui/react-slot";
 
@@ -6,6 +7,7 @@ import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { Button } from "@bb/shared-ui/button";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
+import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
 import { Icon } from "@bb/shared-ui/icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import { setCompactSidebarDrawerShowing } from "./sidebar-mobile-drawer-visibility.js";
@@ -18,9 +20,8 @@ import {
 import { useHorizontalDismissDrag } from "./use-horizontal-dismiss-drag.js";
 
 const SIDEBAR_WIDTH = "16rem";
-const SIDEBAR_MOBILE_VIEWPORT_FRACTION = 0.86;
-const SIDEBAR_MOBILE_MAX_WIDTH_PX = 360;
-const SIDEBAR_WIDTH_MOBILE = `min(${SIDEBAR_MOBILE_VIEWPORT_FRACTION * 100}vw, ${SIDEBAR_MOBILE_MAX_WIDTH_PX}px)`;
+const SIDEBAR_MOBILE_PEEK_PX = 80;
+const SIDEBAR_WIDTH_MOBILE = `calc(100vw - ${SIDEBAR_MOBILE_PEEK_PX}px)`;
 const SIDEBAR_MOBILE_SWIPE_BROWSER_EDGE_GUARD_PX = 24;
 const SIDEBAR_MOBILE_SWIPE_OPEN_EDGE_ZONE_PX = 72;
 const SIDEBAR_MOBILE_SWIPE_OPEN_INTENT_PX = 12;
@@ -35,8 +36,6 @@ const SIDEBAR_MOBILE_SHELF_SETTLE_TRANSITION = `translate ${SIDEBAR_MOBILE_DRAG_
 const SIDEBAR_MOBILE_SHELF_BACKDROP_SETTLE_TRANSITION = `opacity ${SIDEBAR_MOBILE_DRAG_SETTLE_MS}ms ${SIDEBAR_MOBILE_DRAG_SETTLE_EASING}, translate ${SIDEBAR_MOBILE_DRAG_SETTLE_MS}ms ${SIDEBAR_MOBILE_DRAG_SETTLE_EASING}`;
 const SIDEBAR_MOBILE_WHEEL_SWIPE_OPEN_DISTANCE_PX = 90;
 const SIDEBAR_MOBILE_WHEEL_SWIPE_RESET_MS = 250;
-const SIDEBAR_MOBILE_SHELF_INSET_TRANSITION_CLASS =
-  "max-md:[transition:translate_220ms_cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none!";
 const SIDEBAR_MOBILE_BACKDROP_TRANSITION_CLASS =
   "[transition:opacity_220ms_cubic-bezier(0.32,0.72,0,1),translate_220ms_cubic-bezier(0.32,0.72,0,1)]";
 
@@ -72,13 +71,10 @@ const sidebarMobileWidthStyle: SidebarMobileWidthStyle = {
 
 function getSidebarMobilePanelWidth(): number {
   if (typeof window === "undefined") {
-    return SIDEBAR_MOBILE_MAX_WIDTH_PX;
+    return 390 - SIDEBAR_MOBILE_PEEK_PX;
   }
 
-  return Math.min(
-    window.innerWidth * SIDEBAR_MOBILE_VIEWPORT_FRACTION,
-    SIDEBAR_MOBILE_MAX_WIDTH_PX,
-  );
+  return Math.max(0, window.innerWidth - SIDEBAR_MOBILE_PEEK_PX);
 }
 
 function clampSidebarMobileSwipeProgress(value: number): number {
@@ -1050,7 +1046,6 @@ const SidebarMobilePanel = React.forwardRef<
           data-vaul-drawer-direction="left"
           className={cn(
             "group fixed inset-y-0 left-0 z-0 flex h-(--bb-shell-height) w-(--sidebar-width-mobile) touch-pan-y select-none flex-col bg-sidebar text-sidebar-foreground outline-none",
-            "border-border-seam data-[side=left]:border-r",
             className,
           )}
           style={
@@ -1091,6 +1086,7 @@ const SidebarTrigger = React.forwardRef<
       className={cn(
         COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
         "select-none",
+        isCompactViewport && CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
         className,
       )}
       aria-expanded={ariaExpanded ?? (isCompactViewport ? openMobile : open)}
@@ -1688,10 +1684,10 @@ const SidebarInset = React.forwardRef<
           : undefined
       }
       className={cn(
-        "relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background max-md:z-30",
-        SIDEBAR_MOBILE_SHELF_INSET_TRANSITION_CLASS,
+        "relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background max-md:z-30 motion-reduce:transition-none!",
+
         "data-[sidebar-shelf=open]:translate-x-(--sidebar-width-mobile) data-[sidebar-shelf]:will-change-[translate]",
-        "data-[panel-shelf=full]:-translate-x-full data-[panel-shelf]:will-change-[translate]",
+        "data-[panel-shelf]:will-change-[translate]",
         isFramed && [
           "overflow-clip rounded-tr-xl rounded-br-xl border-r",
           SIDEBAR_FRAMED_CARD_EDGE_CLASS,

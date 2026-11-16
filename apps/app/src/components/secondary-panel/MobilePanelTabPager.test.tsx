@@ -221,24 +221,25 @@ describe("MobilePanelTabPager", () => {
     expect(screen.queryByRole("button", { name: "package.json" })).toBeNull();
   });
 
-  it("leaves fixed views and add available when there are no content tabs", () => {
-    render(
-      <MobilePanelTabPager
-        activeTabId="Info"
-        fixedTabs={createFixedTabs()}
-        tabs={[]}
-        newTabControl={<button>Add tab</button>}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Info" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Diff" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Add tab" })).toBeDefined();
-    for (const name of ["Previous tab", "Next tab"]) {
-      expect(
-        screen.getByRole("button", { name }).hasAttribute("disabled"),
-      ).toBe(true);
-    }
-  });
+  it.each([0, 1])(
+    "keeps fixed views and add available without crowding %s content tabs with arrows",
+    (count) => {
+      render(
+        <MobilePanelTabPager
+          activeTabId="Info"
+          fixedTabs={createFixedTabs()}
+          tabs={createTabs().slice(0, count)}
+          newTabControl={<button>Add tab</button>}
+        />,
+      );
+      expect(screen.getByRole("button", { name: "Info" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Diff" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Add tab" })).toBeDefined();
+      for (const name of ["Previous tab", "Next tab"]) {
+        expect(screen.queryByRole("button", { name })).toBeNull();
+      }
+    },
+  );
 
   it("advances once for a horizontal swipe and suppresses the resulting close click", () => {
     const tabs = createTabs();

@@ -25,6 +25,7 @@ function userRow(args: {
     text: args.text,
     mentions: [],
     attachments: null,
+    humanMessagePresentation: false,
     initiator: "user",
     senderThreadId: null,
     systemMessageKind: "unlabeled",

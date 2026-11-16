@@ -252,3 +252,13 @@ projectId, experimental_hostId? }` (nullable fields). The optional host ID
   always use the built-in preview, and a removed/disabled opener degrades
   back to it. Pair with `bb.sdk.files` (rpc from your server) to load and
   CAS-save the content.
+
+- `experimental_threadTimelineFooter` → `{ threadId, projectId,
+runtimeDisplayStatus, Original, ThreadBadge }`. The first registered provider
+  replaces one live entry after conversation rows, inside the scroll area.
+  Registration: `{ id, title, component }`. Render `Original` only after
+  confirming the provider does not own this thread. Show loading/unavailable or
+  partial inventories honestly. `ThreadBadge` accepts `{ threadId, projectId,
+title }` and uses native Parent-style child rows/navigation, shared with the core
+  child-thread summary. Read-only refresh must not post messages or start turns.
+  Mounts are isolated per visible thread; clean up subscriptions and timers.

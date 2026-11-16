@@ -4,6 +4,7 @@ export type * from "@get-bb/plugin-sdk";
 
 export const {
   experimental_Icon,
+  experimental_ThreadStatusGlyph,
   experimental_ProviderIcon,
   definePluginApp,
   ThreadChat,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 
 type MarkThreadReadMutation = Parameters<
@@ -33,8 +33,11 @@ function setDocumentVisibilityState(
 }
 
 describe("useThreadReadTracking", () => {
+  beforeEach(() => vi.useFakeTimers());
+
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     setDocumentVisibilityState("visible");
   });
 
@@ -49,6 +52,42 @@ describe("useThreadReadTracking", () => {
     );
 
     expect(markThreadRead.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("requires two continuous visible seconds and cancels on departure", () => {
+    const markThreadRead = makeMarkThreadRead();
+    const { rerender, unmount } = renderHook(
+      ({ id }) =>
+        useThreadReadTracking({
+          markThreadRead,
+          thread: { id, lastReadAt: 10, latestAttentionAt: 20 },
+        }),
+      { initialProps: { id: "A" } },
+    );
+    act(() => vi.advanceTimersByTime(1999));
+    expect(markThreadRead.mutateAsync).not.toHaveBeenCalled();
+    rerender({ id: "B" });
+    act(() => vi.advanceTimersByTime(1000));
+    act(() => {
+      setDocumentVisibilityState("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    act(() => vi.advanceTimersByTime(3000));
+    expect(markThreadRead.mutateAsync).not.toHaveBeenCalled();
+    act(() => {
+      setDocumentVisibilityState("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    act(() => vi.advanceTimersByTime(1999));
+    expect(markThreadRead.mutateAsync).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(markThreadRead.mutateAsync).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ threadId: "B" }),
+    );
+    rerender({ id: "C" });
+    unmount();
+    act(() => vi.advanceTimersByTime(2000));
+    expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(1);
   });
 
   it("marks an unread thread read after a mobile pageshow restore", () => {
@@ -73,6 +112,7 @@ describe("useThreadReadTracking", () => {
       window.dispatchEvent(new Event("pageshow"));
     });
 
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(1);
     expect(markThreadRead.mutateAsync).toHaveBeenLastCalledWith(
       expect.objectContaining({ threadId: "thr_mobile_restore" }),
@@ -94,15 +134,18 @@ describe("useThreadReadTracking", () => {
       { initialProps: { latestAttentionAt: 20 } },
     );
 
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(1);
     expect(markThreadRead.mutateAsync).toHaveBeenLastCalledWith(
       expect.objectContaining({ threadId: "thr_side_chat" }),
     );
 
     rerender({ latestAttentionAt: 20 });
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(1);
 
     rerender({ latestAttentionAt: 30 });
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(2);
   });
 
@@ -119,11 +162,12 @@ describe("useThreadReadTracking", () => {
         },
       }),
     );
-    await act(async () => {});
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
     act(() => {
       window.dispatchEvent(new Event("pageshow"));
     });
 
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(2);
   });
 
@@ -145,6 +189,7 @@ describe("useThreadReadTracking", () => {
     );
 
     rerender({ lastReadAt: null });
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).not.toHaveBeenCalled();
 
     act(() => {
@@ -156,6 +201,7 @@ describe("useThreadReadTracking", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
 
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).not.toHaveBeenCalled();
   });
 
@@ -184,16 +230,19 @@ describe("useThreadReadTracking", () => {
       { initialProps },
     );
 
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(1);
 
     rerender({ lastReadAt: 20, visible: true });
     rerender({ lastReadAt: null, visible: true });
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(1);
 
     rerender({ lastReadAt: null, visible: false });
     await act(async () => {});
     rerender({ lastReadAt: null, visible: true });
 
+    act(() => vi.advanceTimersByTime(2000));
     expect(markThreadRead.mutateAsync).toHaveBeenCalledTimes(2);
   });
 });

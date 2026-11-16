@@ -37,6 +37,8 @@ interface StoredQueuedThreadMessageRow {
   sendAt: number | null;
   serviceTier: string;
   senderThreadId: string | null;
+  systemInitiated: boolean;
+  humanMessagePresentation: boolean | null;
   requestedByInitiator: StartedOnBehalfOfInitiator | null;
   requestedByThreadId: string | null;
   systemNotice: string | null;
@@ -164,6 +166,7 @@ export function toThreadQueuedMessage(
       ? { initiator: "system" as const, senderThreadId: null }
       : resolveDispatchAuthor({
           retrying: row.payloadKind === "retry",
+          systemInitiated: row.systemInitiated,
           senderThreadId: row.senderThreadId,
           startedOnBehalfOf: storedQueuedThreadMessageRequestedBy(row),
         });
@@ -172,6 +175,8 @@ export function toThreadQueuedMessage(
     origin: row.origin,
     originPluginId: row.originPluginId,
     initiator: author.initiator,
+    humanMessagePresentation:
+      row.humanMessagePresentation === true && author.initiator === "user",
     senderThreadId: author.senderThreadId,
     threadId: row.threadId,
     content: parseStoredQueuedThreadMessageContent(row),

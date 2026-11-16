@@ -1175,7 +1175,7 @@ function StandalonePaneContent({
       subPath={content.subPath}
     />
   );
-  const paneActions = onRequestClose ? (
+  const paneActions = onRequestClose && panelChrome?.showCloseButton !== false ? (
     <Button
       type="button"
       variant="ghost"
@@ -1282,7 +1282,7 @@ function NonThreadPaneContent({
   const paneActions = (
     <>
       <PaneMaximizeButton />
-      {onRequestClose ? (
+      {onRequestClose && content.kind !== "new-thread" && panelChrome?.showCloseButton !== false ? (
         <Button
           type="button"
           variant="ghost"
@@ -1294,13 +1294,7 @@ function NonThreadPaneContent({
           aria-label="Close pane"
           onClick={onRequestClose}
         >
-          <Icon
-            name={
-              content.kind === "new-thread"
-                ? "CloseThreadPane"
-                : "ClosePluginPane"
-            }
-          />
+          <Icon name="ClosePluginPane" />
         </Button>
       ) : null}
     </>

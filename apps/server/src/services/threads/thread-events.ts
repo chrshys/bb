@@ -86,6 +86,7 @@ interface ClientTurnRequestedEventArgs {
   inputGroups?: PromptInput[][];
   requestMethod: "thread/start" | "turn/start";
   senderThreadId: string | null;
+  humanMessagePresentation?: boolean;
   source: "spawn" | "tell";
   systemMessageKind?: SystemMessageKind;
   systemMessageSubject?: SystemMessageSubject | null;
@@ -207,6 +208,12 @@ function buildClientTurnRequestedEventData(
         }
       : {}),
     senderThreadId: args.senderThreadId,
+    ...(args.humanMessagePresentation === undefined
+      ? {}
+      : {
+          humanMessagePresentation:
+            args.humanMessagePresentation && args.initiator === "user",
+        }),
     ...(args.systemMessageKind !== undefined
       ? { systemMessageKind: args.systemMessageKind }
       : {}),

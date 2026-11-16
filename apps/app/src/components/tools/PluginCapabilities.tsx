@@ -285,6 +285,12 @@ function pluginAppSurfaceItems(
     ),
     ...namedSlotItems(
       pluginId,
+      slots.threadTimelineFooters,
+      "thread-timeline-footer",
+      "Provides a live entry inside the conversation.",
+    ),
+    ...namedSlotItems(
+      pluginId,
       slots.threadActions,
       "thread-action",
       "Adds an action to thread menus.",

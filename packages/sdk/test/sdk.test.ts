@@ -1334,7 +1334,7 @@ describe("@bb/sdk", () => {
     });
   });
 
-  it("forwards every public permission mode through thread surfaces", async () => {
+  it("forwards permission modes and presentation declarations through thread surfaces", async () => {
     const queue = createFetchQueue([
       { body: { id: "thr_auto" }, status: 201 },
       { body: { ok: true, delivery: "sent" } },
@@ -1355,6 +1355,7 @@ describe("@bb/sdk", () => {
         hostId: "host_123",
         workspace: { type: "unmanaged", path: null },
       },
+      humanMessagePresentation: true,
       permissionMode: "auto",
       prompt: "Approve for me",
     });
@@ -1362,6 +1363,7 @@ describe("@bb/sdk", () => {
       threadId: "thr_auto",
       input: [{ type: "text", text: "Accept edits", mentions: [] }],
       mode: "start",
+      humanMessagePresentation: true,
       permissionMode: "accept-edits",
       pluginSubmission: {
         pluginId: "example-plugin",
@@ -1371,21 +1373,29 @@ describe("@bb/sdk", () => {
     await sdk.threads.queuedMessages.create({
       threadId: "thr_auto",
       input: [{ type: "text", text: "Full access", mentions: [] }],
+      humanMessagePresentation: true,
       permissionMode: "full",
     });
 
     expect(
       queue.requests.map((request) => JSON.parse(request.bodyText ?? "{}")),
     ).toEqual([
-      expect.objectContaining({ permissionMode: "auto" }),
+      expect.objectContaining({
+        permissionMode: "auto",
+        humanMessagePresentation: true,
+      }),
       expect.objectContaining({
         permissionMode: "accept-edits",
+        humanMessagePresentation: true,
         pluginSubmission: {
           pluginId: "example-plugin",
           data: { action: "hold" },
         },
       }),
-      expect.objectContaining({ permissionMode: "full" }),
+      expect.objectContaining({
+        permissionMode: "full",
+        humanMessagePresentation: true,
+      }),
     ]);
   });
 

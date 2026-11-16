@@ -903,7 +903,6 @@ function buildPromptAreaElement({
         activeWorkflows={activeWorkflows}
         canUseGitUi={false}
         childPendingInteractions={childPendingInteractions}
-        childThreadsSection={null}
         composerFocusRequestNonce={0}
         contextBannerMergeBase={null}
         canRestoreEnvironment={false}

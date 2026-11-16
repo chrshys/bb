@@ -996,6 +996,12 @@ export const queuedThreadMessages = sqliteTable(
       .references(() => threads.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
     senderThreadId: text("sender_thread_id"),
+    humanMessagePresentation: integer("human_message_presentation", {
+      mode: "boolean",
+    }),
+    systemInitiated: integer("system_initiated", { mode: "boolean" })
+      .notNull()
+      .default(false),
     // How the dispatch this row was queued from was requested, and the plugin
     // that requested it. On the row rather than read from the request, so a
     // drained re-attempt decides on the same provenance its first attempt saw.

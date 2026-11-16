@@ -61,6 +61,7 @@ type ThreadRewindPrepareCommand = Extract<
 >;
 
 interface EditableTurn {
+  humanMessagePresentation?: boolean;
   leadingAgentOnlyInput: PromptInput[];
   currentTurnId: string;
   oldMaxSequence: number;
@@ -91,6 +92,7 @@ function requestFingerprint(payload: EditMessageRequest): string {
         permissionMode: payload.permissionMode,
         reasoningLevel: payload.reasoningLevel,
         senderThreadId: payload.senderThreadId,
+        humanMessagePresentation: payload.humanMessagePresentation,
         serviceTier: payload.serviceTier,
       }),
     )
@@ -320,6 +322,7 @@ function resolveEditableTurnCandidate(
   }
   return {
     leadingAgentOnlyInput: getLeadingAgentOnlyInput(request.input),
+    humanMessagePresentation: request.humanMessagePresentation,
     currentTurnId: accepted.turnId,
     oldMaxSequence,
     precedingProviderCheckpoint,
@@ -623,6 +626,9 @@ export async function editThreadMessage(
       },
       payload: {
         ...sendPayload,
+        humanMessagePresentation:
+          sendPayload.humanMessagePresentation ??
+          target.humanMessagePresentation,
         input: [...target.leadingAgentOnlyInput, ...sendPayload.input],
         mode: "start",
       },

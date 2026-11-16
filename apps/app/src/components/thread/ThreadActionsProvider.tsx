@@ -224,6 +224,10 @@ export function ThreadActionsProvider({
           threadId: thread.id,
         });
         if (signal.aborted) return null;
+        if (childSummary.deleteProtectionReason) {
+          appToast.error(childSummary.deleteProtectionReason);
+          return null;
+        }
 
         return {
           childThreadCount: childSummary?.nonDeletedChildCount ?? 0,

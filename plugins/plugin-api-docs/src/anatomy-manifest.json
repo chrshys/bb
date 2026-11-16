@@ -27,6 +27,30 @@
     ]
   },
   "surfaceFixtures": {
+    "timeline-renderers": {
+      "groupId": "app-shell",
+      "fidelity": "anchor",
+      "responsiveStrategy": "scale-together",
+      "requiredStates": ["anchor"],
+      "labels": { "anchor": [] },
+      "fixtureClassAnchors": [],
+      "sources": [
+        {
+          "path": "apps/app/src/components/plugin/ThreadMessageAppearance.tsx",
+          "anchors": [
+            "slotKind=\"threadMessageAppearance\"",
+            "slot.useAppearance({ threadId })"
+          ]
+        },
+        {
+          "path": "apps/app/src/components/thread/timeline/ConversationMessageContent.tsx",
+          "anchors": [
+            "data-human-message-appearance",
+            "humanMessagePresentation = false"
+          ]
+        }
+      ]
+    },
     "composer-actions": {
       "groupId": "composer",
       "fidelity": "flow",

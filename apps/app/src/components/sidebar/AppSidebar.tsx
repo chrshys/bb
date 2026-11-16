@@ -52,10 +52,7 @@ import { useRouteState } from "@/hooks/useRouteState";
 import { SidebarNavigationModelProvider } from "./SidebarNavigationModel";
 import { SIDEBAR_FOOTER_MORE_ID } from "./sidebarFooterPreferences";
 import { LazySidebarFooterCustomize } from "./LazySidebarFooterCustomize";
-import {
-  NavRailNewThreadButton,
-  type NavRailCustomizeState,
-} from "./AppNavRail";
+import type { NavRailCustomizeState } from "./AppNavRail";
 
 import { NAV_RAIL_WIDTH_CLASS } from "./navRailWidth";
 
@@ -201,18 +198,7 @@ export function AppSidebar({
 
   const body = (
     <>
-      <SidebarTopReserveRow
-        testId="app-sidebar-top-reserve-row"
-        headerSlot={
-          <div
-            data-testid="nav-rail-header"
-            data-sidebar-header-slot=""
-            className="flex h-full min-w-0 flex-1 items-center"
-          >
-            <NavRailNewThreadButton />
-          </div>
-        }
-      />
+      <SidebarTopReserveRow testId="app-sidebar-top-reserve-row" />
       <SidebarContent>
         <ThreadActionSurfaceVisibility visible={isThreadListVisible}>
           <PluginThreadList

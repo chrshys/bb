@@ -125,6 +125,7 @@ export const timelineUserConversationRowSchema =
     role: z.literal("user"),
     initiator: threadTurnInitiatorSchema,
     senderThreadId: z.string().nullable(),
+    humanMessagePresentation: z.boolean().default(false),
     systemMessageKind: systemMessageKindSchema,
     systemMessageSubject: systemMessageSubjectSchema.nullable(),
     turnRequest: timelineConversationTurnRequestSchema,

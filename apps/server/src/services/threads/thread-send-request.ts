@@ -12,6 +12,7 @@ import { runWithTurnTrace } from "../system/turn-trace.js";
 
 interface AcceptThreadSendRequestArgs {
   payload: SendMessageRequest;
+  systemInitiated?: boolean;
   thread: Thread;
 }
 
@@ -29,6 +30,7 @@ export async function acceptThreadSendRequest(
       payload: args.payload,
       thread: args.thread,
       trigger: "user",
+      systemInitiated: args.systemInitiated,
     });
     return { ok: true, delivery: "sent" };
   }
@@ -46,6 +48,7 @@ export async function acceptThreadSendRequest(
         origin: null,
         originPluginId: null,
         startedOnBehalfOf: null,
+        systemInitiated: args.systemInitiated,
         trigger: "user",
       }),
   );

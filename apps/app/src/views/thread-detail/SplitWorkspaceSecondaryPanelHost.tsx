@@ -240,6 +240,7 @@ export function SplitWorkspaceSecondaryPanelHost({
         >
           <Panel
             id="split-workspace-main-panel"
+            data-app-main-panel=""
             collapsible
             collapsedSize={0}
             defaultSize={
@@ -290,6 +291,7 @@ export function SplitWorkspaceSecondaryPanelHost({
                 </PanelResizeHandle>
                 <Panel
                   id="split-workspace-empty-secondary-panel"
+                  data-app-secondary-panel=""
                   collapsible
                   collapsedSize={0}
                   defaultSize={isOpen ? panelWidthPercent : 0}

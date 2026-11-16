@@ -51,6 +51,12 @@ const hostActions = vi.hoisted(() => ({
   requestDelete: vi.fn(),
 }));
 const sdkThreads = vi.hoisted(() => ({
+  childSummary: vi.fn(async () => ({
+    nonDeletedChildCount: 0,
+    unarchivedDescendantCount: 0,
+    archiveProtectionReason: null as string | null,
+    deleteProtectionReason: null as string | null,
+  })),
   pin: vi.fn(),
   unpin: vi.fn(),
   markRead: vi.fn(),
@@ -216,7 +222,11 @@ function twoPaneLayout(focusedPaneId: string): SplitLayout {
         {
           type: "pane",
           paneId: "pane_other",
-          content: { kind: "thread", projectId: "proj_a", threadId: "thr_other" },
+          content: {
+            kind: "thread",
+            projectId: "proj_a",
+            threadId: "thr_other",
+          },
         },
         {
           type: "pane",
@@ -320,6 +330,12 @@ afterEach(() => {
   resetPluginSlotStoreForTest();
   resetThreadActionRegistryForTest();
   vi.clearAllMocks();
+  sdkThreads.childSummary.mockResolvedValue({
+    nonDeletedChildCount: 0,
+    unarchivedDescendantCount: 0,
+    archiveProtectionReason: null,
+    deleteProtectionReason: null,
+  });
   vi.useRealTimers();
 });
 
@@ -334,6 +350,28 @@ const CUSTOMIZE: PluginThreadActionsInlineItem = {
 };
 
 describe.each(SURFACES)("thread actions on the $name", (surface) => {
+  it("disables protected lifecycle actions with the server reason", async () => {
+    sdkThreads.childSummary.mockResolvedValue({
+      nonDeletedChildCount: 0,
+      unarchivedDescendantCount: 0,
+      archiveProtectionReason: "Persistent coordinator",
+      deleteProtectionReason: "Persistent coordinator",
+    });
+    renderSurface(surface, { thread: baseThread });
+    await surface.open();
+    for (const label of ["Archive", "Delete"]) {
+      const item = await screen.findByRole("menuitem", {
+        name: new RegExp(`${label}.*Persistent coordinator`),
+      });
+      expect(
+        item.getAttribute("aria-disabled") === "true" ||
+          item.hasAttribute("disabled"),
+      ).toBe(true);
+      fireEvent.click(item);
+    }
+    expect(hostActions.requestArchive).not.toHaveBeenCalled();
+    expect(hostActions.requestDelete).not.toHaveBeenCalled();
+  });
   it.each([
     {
       state: "a top-level thread",
@@ -515,7 +553,11 @@ describe.each(SURFACES)("thread actions on the $name", (surface) => {
   ])(
     "lists the items for $state",
     async ({ thread, route, layout, desktop, compact }) => {
-      renderSurface(surface, { thread, inline: [CUSTOMIZE] }, { route, layout });
+      renderSurface(
+        surface,
+        { thread, inline: [CUSTOMIZE] },
+        { route, layout },
+      );
       await surface.open();
       expect(await menuRows()).toEqual(surface.compact ? compact : desktop);
     },

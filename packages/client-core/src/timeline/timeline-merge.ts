@@ -145,6 +145,10 @@ function timelineRowIdentitySignature(row: TimelineRow): string {
     turnRequest?.isGrouped,
     turnRequest?.kind,
     turnRequest?.status,
+    row.kind === "conversation" && row.role === "user"
+      ? row.humanMessagePresentation
+      : null,
+    row.kind === "conversation" && row.role === "user" ? row.initiator : null,
   ].join("\u001f");
 }
 

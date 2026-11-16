@@ -7,6 +7,8 @@ import {
 } from "@bb/sdk";
 import type { ExperimentalPluginRpcCaller } from "@get-bb/plugin-sdk";
 
+export const PLUGIN_SYSTEM_SEND_HEADER = "x-bb-plugin-system-send";
+
 export const PLUGIN_RPC_CALLER_HEADER = "x-bb-plugin-caller";
 
 export interface PluginRpcCallerCredential {
@@ -54,6 +56,7 @@ export function createPluginRpcCallerRegistry(): PluginRpcCallerRegistry {
 export function createPluginRpcCallerSdk(args: {
   baseUrl: string;
   token: string;
+  systemSend?: boolean;
 }): BbSdk {
   const timeoutFetch = createRequestTimeoutFetch({
     timeoutMs: DEFAULT_BB_REQUEST_TIMEOUT_MS,
@@ -63,6 +66,7 @@ export function createPluginRpcCallerSdk(args: {
     fetch: (input, init) => {
       const headers = new Headers(init?.headers);
       headers.set(PLUGIN_RPC_CALLER_HEADER, args.token);
+      if (args.systemSend) headers.set(PLUGIN_SYSTEM_SEND_HEADER, "true");
       return timeoutFetch(input, { ...init, headers });
     },
   });

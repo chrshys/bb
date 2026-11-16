@@ -437,3 +437,7 @@ Read the installed declarations for exact current signatures.
 - `ExperimentalCreateHostEntryHarnessOptions`
 - `ExperimentalHostEntryHarness`
 - `ExperimentalHostHarnessSignal`
+
+- `bb.experimental_threadCloseProtection`: see Plugin Guide → Thread close protection.
+- `experimental_ThreadCloseProtection`
+- `experimental_ThreadCloseProtectionDeclaration`

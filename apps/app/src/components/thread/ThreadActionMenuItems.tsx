@@ -120,7 +120,7 @@ function ThreadActionChoicesHint({
   return (
     <>
       <ActionMenuSeparator surface={surface} />
-      <div className="max-w-56 px-2 py-1 text-xs text-muted-foreground">
+      <div className="max-w-56 px-2 py-1 text-xs text-muted-foreground max-md:max-w-none max-md:px-3 max-md:py-2 max-md:text-sm">
         {hint}
       </div>
     </>
@@ -130,9 +130,9 @@ function ThreadActionChoicesHint({
 function ThreadActionLabel({ action }: { action: PluginBoundThreadAction }) {
   if (action.detail === undefined) return action.label;
   return (
-    <span className="flex min-w-0 flex-1 flex-col">
+    <span className="flex min-w-0 flex-1 flex-col max-md:gap-0.5">
       <span className="truncate">{action.label}</span>
-      <span className="truncate text-2xs text-muted-foreground">
+      <span className="truncate text-2xs text-muted-foreground max-md:text-sm">
         {action.detail}
       </span>
     </span>
@@ -259,9 +259,7 @@ export function ThreadActionMenuRows({
   }
   return groups.map((group, index) => (
     <Fragment key={group[0]?.group ?? index}>
-      {index > 0 && !isDrawer ? (
-        <ActionMenuSeparator surface={surface} />
-      ) : null}
+      {index > 0 ? <ActionMenuSeparator surface={surface} /> : null}
       {group.map((entry) => (
         <ThreadActionMenuRow
           key={entry.key}

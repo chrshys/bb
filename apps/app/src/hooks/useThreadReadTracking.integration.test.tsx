@@ -91,16 +91,16 @@ function setup(deferAbort = false) {
 
 it("cancels optimistic reads on departure and retries after reopening", async () => {
   const { rerender, requests, queryClient } = setup();
-  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(requests).toHaveLength(1), { timeout: 3500 });
   expect(
     queryClient.getQueryData<ThreadWithRuntime>(threadQueryKey("A"))
       ?.lastReadAt,
   ).toBeGreaterThan(20);
   rerender({ id: "B" });
   await waitFor(() => expect(requests[0]?.signal?.aborted).toBe(true));
-  await waitFor(() => expect(requests).toHaveLength(2));
+  await waitFor(() => expect(requests).toHaveLength(2), { timeout: 3500 });
   rerender({ id: "A" });
-  await waitFor(() => expect(requests).toHaveLength(3));
+  await waitFor(() => expect(requests).toHaveLength(3), { timeout: 3500 });
   expect(requests[1]?.signal?.aborted).toBe(true);
   expect(requests[2]?.threadId).toBe("A");
   expect(requests[2]?.signal?.aborted).toBe(false);
@@ -108,7 +108,7 @@ it("cancels optimistic reads on departure and retries after reopening", async ()
 
 it("rolls back an optimistic read after unmount so a new mount can retry", async () => {
   const { unmount, requests, queryClient, mount } = setup();
-  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(requests).toHaveLength(1), { timeout: 3500 });
   unmount();
   await waitFor(() => expect(requests[0]?.signal?.aborted).toBe(true));
   await waitFor(() =>
@@ -118,12 +118,12 @@ it("rolls back an optimistic read after unmount so a new mount can retry", async
     ).toBe(10),
   );
   mount();
-  await waitFor(() => expect(requests).toHaveLength(2));
+  await waitFor(() => expect(requests).toHaveLength(2), { timeout: 3500 });
 });
 
 it("keeps a completed read and respects manual unread until new attention", async () => {
   const { requests, result, queryClient } = setup();
-  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(requests).toHaveLength(1), { timeout: 3500 });
   await act(async () => requests[0]?.resolve());
   vi.mocked(sdk.threads.markUnread).mockResolvedValue(
     makeThreadResponse({ id: "A", lastReadAt: null, latestAttentionAt: 20 }),
@@ -143,12 +143,12 @@ it("keeps a completed read and respects manual unread until new attention", asyn
       (thread) => thread && { ...thread, latestAttentionAt: 30 },
     ),
   );
-  await waitFor(() => expect(requests).toHaveLength(2));
+  await waitFor(() => expect(requests).toHaveLength(2), { timeout: 3500 });
 });
 
 it("does not undo a newer manual unread when an older read is cancelled", async () => {
   const { requests, result, rerender, queryClient } = setup();
-  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(requests).toHaveLength(1), { timeout: 3500 });
   vi.mocked(sdk.threads.markUnread).mockResolvedValue(
     makeThreadResponse({ id: "A", lastReadAt: null, latestAttentionAt: 20 }),
   );
@@ -157,7 +157,9 @@ it("does not undo a newer manual unread when an older read is cancelled", async 
   });
   rerender({ id: "B" });
   await waitFor(() => expect(requests[0]?.signal?.aborted).toBe(true));
-  await waitFor(() => expect(queryClient.isMutating()).toBe(1));
+  await waitFor(() => expect(queryClient.isMutating()).toBe(1), {
+    timeout: 3500,
+  });
   expect(
     queryClient.getQueryData<ThreadWithRuntime>(threadQueryKey("A"))
       ?.lastReadAt,
@@ -166,7 +168,7 @@ it("does not undo a newer manual unread when an older read is cancelled", async 
 
 it("cancels every attention request without rolling back newer thread data", async () => {
   const { requests, queryClient, unmount } = setup();
-  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(requests).toHaveLength(1), { timeout: 3500 });
   act(() =>
     queryClient.setQueryData<ThreadWithRuntime>(
       threadQueryKey("A"),
@@ -178,7 +180,7 @@ it("cancels every attention request without rolling back newer thread data", asy
         },
     ),
   );
-  await waitFor(() => expect(requests).toHaveLength(2));
+  await waitFor(() => expect(requests).toHaveLength(2), { timeout: 3500 });
   const attention = queryClient.getQueryData<ThreadWithRuntime>(
     threadQueryKey("A"),
   )?.latestAttentionAt;
@@ -192,13 +194,13 @@ it("cancels every attention request without rolling back newer thread data", asy
 
 it("retries after returning before the cancelled request has finished", async () => {
   const { requests, rerender } = setup(true);
-  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() => expect(requests).toHaveLength(1), { timeout: 3500 });
   rerender({ id: "B" });
-  await waitFor(() => expect(requests).toHaveLength(2));
+  await waitFor(() => expect(requests).toHaveLength(2), { timeout: 3500 });
   rerender({ id: "A" });
   expect(requests[0]?.signal?.aborted).toBe(true);
   await act(async () => requests[0]?.reject());
-  await waitFor(() => expect(requests).toHaveLength(3));
+  await waitFor(() => expect(requests).toHaveLength(3), { timeout: 3500 });
   expect(requests[2]?.threadId).toBe("A");
   await act(async () => requests[1]?.reject());
   expect(requests[2]?.signal?.aborted).toBe(false);

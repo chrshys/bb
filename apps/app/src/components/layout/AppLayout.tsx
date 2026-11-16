@@ -203,8 +203,9 @@ function SidebarStateBridge({ framed, children }: SidebarStateBridgeProps) {
   return (
     <SidebarProvider
       width={`${sidebarLiveWidth ?? sidebarWidth}px`}
-      collapsedRailWidth={NAV_RAIL_COLLAPSED_SIDEBAR_WIDTH}
+      collapsedRailWidth={framed ? NAV_RAIL_COLLAPSED_SIDEBAR_WIDTH : undefined}
       framed={framed}
+      data-floating-chrome={!framed ? "" : undefined}
       data-testid="app-layout-root"
       open={open}
       onOpenChange={handleOpenChange}
@@ -313,6 +314,7 @@ function SidebarTriggerOverlay({
   return (
     <div
       data-testid="app-sidebar-trigger-overlay"
+      data-sidebar-trigger-overlay=""
       data-panel-shelf={panelShelfState}
       style={{
         zIndex: isCompactViewport
@@ -336,7 +338,7 @@ function SidebarTriggerOverlay({
 }
 
 const routeTitles: Record<string, { title: string }> = {
-  "/": { title: "bb" },
+  "/": { title: "BBC" },
   "/settings": { title: "Settings" },
   "/automations": { title: "Automations" },
   "/skills": { title: "Skills" },
@@ -690,7 +692,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       return pluginPanel.title;
     }
     if (documentTitleBreadcrumbs) {
-      const sectionLabel = documentTitleBreadcrumbs[0]?.label ?? "BB";
+      const sectionLabel = documentTitleBreadcrumbs[0]?.label ?? "BBC";
       const pageLabel = documentTitleBreadcrumbs.at(-1)?.label ?? sectionLabel;
       return pageLabel === sectionLabel
         ? sectionLabel
@@ -708,7 +710,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       return projectLabel ?? projectId;
     }
     const routeTitle = resolveRouteTitle(location.pathname)?.title;
-    return routeTitle && routeTitle.length > 0 ? routeTitle : "BB";
+    return routeTitle && routeTitle.length > 0 ? routeTitle : "BBC";
   })();
   const currentThreadPendingInteractionsQuery = useThreadPendingInteractions(
     threadId ?? "",
@@ -799,7 +801,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.title = documentTitle;
+    document.title = documentTitle === "BBC" ? "BBC" : `BBC · ${documentTitle}`;
   }, [documentTitle]);
 
   if (canonicalThreadRoutePath !== null) {

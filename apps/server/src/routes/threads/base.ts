@@ -1,4 +1,11 @@
-import { countUnarchivedThreadDescendants } from "../../services/threads/thread-archive.js";
+import {
+  assertThreadsMayClose,
+  resolveThreadCloseProtection,
+} from "../../services/threads/thread-close-protection.js";
+import {
+  listArchiveCandidates,
+  countUnarchivedThreadDescendants,
+} from "../../services/threads/thread-archive.js";
 import { cancelAbandonedProviderCreations } from "../../services/threads/thread-environment-providers.js";
 import {
   THREAD_SEARCH_LIMIT_PER_GROUP_DEFAULT,
@@ -413,6 +420,14 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     });
     return {
       nonDeletedChildCount,
+      archiveProtectionReason: resolveThreadCloseProtection(
+        deps.db,
+        listArchiveCandidates(deps.db, [thread]),
+      ),
+      deleteProtectionReason: resolveThreadCloseProtection(
+        deps.db,
+        listLifecycleThreadTree(deps.db, thread.id),
+      ),
       unarchivedDescendantCount: countUnarchivedThreadDescendants(
         deps.db,
         thread,
@@ -525,6 +540,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       thread,
     });
     const dependents = listLifecycleThreadTree(deps.db, thread.id);
+    assertThreadsMayClose(deps.db, dependents);
     markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     for (const dependent of dependents) {
       const deleted = getThread(deps.db, dependent.id);

@@ -799,6 +799,7 @@ function FilePreviewHeader({
             />
             {toggleKind !== null ? (
               <div
+                data-file-preview-view-modes=""
                 className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border p-0.5"
                 role="tablist"
                 aria-label={getToggleAriaLabel(toggleKind)}

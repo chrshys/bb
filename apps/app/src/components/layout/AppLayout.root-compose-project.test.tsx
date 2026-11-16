@@ -207,7 +207,7 @@ describe("AppLayout root compose project preference", () => {
     );
 
     await waitFor(() => {
-      expect(document.title).toBe("Opened Thread");
+      expect(document.title).toBe("BBC · Opened Thread");
     });
 
     act(() => {

@@ -299,12 +299,11 @@ function FaviconColorPreview({ value }: { value: FaviconColorPreference }) {
   return (
     <span
       aria-hidden
-      className={cn("size-4 shrink-0", value === "default" && "bg-foreground")}
+      className="size-4 shrink-0"
       style={{
         mask: `url("${getFaviconGlyphHref()}") center / contain no-repeat`,
-        ...(value === "default"
-          ? undefined
-          : { backgroundColor: FAVICON_COLOR_VALUES[value] }),
+        backgroundColor:
+          FAVICON_COLOR_VALUES[value === "default" ? "purple" : value],
       }}
     />
   );
@@ -1211,9 +1210,7 @@ export function SettingsView() {
   } else if (activeSection === "providers") {
     content = (
       <ProvidersSettingsSection
-        disabled={
-          systemConfigQuery.data === undefined
-        }
+        disabled={systemConfigQuery.data === undefined}
         generalSettings={generalSettings}
         onGeneralSettingsChange={(next) =>
           updateGeneralSettingsMutation.mutateAsync(next)
@@ -1304,9 +1301,7 @@ export function SettingsView() {
   } else if (activeSection === "experiments") {
     content = (
       <ExperimentsSettingsSection
-        disabled={
-          systemConfigQuery.data === undefined
-        }
+        disabled={systemConfigQuery.data === undefined}
         experiments={experiments}
         performanceDiagnosticsAvailable={
           systemConfigQuery.data?.performanceDiagnosticsAvailable ?? false
@@ -1354,9 +1349,7 @@ export function SettingsView() {
             })
           }
           desktopBrowserAvailable={desktopBrowserAvailable}
-          generalSettingsDisabled={
-            systemConfigQuery.data === undefined
-          }
+          generalSettingsDisabled={systemConfigQuery.data === undefined}
           managedBranchPrefix={generalSettings.managedBranchPrefix}
           onManagedBranchPrefixChange={async (prefix) => {
             await updateGeneralSettingsMutation.mutateAsync({
@@ -1392,9 +1385,7 @@ export function SettingsView() {
             })
           }
           enabled={generalSettings.showDiagnosticEvents}
-          disabled={
-            systemConfigQuery.data === undefined
-          }
+          disabled={systemConfigQuery.data === undefined}
           onEnabledChange={(enabled) =>
             updateGeneralSettingsMutation.mutate({
               showDiagnosticEvents: enabled,

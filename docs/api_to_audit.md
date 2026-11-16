@@ -1,5 +1,44 @@
 # APIs To Audit
 
+## Navigation panel close button
+
+`PluginNavPanelRegistration.experimental_showCloseButton?: boolean` defaults to
+true. False omits only the host title-bar close button. The SDK collector rejects
+non-booleans. Core `StandalonePaneContent` and `NonThreadPaneContent` consume the
+same live/remembered `plugin-nav-panel-chrome` metadata, preserving the choice
+before frontend boot on reload. Native new-thread panes omit the button too;
+keyboard pane close, maximize, right-panel toggles and unrelated panel controls
+retain their existing actions. No new close action or CLI command is introduced.
+
+Stabilization requires desktop and compact layout verification, old-cache
+defaults, opt-out persistence before boot, live registration replacement, and
+confirmation that keyboard close remains available.
+
+## Live thread timeline footer
+
+`app.slots.experimental_threadTimelineFooter({ id, title, component })` replaces
+one live entry at the end of the main conversation scroll area. The first
+registered provider wins. Each visible thread mounts independently, resets on
+thread changes and plugin reload, and receives `threadId`, `projectId`,
+`runtimeDisplayStatus`, `Original`, and `ThreadBadge`. `Original` renders the
+native child-thread summary. A provider must confirm it does not own the thread
+before using that fallback; loading, failed, or incomplete inventories must be
+shown honestly. A crashing provider shows an unavailable status, never a
+misleading native inventory. Refreshes are reads and do not start model turns,
+send messages, or persist new timeline events.
+
+`ThreadBadge` receives `{ threadId, projectId, title }` and renders BB's native
+Parent-style relationship row with a Child label and thread navigation. Core's
+`RunningThreadsSummary` uses that same `ThreadBadge` implementation.
+`ThreadDetailView` supplies the native summary through the replacement surface;
+core has no bot ownership registry. Bots Sidebar supplies its own authoritative
+coordinator inventory through this public surface.
+
+Before stabilization, verify competing providers and selection priority, split
+pane isolation, crash/reload cleanup, idle polling lifecycle, mobile truncation,
+loading/unavailable states, and ordinary-thread fallback. Audit whether this
+replacement surface belongs in embedded chat as well as the main conversation.
+
 ## Environment removal notification
 
 `experimental_environment.removed` announces successful provider removal after
@@ -1634,12 +1673,12 @@ batches. Confirm the platform coverage (Linux
 `/proc`, macOS `lsof`) and whether the grace should be per call.
 
 0b. **Process identity.** `experimental_readProcessIdentity(pid)` from
-   `@get-bb/plugin-sdk/host` returns `{ command, startedAt }` (`ps` on POSIX,
-   CIM on Windows) or null. bb's launcher uses the same probe to confirm a
-   recorded PID before stopping it. Storage & retention checks a development
-   instance's recorded launcher entry path and start time before signalling
-   it, so a reused PID is never killed. Confirm start-time precision per
-   platform and whether a combined verified-stop helper should replace it.
+`@get-bb/plugin-sdk/host` returns `{ command, startedAt }` (`ps` on POSIX,
+CIM on Windows) or null. bb's launcher uses the same probe to confirm a
+recorded PID before stopping it. Storage & retention checks a development
+instance's recorded launcher entry path and start time before signalling
+it, so a reused PID is never killed. Confirm start-time precision per
+platform and whether a combined verified-stop helper should replace it.
 
 0. **Call timeout.** `ExperimentalHostCallOptions.timeoutMs` (default 30s,
    capped at 30 minutes) lets a plugin run a long host call — a setup
@@ -4083,3 +4122,39 @@ Stabilization requires exercising reconnect/reload, concurrent deduplication, ro
 `hosts.experimental_discoverRepos({ hostId })` asks the machine for git repositories under the user's home directory with local activity in the last 30 days, newest first, capped at 10. Each entry has `path`, `name`, `lastActivityAt`, `originUrl`, and `projectId` (the bb project already bound to that path on that machine, or null). `truncated` is true when the three-second walk budget ran out. The walk stops at each repository root, skips dot-directories, common build directories, scratch directories (`tmp`, `temp`, `tmp-*`, `Downloads`), linked worktrees, and submodules. The first-run setup guide and `bb project discover` use it. Host-daemon wire change: the `host.discover_repos` command (protocol 230).
 
 Stabilize after deciding whether depth, recency window, and limit should be caller options, and after exercising slow or network-mounted home directories and Windows hosts.
+
+## Thread close protection
+
+`BbPluginApi.experimental_threadCloseProtection`, `experimental_ThreadCloseProtection`, and `experimental_ThreadCloseProtectionDeclaration` register synchronous per-thread veto resolvers. Core archive trees, environment bulk archive, thread delete and project deletion consult the same resolver before effects; native action controls read those reasons through `threads.childSummary`. Plugin activation stages registrations, successful replacement overlaps protections before disposing the old instance, and unload removes them. Resolver exceptions or invalid results fail closed. This is loaded-plugin policy, not durable protection while a plugin is disabled.
+
+Stabilization requires lifecycle/reload, atomic subtree/bulk rejection and UI/CLI/SDK parity coverage, review of synchronous resolver cost and availability, and an explicit decision on durable policy. No daemon wire fields change.
+
+## Plugin system sends and composer presentation provenance
+
+`PluginBbSdk.threads.experimental_sendSystem` sends plugin background input through the same `/threads/:id/send`, `acceptThreadSendRequest`, dispatch checkpoint and queue used by native sends. It requires the backend plugin's existing revocable caller credential. `senderThreadId` and human presentation are prohibited; system initiator permission policy remains effective after queueing. No public request can set the internal system flag. Stabilization requires real route/queue coverage, revoked credential denial and compatibility with native agent sends.
+
+`humanMessagePresentation` is a presentation-only declaration forwarded by the native composer (including `NewThreadRequest`) and SDK send/spawn. Authorized local API callers can declare it too; it is not authenticated human identity. Absent legacy declarations stay absent in storage and project to false. Agent/system initiators always project false. It never affects permission or approval policy.
+
+## Thread message appearance
+
+`app.slots.experimental_threadMessageAppearance({ id, useAppearance })` mounts a
+plugin hook once per visible `ThreadTimelineSurface`, including SDK `ThreadChat`.
+The hook receives `{ threadId }` and returns
+`{ humanMessageBackgroundColor: "#RRGGBB" }` or null. The host validates opaque
+six-digit hex and chooses contrasting foreground colors. The first registration
+in deterministic slot order wins; absent, invalid, failed or removed providers
+restore native rendering. Each pane owns its hook state; thread changes and
+plugin reloads reset it. Providers own subscriptions and their cleanup.
+
+Core `ConversationMessageContent` consumes the same context and applies the
+background only to explicit native composer human presentation metadata with `initiator=user`.
+Unknown legacy authorship, agent and system messages retain native styling.
+Message rendering, attachments and actions remain native. No server/daemon wire
+changes belong to this frontend extension. CLI-authored plugin registrations use
+the same runtime; no additional color preference or setter is introduced.
+
+Stabilization requires validation of precedence, split panes, failed providers,
+reload and removal, thread changes, presentation metadata projection, and readable
+text, links, mentions, code and selection across light/dark themes and saturated
+colors. Review the hook/result contract and registration naming before removing
+the experimental prefix.

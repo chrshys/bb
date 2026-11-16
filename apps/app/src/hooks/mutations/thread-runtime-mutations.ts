@@ -186,6 +186,7 @@ export function useSendThreadMessage() {
     }: SendThreadMessageMutationRequest) => {
       return await sdk.threads.send({
         threadId: id,
+        humanMessagePresentation: senderThreadId === undefined,
         input,
         model,
         serviceTier,
@@ -232,7 +233,11 @@ export function useEditThreadMessage() {
       showErrorToast: false,
     },
     mutationFn: ({ id, ...request }: EditMessageMutationRequest) =>
-      sdk.threads.editMessage({ threadId: id, ...request }),
+      sdk.threads.editMessage({
+        threadId: id,
+        ...request,
+        humanMessagePresentation: request.senderThreadId === undefined,
+      }),
     onSuccess: (_result, variables) => {
       if (wsManager.getConnectionState() === "connected") {
         return;
@@ -265,6 +270,7 @@ export function useCreateThreadQueuedMessage() {
       executionInputSources,
     }: CreateThreadQueuedMessageMutationRequest): Promise<ThreadQueuedMessage> =>
       sdk.threads.queuedMessages.create({
+        humanMessagePresentation: true,
         threadId: id,
         input,
         model,

@@ -439,6 +439,7 @@ export function useMachineThreadPreview({
 interface UseChildThreadsArgs {
   enabled: boolean;
   parentThreadId: string | undefined;
+  refetchInterval?: number | false;
 }
 
 interface UseChildThreadsResult {
@@ -451,6 +452,7 @@ interface UseChildThreadsResult {
 export function useChildThreads({
   enabled: enabledOption,
   parentThreadId,
+  refetchInterval,
 }: UseChildThreadsArgs): UseChildThreadsResult {
   const enabled = enabledOption && Boolean(parentThreadId);
   useThreadListRealtimeSubscription({ enabled });
@@ -464,7 +466,9 @@ export function useChildThreads({
   const { data: sidebarChildren, isBootstrapPending } =
     useSidebarNavigationThreadSelection(selectChildren);
   const shouldFetch =
-    enabled && sidebarChildren === undefined && !isBootstrapPending;
+    enabled &&
+    (refetchInterval !== undefined ||
+      (sidebarChildren === undefined && !isBootstrapPending));
   const fallbackQuery = useQuery<ThreadListResponse>({
     queryKey:
       shouldFetch && parentThreadId
@@ -480,9 +484,11 @@ export function useChildThreads({
         signal,
       }),
     enabled: shouldFetch,
+    refetchInterval,
     staleTime: THREAD_LIST_STALE_TIME_MS,
   });
-  const derivedChildren = enabled ? sidebarChildren : undefined;
+  const derivedChildren =
+    enabled && refetchInterval === undefined ? sidebarChildren : undefined;
   if (derivedChildren !== undefined) {
     return {
       data: derivedChildren,

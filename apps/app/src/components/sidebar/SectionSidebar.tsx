@@ -15,6 +15,7 @@ import {
 import { PROJECT_LIST_ACTION_BUTTON_CLASS } from "@bb/shared-ui/sidebar-row-classes";
 import { SIDEBAR_STANDARD_ROW_PADDING_CLASS } from "@bb/shared-ui/sidebar-row-classes";
 import { CHROME_SECTION_LABEL_CLASS } from "@bb/shared-ui/chrome-style-tokens";
+import { useAppCommandRunner } from "@/components/commands/AppCommandProvider";
 
 export function SectionSidebarIcon({ name }: { name: IconName }) {
   return <Icon name={name} className={COARSE_POINTER_ICON_SIZE_CLASS} />;
@@ -108,6 +109,7 @@ export function SectionSidebar({
   onResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   testIdPrefix: string;
 }) {
+  const commands = useAppCommandRunner();
   return (
     <div
       data-testid={`${testIdPrefix}-sidebar-body`}
@@ -116,6 +118,20 @@ export function SectionSidebar({
       <SidebarTopReserveRow
         testId={`${testIdPrefix}-sidebar-top-reserve-row`}
       />
+      <div className="shrink-0 border-b border-sidebar-border px-2 py-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={cn(PROJECT_LIST_ACTION_BUTTON_CLASS, "w-full")}
+          onClick={(event) => commands.dispatch("app.back", event.currentTarget)}
+        >
+          <SectionSidebarIcon name="ChevronLeft" />
+          <span className="min-w-0 flex-1 truncate text-left">
+            Back to workspace
+          </span>
+        </Button>
+      </div>
       <SidebarContent>
         <div className="min-w-0 px-2">{children}</div>
       </SidebarContent>

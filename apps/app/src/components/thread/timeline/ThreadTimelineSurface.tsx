@@ -1,3 +1,4 @@
+import { ThreadMessageAppearanceProvider } from "@/components/plugin/ThreadMessageAppearance";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
@@ -47,6 +48,7 @@ export interface ThreadTimelineSurfaceProps {
   timelineError: boolean;
   loadingContent?: ReactNode;
   leadingContent?: ReactNode;
+  trailingContent?: ReactNode;
   onForkMessage?: ThreadTimelineForkMessageHandler;
   onEditMessage?: ThreadTimelineEditMessageHandler;
   inlineMessageEditor?: ThreadTimelineInlineMessageEditor;
@@ -136,7 +138,18 @@ function useTimelineRowsWithPendingStop({
   }, [rows, isStopping, stoppingAnchorAt, threadId]);
 }
 
-export function ThreadTimelineSurface({
+export function ThreadTimelineSurface(props: ThreadTimelineSurfaceProps) {
+  return (
+    <ThreadMessageAppearanceProvider
+      key={props.threadId}
+      threadId={props.threadId}
+    >
+      <ThreadTimelineSurfaceContent {...props} />
+    </ThreadMessageAppearanceProvider>
+  );
+}
+
+function ThreadTimelineSurfaceContent({
   activeThinking,
   canSpawnChild,
   contextBoundarySeq,
@@ -148,6 +161,7 @@ export function ThreadTimelineSurface({
   timelineError,
   loadingContent,
   leadingContent,
+  trailingContent,
   onForkMessage,
   onEditMessage,
   inlineMessageEditor,
@@ -276,6 +290,7 @@ export function ThreadTimelineSurface({
             label={ongoingIndicatorLabel}
           />
         </HeightTransition>
+        {!isThreadTimelinePending && !timelineError ? trailingContent : null}
       </ConversationTimeline>
     </TimelineReasoningExpansionProvider>
   );
@@ -373,4 +388,3 @@ function DelayedThreadLoadingIndicator() {
 
   return <ThreadTimelineLoadingSkeleton />;
 }
-

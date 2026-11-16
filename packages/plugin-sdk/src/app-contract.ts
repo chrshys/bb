@@ -160,11 +160,10 @@ export interface ExperimentalQuestionFormHost {
  * the host adds room for its microphone controls when voice input is
  * available.
  */
-export interface ExperimentalVoiceInputTextareaProps
-  extends Omit<
-    ComponentPropsWithRef<"textarea">,
-    "value" | "defaultValue" | "onChange" | "children"
-  > {
+export interface ExperimentalVoiceInputTextareaProps extends Omit<
+  ComponentPropsWithRef<"textarea">,
+  "value" | "defaultValue" | "onChange" | "children"
+> {
   value: string;
   /**
    * Receives typed edits and finished transcripts, which the host appends to
@@ -212,6 +211,28 @@ export interface PluginThreadListProps {
    * @deprecated The quick palette owns thread search. Ignore this value.
    */
   searchQuery: string;
+}
+
+export interface ExperimentalThreadTimelineFooterThreadBadgeProps {
+  threadId: string;
+  projectId: string;
+  title: string;
+}
+
+export interface ExperimentalThreadTimelineFooterProps {
+  threadId: string;
+  projectId: string;
+  runtimeDisplayStatus: ThreadRuntimeDisplayStatus;
+  /** Render the native child-thread summary when this provider does not own the thread. */
+  Original: ComponentType<Record<never, never>>;
+  /** Native Parent-style child-thread row, including thread navigation. */
+  ThreadBadge: ComponentType<ExperimentalThreadTimelineFooterThreadBadgeProps>;
+}
+
+export interface ExperimentalThreadTimelineFooterRegistration {
+  id: string;
+  title: string;
+  component: ComponentType<ExperimentalThreadTimelineFooterProps>;
 }
 
 /**
@@ -598,6 +619,14 @@ export type PluginFixedTabDeclaration =
   | PluginFixedTabRegistration<JsonValue>;
 
 export interface PluginNavPanelRegistration {
+  /**
+   * Whether the host title bar shows its pane close button. Defaults to true.
+   * False omits only that button on desktop and compact layouts; keyboard
+   * pane close, maximize, and right-panel controls remain available. Remembered
+   * with panel chrome so the choice survives reload before frontend boot.
+   * Experimental: see docs/api_to_audit.md.
+   */
+  experimental_showCloseButton?: boolean;
   /** Unique within the plugin; letters, digits, `-`, `_`. */
   id: string;
   title: string;
@@ -1190,7 +1219,9 @@ export interface ExperimentalClipboardContent {
  */
 export type PluginBoundThreadsArea = Omit<
   BbSdkAreas["threads"],
-  "getPluginMetadata" | "updatePluginMetadata" | "experimental_listPluginMetadata"
+  | "getPluginMetadata"
+  | "updatePluginMetadata"
+  | "experimental_listPluginMetadata"
 > & {
   getPluginMetadata(
     args: Omit<ThreadPluginMetadataArgs, "pluginId"> & { pluginId?: string },
@@ -1357,6 +1388,26 @@ export interface PluginSidebarThreadActions {
    * deliberately no silent `delete`.
    */
   requestDelete(threadId: string): void;
+}
+
+export interface ExperimentalThreadMessageAppearance {
+  /** Opaque six-digit hex color. Invalid values restore the native background. */
+  humanMessageBackgroundColor: string;
+}
+
+export interface ExperimentalThreadMessageAppearanceRegistration {
+  id: string;
+  /**
+   * Runs once per mounted timeline in plugin context, isolated between panes.
+   * Return null while unavailable. Use hooks to subscribe to source refreshes.
+   * The first registration in deterministic slot order wins; null or
+   * invalid values do not fall through to another provider. Thread changes,
+   * removal and reload clear the prior value. Throws fall back to native colors.
+   * This presentation hint never changes author identity or approval policy.
+   */
+  useAppearance: (context: {
+    threadId: string;
+  }) => ExperimentalThreadMessageAppearance | null;
 }
 
 /**
@@ -2173,6 +2224,22 @@ export interface PluginAppSlots {
    * docs/api_to_audit.md for what to audit before the prefix drops.
    */
   experimental_threadList(registration: PluginThreadListRegistration): void;
+  /**
+   * Replace the live entry after conversation rows, inside the scroll area.
+   * The first registered provider wins; use Original for unowned threads.
+   * State refresh must not send chat messages or start model turns.
+   */
+  experimental_threadTimelineFooter(
+    registration: ExperimentalThreadTimelineFooterRegistration,
+  ): void;
+  /**
+   * Provide per-thread human message colors in native timelines and ThreadChat.
+   * The first registration wins; null, invalid hex and errors use native colors.
+   * Only explicit human presentation with a user initiator is eligible.
+   */
+  experimental_threadMessageAppearance(
+    registration: ExperimentalThreadMessageAppearanceRegistration,
+  ): void;
   /**
    * Render a component in the thread header's action row (see
    * {@link PluginThreadHeaderActionRegistration}). Experimental: see
@@ -3165,6 +3232,8 @@ export interface ExperimentalPermissionModePickerProps {
  * composer props.
  */
 export interface NewThreadRequest {
+  /** Native composer presentation intent; not authenticated identity or permission authority. Forward unchanged to spawn. */
+  humanMessagePresentation?: boolean;
   /**
    * The selected project id. Choosing "Don't work in a project" submits BB's
    * personal-project id (not `null`) together with a `personal` workspace

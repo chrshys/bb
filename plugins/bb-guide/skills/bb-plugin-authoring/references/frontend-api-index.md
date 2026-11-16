@@ -179,6 +179,13 @@ Read the installed SDK declarations for the exact current signatures.
 - `PluginEnvironmentProvidersState`
 - `PluginBoundThreadsArea`
 - `PluginBrowserBbSdk`
+- `ExperimentalThreadTimelineFooterRegistration`
+- `ExperimentalThreadTimelineFooterProps`
+- `ExperimentalThreadTimelineFooterThreadBadgeProps`
+- `PluginAppSlots.experimental_threadTimelineFooter`
+- `ExperimentalThreadMessageAppearance`
+- `ExperimentalThreadMessageAppearanceRegistration`
+- `PluginAppSlots.experimental_threadMessageAppearance`
 - `PluginThreadHeaderActionRegistration`
 - `PluginThreadActionTarget`
 - `PluginThreadActionChoice`

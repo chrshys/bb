@@ -1,0 +1,79 @@
+@media (max-width: 767px) {
+  :where([data-sidebar="inset"]) {
+    transition:
+      translate 220ms cubic-bezier(0.32, 0.72, 0, 1),
+      box-shadow 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  :where([data-sidebar="inset"])[data-sidebar-shelf="open"],
+  :where([data-sidebar="inset"])[data-panel-shelf="full"] {
+    border-radius: 0;
+    box-shadow: -8px 0 20px -8px var(--shadow-color);
+    outline: none;
+    border: 0;
+    overflow: clip;
+  }
+
+  :where([data-sidebar="inset"])[data-panel-shelf="full"] {
+    translate: calc(80px - 100vw) 0;
+    box-shadow: 8px 0 20px -8px var(--shadow-color);
+  }
+
+  :where([data-sidebar="panel"][data-vaul-drawer-direction="left"]),
+  :where([data-secondary-panel-shelf]) {
+    --background: var(--sidebar);
+  }
+
+  :where(body:has([data-secondary-panel-shelf][data-closing]))
+    [data-main-right-panel-toggle] {
+    visibility: hidden;
+  }
+
+  :where([data-secondary-panel-shelf] [data-file-preview-toolbar]) {
+    background: transparent;
+  }
+
+  :where([data-secondary-panel-shelf] [data-tab-pill]),
+  :where([data-secondary-panel-shelf] [data-file-preview-view-modes] button) {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  :where([data-secondary-panel-shelf] [data-tab-pill]):has(
+    > button[aria-pressed="true"]
+  ),
+  :where(
+    [data-secondary-panel-shelf]
+      [data-file-preview-view-modes]
+      button[aria-pressed="true"]
+  ) {
+    text-decoration: underline;
+    text-decoration-color: var(--border);
+    text-underline-offset: 0.4em;
+  }
+
+  :where([data-secondary-panel-shelf] [data-file-preview-view-modes]) {
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  :where([data-sidebar="panel"])[data-state="open"],
+  :where([data-secondary-panel-shelf])[data-state="full"] {
+    transition-delay: 0s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(body:has([data-secondary-panel-shelf][data-closing]))
+    [data-main-right-panel-toggle] {
+    visibility: visible;
+  }
+
+  :where([data-sidebar="inset"]),
+  :where([data-sidebar="panel"][data-vaul-drawer-direction="left"]),
+  :where([data-secondary-panel-shelf]) {
+    transition: none !important;
+  }
+}

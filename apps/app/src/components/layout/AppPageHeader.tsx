@@ -41,6 +41,7 @@ interface AppPageHeaderProps {
   headerRef?: Ref<HTMLElement>;
   isWindowDragRegion?: boolean;
   ownsWindowTopLeft?: boolean;
+  centered?: boolean;
 }
 
 export function AppPageHeader({
@@ -50,6 +51,7 @@ export function AppPageHeader({
   headerRef,
   isWindowDragRegion = true,
   ownsWindowTopLeft = true,
+  centered = false,
 }: AppPageHeaderProps) {
   const isSidebarShowing = useIsSidebarShowing();
   const sidebarKeepsCollapsedRail = useSidebarKeepsCollapsedRail();
@@ -82,6 +84,7 @@ export function AppPageHeader({
               if (
                 event.defaultPrevented ||
                 !(event.target instanceof Element) ||
+                !event.currentTarget.contains(event.target) ||
                 event.target.closest(
                   'button, a, input, textarea, select, [role="button"], [role="link"], [contenteditable]:not([contenteditable="false"])',
                 )
@@ -117,11 +120,17 @@ export function AppPageHeader({
           isCompactViewport && "pointer-events-none",
           usesDesktopChrome && MACOS_CHROME_CONTROL_AXIS_CLASS,
           "transition-[padding] duration-200 ease-linear",
-          windowTopLeftReserveClassName,
+          !centered && windowTopLeftReserveClassName,
+          centered && "grid grid-cols-[2.5rem_minmax(0,1fr)_2.5rem]",
         )}
       >
         {center ? (
-          <div className="flex min-w-0 flex-1 items-center">
+          <div
+            className={cn(
+              "flex min-w-0 flex-1 items-center",
+              centered && "col-start-2 justify-center",
+            )}
+          >
             <div className="pointer-events-auto flex min-w-0 max-w-full items-center gap-2">
               {center}
             </div>
@@ -133,6 +142,7 @@ export function AppPageHeader({
           <div
             className={cn(
               "pointer-events-auto flex shrink-0 items-center gap-1",
+              centered && "col-start-3 justify-self-end",
               usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
             )}
           >

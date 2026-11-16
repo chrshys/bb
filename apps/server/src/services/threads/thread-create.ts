@@ -495,6 +495,7 @@ async function createPendingThreadAndAttemptFirstDispatch(
       thread,
       payload: {
         input: args.request.input,
+        humanMessagePresentation: args.request.humanMessagePresentation,
         mode: "start",
         model: execution.model,
         reasoningLevel: execution.reasoningLevel,

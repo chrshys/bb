@@ -42,6 +42,7 @@ function conversationRow({
     return {
       ...base,
       role: "user",
+      humanMessagePresentation: false,
       initiator: "user",
       senderThreadId: null,
       systemMessageKind: "unlabeled",

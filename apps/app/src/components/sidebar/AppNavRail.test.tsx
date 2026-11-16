@@ -50,11 +50,7 @@ import {
 } from "@/lib/route-paths";
 import { makePluginRegistrationSet as registrationSet } from "@/test/fixtures/plugins";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
-import {
-  AppNavRail,
-  NavRailNewThreadButton,
-  NavRailSettingsButton,
-} from "./AppNavRail";
+import { AppNavRail, NavRailSettingsButton } from "./AppNavRail";
 import { SidebarVisibilityCustomize } from "./SidebarVisibilityControls";
 import { SidebarNavigationModelProvider } from "./SidebarNavigationModel";
 
@@ -169,7 +165,6 @@ function RailHarness({ useLayout = false }: { useLayout?: boolean }) {
           />
         </>
       )}
-      <NavRailNewThreadButton />
       <output data-testid="pathname">{location.pathname}</output>
     </SidebarNavigationModelProvider>
   );
@@ -276,7 +271,7 @@ afterEach(() => {
 });
 
 describe("AppNavRail", () => {
-  it("lists Home, the visible destinations, More, and Settings, with New thread left to the header", () => {
+  it("lists Home, the visible destinations, More, and Settings", () => {
     renderRail(THREAD_PATH);
 
     expect(railLabels()).toEqual([
@@ -618,13 +613,6 @@ describe("AppNavRail", () => {
     }
   });
 
-  it("keeps the header New thread button when stored preferences leave New thread out", () => {
-    renderRail(THREAD_PATH, { visibleKeys: ["__bb__/extensions"] });
-
-    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
-    expect(mocks.onNewChat).toHaveBeenCalledTimes(1);
-  });
-
   it("offers no New thread row in Customize rail", async () => {
     renderRail(THREAD_PATH);
 
@@ -647,6 +635,5 @@ describe("AppNavRail", () => {
       "Show Skills in sidebar",
       "Show Docs in sidebar",
     ]);
-    expect(screen.getByRole("button", { name: "New thread" })).toBeDefined();
   });
 });

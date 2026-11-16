@@ -6,11 +6,7 @@ import {
   type FaviconColor,
   type FaviconColorPreference,
 } from "@bb/domain";
-import {
-  DARK_COLOR_SCHEME_QUERY,
-  getMediaQuerySnapshot,
-  subscribeMediaQuery,
-} from "@bb/shared-ui/hooks/use-media-query";
+import { getMediaQuerySnapshot } from "@bb/shared-ui/hooks/use-media-query";
 import { useSystemConfig } from "@/hooks/queries/system-queries";
 
 export const FAVICON_COLOR_STORAGE_KEY = "bb.faviconColor";
@@ -107,12 +103,7 @@ interface UnreadBadgeDot {
 }
 
 export function getFaviconGlyphHref(): string {
-  return import.meta.env.DEV ? "/favicon-32x32-dev.png" : "/favicon-32x32.png";
-}
-
-function getFaviconVariantSuffix(): string {
-  if (import.meta.env.DEV) return "-dev";
-  return getMediaQuerySnapshot(DARK_COLOR_SCHEME_QUERY) ? "-dark" : "";
+  return "/favicon-32x32-purple.png";
 }
 
 function getFaviconLink(size: number): HTMLLinkElement | null {
@@ -126,7 +117,9 @@ function getDocumentLink(id: string): HTMLLinkElement | null {
 }
 
 function getTintedAssetSuffix(colorPreference: FaviconColorPreference): string {
-  return colorPreference === defaultFaviconColor ? "" : `-${colorPreference}`;
+  return colorPreference === defaultFaviconColor
+    ? "-purple"
+    : `-${colorPreference}`;
 }
 
 function getPwaManifestHref(colorPreference: FaviconColorPreference): string {
@@ -234,10 +227,9 @@ let applyToken = 0;
 async function applyFaviconState(state: FaviconRenderState): Promise<void> {
   const token = ++applyToken;
   if (getMediaQuerySnapshot(STANDALONE_DISPLAY_MODE_QUERY)) return;
-  const suffix = getFaviconVariantSuffix();
   const links = await Promise.all(
     FAVICON_SIZES.map(async (size): Promise<RenderedFaviconLink> => {
-      const baseHref = `/favicon-${size}x${size}${suffix}.png`;
+      const baseHref = `/favicon-${size}x${size}-purple.png`;
       const href = await createFaviconHref({
         badge: state.badge,
         baseHref,
@@ -270,6 +262,5 @@ export function initializeFavicon(): void {
   };
   store.sub(faviconColorAtom, apply);
   store.sub(faviconBadgeAtom, apply);
-  subscribeMediaQuery(DARK_COLOR_SCHEME_QUERY, apply);
   apply();
 }

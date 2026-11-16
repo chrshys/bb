@@ -201,6 +201,9 @@ export function useArchiveThreadAndChildren() {
     }: ArchiveThreadAndChildrenMutationRequest): Promise<ThreadArchiveAllResponse> => {
       if (!childThreadsConfirmed) {
         const summary = await sdk.threads.childSummary({ threadId: id });
+        if (summary.archiveProtectionReason) {
+          throw new Error(summary.archiveProtectionReason);
+        }
         if (summary.unarchivedDescendantCount > 0) {
           throw new ArchiveThreadConfirmationRequired(
             summary.unarchivedDescendantCount,

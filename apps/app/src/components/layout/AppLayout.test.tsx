@@ -47,14 +47,28 @@ vi.mock("./AppLayoutSidebar", async () => {
   const { Sidebar } = await vi.importActual<
     typeof import("@/components/ui/sidebar")
   >("@/components/ui/sidebar");
+  const { SectionSidebar } = await vi.importActual<
+    typeof import("@/components/sidebar/SectionSidebar")
+  >("@/components/sidebar/SectionSidebar");
   return {
     AppLayoutSidebar: ({
+      mode,
       onResizeMouseDown,
     }: {
+      mode: string;
       onResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
     }) => (
       <Sidebar>
         <div data-testid="sidebar-body">App sidebar</div>
+        {mode !== "app" ? (
+          <SectionSidebar
+            isResizing={false}
+            onResizeMouseDown={onResizeMouseDown}
+            testIdPrefix="secondary"
+          >
+            <a href="/settings">General settings</a>
+          </SectionSidebar>
+        ) : null}
         <div data-testid="resize-handle" onMouseDown={onResizeMouseDown} />
       </Sidebar>
     ),
@@ -114,7 +128,9 @@ vi.mock("@/components/dialogs/ProjectPathDialog", () => ({
 
 vi.mock("./AppPageHeader", () => ({
   HEADER_ICON_BUTTON_CLASS: "header-icon-button",
-  AppPageHeader: () => <header />,
+  AppPageHeader: ({ actions }: { actions?: ReactNode }) => (
+    <header>{actions}</header>
+  ),
 }));
 
 vi.mock("@/lib/bb-desktop", () => ({
@@ -315,6 +331,33 @@ describe("mobile workspace sidebar access", () => {
 });
 
 describe("AppLayout Back to app", () => {
+  it.each(["button", "Escape"])(
+    "leaves Settings through %s and restores the workspace sidebar",
+    (control) => {
+      renderLayout(APP_ROUTE);
+      fireEvent.click(screen.getByRole("link", { name: SETTINGS_ROUTE }));
+      const toggle = screen.getByRole("button", { name: /^Toggle sidebar/ });
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+      if (control === "button") {
+        fireEvent.click(toggle);
+        const back = screen.getByRole("button", { name: "Back to workspace" });
+        expect(back.closest('[data-sidebar="panel"]')).not.toBeNull();
+        expect(back.closest("header")).toBeNull();
+        fireEvent.click(back);
+      } else {
+        fireEvent.keyDown(document, { key: "Escape" });
+      }
+
+      expect(screen.getByTestId("location").textContent).toBe(APP_ROUTE);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(
+        screen.queryByRole("button", { name: "Back to workspace" }),
+      ).toBeNull();
+    },
+  );
+
   it.each(SECONDARY_ROUTES)(
     "returns from %s with the remembered query and hash, then releases Escape",
     (route) => {

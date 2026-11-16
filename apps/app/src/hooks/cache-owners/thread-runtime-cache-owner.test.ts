@@ -719,61 +719,77 @@ describe("thread runtime cache owner", () => {
     ]);
   });
 
-  it("optimistically projects sent queued messages into the timeline", async () => {
-    const queryClient = createAppQueryClient({
-      defaultOptions: { queries: { gcTime: Infinity, retry: false } },
-      showMutationErrorToasts: false,
-    });
-    const previousQueue = [makeQueuedMessage({ id: "qmsg-1" })];
-    queryClient.setQueryData(
-      threadQueuedMessagesQueryKey("thread-1"),
-      previousQueue,
-    );
-    queryClient.setQueryData(
-      threadTimelineQueryKey("thread-1"),
-      makeTimelineResponse(),
-    );
-
-    const transaction = await beginSendQueuedMessageTransaction({
-      queryClient,
-      request: {
-        id: "thread-1",
-        mode: "auto",
-        queuedMessageId: "qmsg-1",
-      },
-    });
-
-    expect(
-      queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
-    ).toEqual([]);
-    const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1"),
-    );
-    expect(timeline?.rows).toHaveLength(1);
-    expect(timeline?.rows[0]).toMatchObject({
-      kind: "conversation",
-      role: "user",
-      text: "Queued message",
-    });
-
-    rollbackRemoveQueuedMessageTransaction({
-      queryClient,
-      request: {
-        id: "thread-1",
-        queuedMessageId: "qmsg-1",
-      },
-      transaction,
-    });
-
-    expect(
-      queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
-    ).toEqual(previousQueue);
-    expect(
-      queryClient.getQueryData<ThreadTimelineResponse>(
+  it.each([
+    { initiator: "user" as const, declared: true, expected: true },
+    { initiator: "user" as const, declared: undefined, expected: false },
+    { initiator: "system" as const, declared: false, expected: false },
+    { initiator: "agent" as const, declared: true, expected: false },
+  ])(
+    "optimistically projects queued $initiator input without inventing human origin",
+    async ({ initiator, declared, expected }) => {
+      const queryClient = createAppQueryClient({
+        defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+        showMutationErrorToasts: false,
+      });
+      const previousQueue = [
+        makeQueuedMessage({
+          id: "qmsg-1",
+          initiator,
+          humanMessagePresentation: declared,
+        }),
+      ];
+      queryClient.setQueryData(
+        threadQueuedMessagesQueryKey("thread-1"),
+        previousQueue,
+      );
+      queryClient.setQueryData(
         threadTimelineQueryKey("thread-1"),
-      )?.rows,
-    ).toEqual([]);
-  });
+        makeTimelineResponse(),
+      );
+
+      const transaction = await beginSendQueuedMessageTransaction({
+        queryClient,
+        request: {
+          id: "thread-1",
+          mode: "auto",
+          queuedMessageId: "qmsg-1",
+        },
+      });
+
+      expect(
+        queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
+      ).toEqual([]);
+      const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
+      );
+      expect(timeline?.rows).toHaveLength(1);
+      expect(timeline?.rows[0]).toMatchObject({
+        kind: "conversation",
+        role: "user",
+        text: "Queued message",
+        initiator,
+        humanMessagePresentation: expected,
+      });
+
+      rollbackRemoveQueuedMessageTransaction({
+        queryClient,
+        request: {
+          id: "thread-1",
+          queuedMessageId: "qmsg-1",
+        },
+        transaction,
+      });
+
+      expect(
+        queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
+      ).toEqual(previousQueue);
+      expect(
+        queryClient.getQueryData<ThreadTimelineResponse>(
+          threadTimelineQueryKey("thread-1"),
+        )?.rows,
+      ).toEqual([]);
+    },
+  );
 
   it("restores a queued row and removes its optimistic turn when delivery remains queued", async () => {
     const queryClient = createAppQueryClient({

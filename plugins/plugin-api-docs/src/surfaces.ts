@@ -51,11 +51,13 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Add a navigation rail destination that opens a full page your plugin renders. With this, a plugin can:",
         bullets: [
           "Build a whole page, such as a dashboard, a board, or an inbox",
+          "Omit the title-bar close button across reloads while retaining keyboard pane close",
           "Give the page a URL that can be shared and works with back and forward",
           "Add fixed tabs beside Browser and Terminal, and open terminals it started in any folder",
         ],
         apiSymbols: [
           "PluginNavPanelRegistration",
+          "PluginNavPanelRegistration.experimental_showCloseButton",
           "PluginNavPanelProps",
           "PluginFixedTabRegistration",
           "PluginFixedTabDeclaration",
@@ -215,14 +217,19 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       },
       {
         id: "timeline-renderers",
-        title: "Timeline entry content",
+        title: "Timeline content and appearance",
         summary:
           "Add rich detail to the timeline entries your plugin creates. With this, a plugin can:",
         bullets: [
           "Draw custom content under each entry while bb keeps its header and controls",
+          "Color explicitly human-presented messages per thread while bb keeps rendering and controls",
+          "Use native colors for unknown authorship, invalid colors, missing or failed appearance providers",
           "Fall back to bb's default view if the plugin is off or crashes",
         ],
         apiSymbols: [
+          "ExperimentalThreadMessageAppearance",
+          "ExperimentalThreadMessageAppearanceRegistration",
+          "PluginAppSlots.experimental_threadMessageAppearance",
           "PluginTimelineRendererRegistration",
           "PluginTimelineRendererProps",
         ],
@@ -267,6 +274,24 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "ThreadChatMessageReference",
         ],
         firstParty: ["Side chat"],
+      },
+      {
+        id: "thread-timeline-footer",
+        title: "Live conversation entry",
+        summary:
+          "Provide one live status entry at the end of a conversation. With this, a plugin can:",
+        bullets: [
+          "Refresh an authoritative inventory without posting messages or waking a model",
+          "Use native Parent-style child-thread rows and preserve the native child summary for unowned threads",
+          "Show loading, partial, and unavailable state without substituting a misleading inventory",
+        ],
+        apiSymbols: [
+          "PluginAppSlots.experimental_threadTimelineFooter",
+          "ExperimentalThreadTimelineFooterRegistration",
+          "ExperimentalThreadTimelineFooterProps",
+          "ExperimentalThreadTimelineFooterThreadBadgeProps",
+        ],
+        experimental: true,
       },
       {
         id: "pending-interaction",
@@ -732,6 +757,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "background",
           "wire",
           "thread-events",
+          "thread-close-protection",
           "dispatch-hook",
           "environment-providers",
           "machine-providers",
@@ -744,6 +770,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         title: "Data & platform",
         surfaceIds: [
           "storage",
+          "thread-message-provenance",
           "bb-sdk",
           "thread-plugin-metadata",
           "desktop-browsers",
@@ -968,6 +995,24 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Tasks",
           "Workflows",
         ],
+      },
+      {
+        id: "thread-close-protection",
+        title: "Thread close protection",
+        summary:
+          "Provide lifecycle protection for persistent conversations. With this, a plugin can:",
+        bullets: [
+          "Prevent archive or delete with a reason shown in native actions",
+          "Reject an entire subtree or bulk operation before any changes",
+          "Keep protection active across reloads and release it when the plugin unloads",
+          "Allow normal stop, compact, idle and view dismissal",
+        ],
+        apiSymbols: [
+          "BbPluginApi.experimental_threadCloseProtection",
+          "experimental_ThreadCloseProtection",
+          "experimental_ThreadCloseProtectionDeclaration",
+        ],
+        experimental: true,
       },
       {
         id: "dispatch-hook",
@@ -1231,6 +1276,23 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Thread list",
           "Workflows",
         ],
+      },
+      {
+        id: "thread-message-provenance",
+        title: "Background thread messages",
+        summary:
+          "Use native thread delivery for background work. With this, a plugin can:",
+        bullets: [
+          "Send system input through native admission and persistent queues",
+          "Keep system permission policy after queueing and plugin reloads",
+          "Reject sender impersonation and revoked backend plugin credentials",
+          "Forward native composer intent for presentation only, without granting identity or permissions",
+        ],
+        apiSymbols: [
+          "PluginBbSdk.threads.experimental_sendSystem",
+          "NewThreadRequest",
+        ],
+        experimental: true,
       },
       {
         id: "bb-sdk",

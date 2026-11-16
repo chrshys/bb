@@ -1,0 +1,10 @@
+{
+  "default": "mobile-panels-review",
+  "profiles": {
+    "mobile-panels-review": {
+      "cwd": "apps/app",
+      "command": ["node_modules/.bin/ladle", "serve", "--host", "127.0.0.1", "--port", "{port}"],
+      "readyTimeout": 60
+    }
+  }
+}

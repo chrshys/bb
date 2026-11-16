@@ -79,36 +79,45 @@ describe("CompactSecondaryPanelShelf", () => {
     expect(shelf.className).toContain("pl-[env(safe-area-inset-left)]");
   });
 
-  it("fills the viewport while open and rests at the compact width while closed", () => {
-    const { rerender } = renderShelf(false);
-    const shelf = screen.getByTestId("secondary-panel-shelf");
-    expect(shelf.dataset.state).toBe("closed");
-    expect(shelf.className).toContain("w-(--secondary-panel-width-mobile)");
-    expect(shelf.className).toContain("data-[state=full]:w-full");
-
-    rerender(
-      <CompactSecondaryPanelShelf open onClose={vi.fn()} srLabel="Right panel">
-        <div data-testid="panel-body" />
-      </CompactSecondaryPanelShelf>,
+  it("returns to the main panel when its visible edge is tapped without disabling the app root", () => {
+    function Shelf() {
+      const [open, setOpen] = useState(true);
+      return (
+        <CompactSecondaryPanelShelf
+          open={open}
+          onClose={() => setOpen(false)}
+          srLabel="Right panel"
+        >
+          <input aria-label="Panel draft" defaultValue="Keep this draft" />
+        </CompactSecondaryPanelShelf>
+      );
+    }
+    const { container } = render(<Shelf />);
+    const panel = screen.getByTestId("secondary-panel-shelf");
+    fireEvent.click(screen.getByTestId("secondary-panel-backdrop"));
+    expect(panel.dataset.state).toBe("closed");
+    expect(panel.hasAttribute("inert")).toBe(true);
+    expect(screen.getByLabelText("Panel draft")).toHaveProperty(
+      "value",
+      "Keep this draft",
     );
-    expect(screen.getByTestId("secondary-panel-shelf").dataset.state).toBe(
-      "full",
-    );
+    expect(container.hasAttribute("inert")).toBe(false);
+    expect(container.getAttribute("aria-hidden")).not.toBe("true");
   });
 
-  it("stacks the full page panel above app chrome and below shared overlays", () => {
-    renderShelf(true);
-
-    const shelf = screen.getByTestId("secondary-panel-shelf");
-    expect(shelf.style.zIndex).toBe(
-      String(APP_OVERLAY_LAYER.secondaryPanelFullPage),
-    );
-    expect(APP_OVERLAY_LAYER.secondaryPanelFullPage).toBeGreaterThan(
-      APP_OVERLAY_LAYER.sidebarTrigger,
-    );
-    expect(APP_OVERLAY_LAYER.sharedPortaledOverlay).toBeGreaterThan(
-      APP_OVERLAY_LAYER.secondaryPanelFullPage,
-    );
+  it("keeps the panel open when a cancelled edge drag produces a click", () => {
+    const { onClose } = renderShelf(true);
+    const panel = screen.getByTestId("secondary-panel-shelf");
+    const backdrop = screen.getByTestId("secondary-panel-backdrop");
+    Object.defineProperty(panel, "clientWidth", { value: 300 });
+    fireTouch(backdrop, "touchstart", createTouch(30, 160));
+    fireTouch(window, "touchmove", createTouch(50, 160));
+    fireTouch(window, "touchend", createTouch(50, 160));
+    fireEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.pointerDown(backdrop);
+    fireEvent.click(backdrop);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("navigates tab swipes without dismissing while preserving body dismissal", () => {

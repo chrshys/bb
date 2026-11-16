@@ -160,16 +160,18 @@ export function MobilePanelTabPager({
         ref={navigationRef}
         className="flex min-w-0 flex-1 items-center gap-1"
       >
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`${PANEL_TAB_CONTROL_CLASS} text-muted-foreground/70`}
-          aria-label="Previous tab"
-          disabled={previousTab === undefined}
-          onClick={() => previousTab?.onSelect()}
-        >
-          <Icon name="ChevronLeft" />
-        </Button>
+        {tabs.length > 1 ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`${PANEL_TAB_CONTROL_CLASS} text-muted-foreground/70`}
+            aria-label="Previous tab"
+            disabled={previousTab === undefined}
+            onClick={() => previousTab?.onSelect()}
+          >
+            <Icon name="ChevronLeft" />
+          </Button>
+        ) : null}
         <div
           ref={viewportRef}
           data-testid="mobile-panel-tab-viewport"
@@ -249,16 +251,18 @@ export function MobilePanelTabPager({
             ))}
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`${PANEL_TAB_CONTROL_CLASS} text-muted-foreground/70`}
-          aria-label="Next tab"
-          disabled={nextTab === undefined}
-          onClick={() => nextTab?.onSelect()}
-        >
-          <Icon name="ChevronRight" />
-        </Button>
+        {tabs.length > 1 ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`${PANEL_TAB_CONTROL_CLASS} text-muted-foreground/70`}
+            aria-label="Next tab"
+            disabled={nextTab === undefined}
+            onClick={() => nextTab?.onSelect()}
+          >
+            <Icon name="ChevronRight" />
+          </Button>
+        ) : null}
         {newTabControl}
       </div>
     </div>

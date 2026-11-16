@@ -355,6 +355,7 @@ export function SecondaryPanelLayout({
         >
           <Panel
             id={mainPanelId}
+            data-app-main-panel=""
             {...(collapse === undefined
               ? {}
               : { collapsible: true, collapsedSize: 0 })}

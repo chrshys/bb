@@ -168,6 +168,29 @@ const baseManifest = JSON.parse(
   await readFile(join(publicDir, "manifest.webmanifest"), "utf8"),
 );
 
+for (const size of [16, 32]) {
+  const { data, info } = await sharp(
+    join(publicDir, `favicon-${size}x${size}.png`),
+  )
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const rgb = parseHex(faviconColorValues.purple);
+  for (let index = 0; index < data.length; index += 4) {
+    data[index] = rgb[0];
+    data[index + 1] = rgb[1];
+    data[index + 2] = rgb[2];
+  }
+  await writeOrCheck(
+    `favicon-${size}x${size}-purple.png`,
+    await sharp(data, {
+      raw: { width: info.width, height: info.height, channels: 4 },
+    })
+      .png()
+      .toBuffer(),
+  );
+}
+
 for (const monochromeIcon of monochromeIcons) {
   await writeOrCheck(
     monochromeIcon.target,

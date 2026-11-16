@@ -8,9 +8,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { APP_OVERLAY_LAYER } from "@/components/ui/app-overlay-layers";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { usePersistentOverlayFocus } from "@bb/shared-ui/responsive-overlay";
-import { APP_OVERLAY_LAYER } from "@/components/ui/app-overlay-layers";
 import { hasTextSelectionWithin } from "@/components/ui/gesture-dom";
 import { useHorizontalDismissDrag } from "@/components/ui/use-horizontal-dismiss-drag";
 import { setCompactSecondaryPanelPresentation } from "@/components/ui/secondary-panel-shelf-visibility";
@@ -38,8 +38,22 @@ export function CompactSecondaryPanelShelf({
 }: CompactSecondaryPanelShelfProps) {
   const labelId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const draggedBackdropRef = useRef(false);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
   const draggedInsetRef = useRef<HTMLElement | null>(null);
   const state = open ? "full" : "closed";
+  const [isExitPending, setIsExitPending] = useState(open);
+  useLayoutEffect(() => {
+    if (open) {
+      setIsExitPending(true);
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setIsExitPending(false),
+      SHELF_SETTLE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [open]);
   const onCloseRef = useRef(onClose);
   useLayoutEffect(() => {
     onCloseRef.current = onClose;
@@ -53,6 +67,11 @@ export function CompactSecondaryPanelShelf({
       inset.style.transition = "";
       draggedInsetRef.current = null;
     }
+    const backdrop = backdropRef.current;
+    if (backdrop !== null) {
+      backdrop.style.translate = "";
+      backdrop.style.transition = "";
+    }
   }, []);
 
   const applyDragProgress = useCallback(
@@ -65,6 +84,7 @@ export function CompactSecondaryPanelShelf({
       width: number;
       settling: boolean;
     }) => {
+      if (!settling) draggedBackdropRef.current = true;
       const panel = panelRef.current;
       if (panel === null) {
         return;
@@ -74,6 +94,13 @@ export function CompactSecondaryPanelShelf({
         draggedInsetRef.current = inset;
         inset.style.translate = `${-width * progress}px`;
         inset.style.transition = settling
+          ? SHELF_DRAG_SETTLE_TRANSITION
+          : "none";
+      }
+      const backdrop = backdropRef.current;
+      if (backdrop !== null) {
+        backdrop.style.translate = `${-width * progress}px`;
+        backdrop.style.transition = settling
           ? SHELF_DRAG_SETTLE_TRANSITION
           : "none";
       }
@@ -131,38 +158,60 @@ export function CompactSecondaryPanelShelf({
   }
 
   return createPortal(
-    <div
-      ref={panelRef}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={labelId}
-      data-bb-portaled-overlay=""
-      tabIndex={-1}
-      inert={!open}
-      data-testid="secondary-panel-shelf"
-      data-state={state}
-      style={{
-        zIndex:
-          state === "full"
-            ? APP_OVERLAY_LAYER.secondaryPanelFullPage
-            : APP_OVERLAY_LAYER.secondaryPanel,
-      }}
-      className={cn(
-        "fixed inset-y-0 right-0 flex h-(--bb-shell-height) flex-col overflow-hidden border-l border-border-seam bg-sidebar pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[var(--bb-safe-area-bottom,env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] outline-none",
-        "w-(--secondary-panel-width-mobile) data-[state=full]:w-full data-[state=full]:border-l-0",
-        SHELF_TRANSITION_CLASS,
-        "data-[state=closed]:invisible data-[state=closed]:[transition:visibility_0s_linear_220ms]",
-      )}
-      onPointerDown={beginPointerDrag}
-      onTouchStart={beginTouchDrag}
-    >
-      <span id={labelId} className="sr-only">
-        {srLabel}
-      </span>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {children}
+    <>
+      <div
+        ref={backdropRef}
+        data-testid="secondary-panel-backdrop"
+        aria-hidden="true"
+        inert={!open}
+        className={cn(
+          "fixed inset-0 z-40",
+          SHELF_TRANSITION_CLASS,
+          open ? "-translate-x-[calc(100vw-80px)]" : "pointer-events-none",
+        )}
+        onClick={() => {
+          if (!draggedBackdropRef.current) requestClose();
+          draggedBackdropRef.current = false;
+        }}
+        onPointerDown={(event) => {
+          draggedBackdropRef.current = false;
+          beginPointerDrag(event);
+        }}
+        onTouchStart={(event) => {
+          draggedBackdropRef.current = false;
+          beginTouchDrag(event);
+        }}
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelId}
+        data-bb-portaled-overlay=""
+        tabIndex={-1}
+        inert={!open}
+        data-testid="secondary-panel-shelf"
+        data-secondary-panel-shelf=""
+        data-closing={!open && isExitPending ? "" : undefined}
+        style={{ zIndex: APP_OVERLAY_LAYER.secondaryPanel }}
+        data-state={state}
+        className={cn(
+          "fixed inset-y-0 right-0 flex h-(--bb-shell-height) flex-col overflow-hidden bg-sidebar pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[var(--bb-safe-area-bottom,env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] outline-none",
+          "w-[calc(100vw-80px)]",
+          SHELF_TRANSITION_CLASS,
+          "data-[state=closed]:invisible data-[state=closed]:[transition:visibility_0s_linear_220ms]",
+        )}
+        onPointerDown={beginPointerDrag}
+        onTouchStart={beginTouchDrag}
+      >
+        <span id={labelId} className="sr-only">
+          {srLabel}
+        </span>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {children}
+        </div>
       </div>
-    </div>,
+    </>,
     portalTarget,
   );
 }

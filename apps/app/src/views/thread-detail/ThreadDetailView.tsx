@@ -1,3 +1,5 @@
+import { RunningThreadsSummary } from "@/components/thread/timeline/RunningThreadsSummary";
+import { PluginThreadTimelineFooter } from "@/components/plugin/PluginThreadTimelineFooter";
 import { getPanelTabHistoryKey } from "@/components/secondary-panel/recentlyClosedPanelTabs";
 import { appendQuoteAndAttachmentsToDraft } from "@bb/client-core";
 import { queueSplitDownload } from "@/lib/split-prefetch";
@@ -498,7 +500,6 @@ function ThreadDetailViewInternal(
     isFocused,
     isMaximized: isPaneMaximized,
     navigateInPane,
-    onRequestClose,
     isBoundedPane,
   } = usePaneContext();
   const navigate = useImmediateRouteNavigate();
@@ -768,6 +769,11 @@ function ThreadDetailViewInternal(
   const childThreadSubsetQuery = useChildThreads({
     enabled: threadQueryState.status === "ready" && Boolean(thread?.id),
     parentThreadId: thread?.id,
+    refetchInterval:
+      thread &&
+      isRunningThreadRuntimeDisplayStatus(thread.runtime.displayStatus)
+        ? false
+        : 60_000,
   });
   const parentThreads = useMemo(
     () =>
@@ -2322,11 +2328,15 @@ function ThreadDetailViewInternal(
   const timelineHeader = (
     <ThreadDetailHeader
       actionsMenu={({
+        open,
+        onOpenChange,
         includeResponsiveActions,
         requestRename,
         onCloseAutoFocus,
       }) => (
         <ThreadActionsMenu
+          open={open}
+          onOpenChange={onOpenChange}
           thread={threadActionTarget}
           trigger={(triggerProps) => (
             <Button
@@ -2359,7 +2369,6 @@ function ThreadDetailViewInternal(
       )}
       childPillLabel={parentThreadId ? "child" : null}
       isSecondaryPanelOpen={isSecondaryPanelOpen}
-      onClosePane={onRequestClose ?? undefined}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleSecondaryPanel}
       pluginActions={
@@ -2445,7 +2454,6 @@ function ThreadDetailViewInternal(
       activeBackgroundCommands={activeBackgroundCommands}
       parentThreadSection={parentThreadSection}
       childPendingInteractions={childPendingInteractions}
-      childThreadsSection={childThreadsSection}
       pullRequest={pullRequest}
       thread={thread}
     />
@@ -2836,6 +2844,19 @@ function ThreadDetailViewInternal(
               onPanelFocus: touchFixedPanelTabsState,
             }}
             timeline={{
+              trailingContent:
+                thread.archivedAt === null &&
+                threadEnvironmentGoneStatus === null ? (
+                  <PluginThreadTimelineFooter
+                    threadId={thread.id}
+                    projectId={thread.projectId}
+                    runtimeDisplayStatus={thread.runtime.displayStatus}
+                  >
+                    <RunningThreadsSummary
+                      threads={childThreadSubsetQuery.data ?? []}
+                    />
+                  </PluginThreadTimelineFooter>
+                ) : null,
               activeThinking,
               canSpawnChild: thread.canSpawnChild,
               contextBoundarySeq,

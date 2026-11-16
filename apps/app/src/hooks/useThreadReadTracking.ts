@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Thread } from "@bb/domain";
 import { isThreadRead, type ThreadReadState } from "@bb/client-core";
 import {
@@ -38,7 +38,26 @@ export function useThreadReadTracking({
   const suppressedManualUnreadKeysRef = useRef<Set<string>>(new Set());
   const previousSnapshotRef = useRef<ReadTrackingSnapshot | null>(null);
   const visibilityRevision = useDocumentVisibilityRevision();
-  const isVisible = useDocumentVisible();
+  const documentVisible = useDocumentVisible();
+  const attentionKey = thread
+    ? `${thread.id}:${thread.latestAttentionAt}`
+    : null;
+  const [viewedAttentionKey, setViewedAttentionKey] = useState<string | null>(
+    null,
+  );
+  const isVisible =
+    documentVisible &&
+    attentionKey !== null &&
+    viewedAttentionKey === attentionKey;
+
+  useEffect(() => {
+    if (!documentVisible || attentionKey === null) return;
+    const timer = setTimeout(() => setViewedAttentionKey(attentionKey), 2000);
+    return () => {
+      clearTimeout(timer);
+      setViewedAttentionKey(null);
+    };
+  }, [attentionKey, documentVisible]);
 
   useEffect(() => {
     const controllers = pendingReadControllersRef.current;
@@ -64,9 +83,6 @@ export function useThreadReadTracking({
       }
     }
 
-    if (!isVisible) {
-      return;
-    }
     if (!thread) {
       return;
     }
@@ -81,6 +97,20 @@ export function useThreadReadTracking({
       suppressedManualUnreadKeysRef.current.clear();
     }
 
+    const isRetry = failedReadKeysRef.current.has(marker);
+    const becameManuallyUnread =
+      previousSnapshot?.threadId === thread.id &&
+      previousSnapshot.latestAttentionAt === thread.latestAttentionAt &&
+      previousSnapshot.isRead === true &&
+      !threadIsRead &&
+      !isRetry;
+
+    if (becameManuallyUnread) {
+      suppressedManualUnreadKeysRef.current.add(marker);
+    }
+
+    if (!isVisible) return;
+
     if (threadIsRead) {
       failedReadKeysRef.current.delete(marker);
       suppressedManualUnreadKeysRef.current.delete(marker);
@@ -90,17 +120,6 @@ export function useThreadReadTracking({
     const becameVisible =
       previousSnapshot?.threadId === thread.id &&
       previousSnapshot.isVisible === false;
-    const isRetry = failedReadKeysRef.current.has(marker);
-    const becameManuallyUnread =
-      previousSnapshot?.threadId === thread.id &&
-      previousSnapshot.latestAttentionAt === thread.latestAttentionAt &&
-      previousSnapshot.isVisible &&
-      previousSnapshot.isRead === true &&
-      !isRetry;
-
-    if (becameManuallyUnread) {
-      suppressedManualUnreadKeysRef.current.add(marker);
-    }
     if (
       suppressedManualUnreadKeysRef.current.has(marker) &&
       !isOpenedThread &&

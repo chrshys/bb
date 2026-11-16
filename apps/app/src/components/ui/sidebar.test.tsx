@@ -10,7 +10,7 @@ import {
 import { memo } from "react";
 import { flushSync } from "react-dom";
 import { renderToString } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
 import {
   Sidebar,
@@ -25,6 +25,10 @@ import {
   useSidebar,
   useSidebarKeepsCollapsedRail,
 } from "./sidebar";
+
+beforeEach(() => {
+  vi.spyOn(window, "innerWidth", "get").mockReturnValue(390);
+});
 
 afterEach(() => {
   cleanup();
@@ -453,7 +457,7 @@ function getMobilePanel(): HTMLElement | null {
   return panel instanceof HTMLElement ? panel : null;
 }
 
-const SHELF_OPEN_TRANSLATE = "360px";
+const SHELF_OPEN_TRANSLATE = "310px";
 const SHELF_CLOSED_TRANSLATE = "0px";
 
 function getShelfRevealTranslate(): string {
@@ -637,7 +641,6 @@ describe("mobile sidebar shelf stacking", () => {
     }
 
     expect(panel.className).toContain("z-0");
-    expect(panel.className).toContain("data-[side=left]:border-r");
     expect(inset.className).toContain("max-md:z-30");
     expect(inset.className).toContain("motion-reduce:transition-none!");
     expect(inset.dataset.sidebarShelf).toBe("closed");
@@ -647,28 +650,6 @@ describe("mobile sidebar shelf stacking", () => {
 
     expect(inset.dataset.sidebarShelf).toBe("open");
     expect(getMobilePanel()?.style.translate).toBe("");
-  });
-
-  it("keeps the center pane square for both shelves", () => {
-    vi.useFakeTimers();
-    renderCompactSidebarHarness();
-    settleMobileRealization();
-
-    const inset = document.querySelector('[data-sidebar="inset"]');
-    if (!(inset instanceof HTMLElement)) {
-      throw new Error("Expected a page inset");
-    }
-
-    expect(inset.className).not.toContain("data-[sidebar-shelf=open]:rounded");
-    expect(inset.className).not.toContain("data-[panel-shelf=full]:rounded");
-    expect(inset.className).not.toContain(
-      "data-[sidebar-shelf=open]:overflow-hidden",
-    );
-    expect(inset.className).not.toContain(
-      "data-[panel-shelf=full]:overflow-hidden",
-    );
-    expect(inset.className).not.toContain("data-[sidebar-shelf=open]:shadow");
-    expect(inset.className).not.toContain("data-[panel-shelf=full]:shadow");
   });
 
   it("leaves the page untouched by the shelf on desktop", () => {

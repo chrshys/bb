@@ -509,6 +509,8 @@ function ThreadRowComponent({
     trailingIndicatorState,
     pluginThreadRowStatus?.tone === "running",
   );
+  const keepMobileActivityVisible =
+    isCompactViewport && splitIndicatorIsWorking;
   const splitIndicatorLabel = trailingIndicatorResolution.accessibleLabel
     ? `${labelTitle} — open in split; ${trailingIndicatorResolution.accessibleLabel}`
     : `${labelTitle} — open in split`;
@@ -775,7 +777,7 @@ function ThreadRowComponent({
               />
             </span>
           </span>
-        ) : shortcut ? (
+        ) : shortcut && !keepMobileActivityVisible ? (
           <AppCommandShortcutPill shortcut={shortcut} />
         ) : (
           <span
@@ -795,7 +797,8 @@ function ThreadRowComponent({
                   isActionsOpen ? "true" : undefined
                 }
                 className={cn(
-                  SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
+                  !keepMobileActivityVisible &&
+                    SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
                   "absolute inset-0 flex items-center justify-center",
                 )}
               >
@@ -889,7 +892,7 @@ function ThreadRowComponent({
       requestRename={requestRenameFromMenu}
       onOpenChange={setIsContextActionsOpen}
       onCloseAutoFocus={handleActionsMenuCloseAutoFocus}
-      disabled={isEditing}
+      disabled={isEditing || keepMobileActivityVisible}
       dragging={rowDragBindings?.isDragging ?? false}
     >
       {row}

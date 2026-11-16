@@ -11,6 +11,10 @@ import {
   type RefObject,
 } from "react";
 import { NavLink } from "react-router-dom";
+import {
+  ThreadRelationshipLink,
+  THREAD_RELATIONSHIP_TITLE_CLASS,
+} from "./ThreadRelationshipRow";
 import type {
   EnvironmentStatus,
   GitBranchRefClassification,
@@ -324,9 +328,6 @@ function useParentSectionAriaLabel(
   return `${PARENT_SECTION_COPY[section.relationship].ariaPrefix} ${parentThreadTitle}`;
 }
 
-const PARENT_THREAD_TITLE_CLASS =
-  "text-foreground/90 underline underline-offset-2";
-
 function ParentThreadInlineSegment({
   section,
 }: {
@@ -334,29 +335,13 @@ function ParentThreadInlineSegment({
 }) {
   const ariaLabel = useParentSectionAriaLabel(section);
   return (
-    <div
-      className={cn(
-        "flex min-w-0 items-center gap-1.5 text-xs",
-        PROMPT_STACK_INLAY_SEGMENT_CLASS,
-      )}
-      title={ariaLabel}
-    >
-      <Icon
-        name={PARENT_SECTION_ICON[section.relationship]}
-        className="size-3.5 shrink-0"
-        aria-hidden="true"
-      />
-      <span className="min-w-0 truncate">
-        {PARENT_SECTION_COPY[section.relationship].verb}{" "}
-        <NavLink to={section.href}>
-          <ThreadTitle
-            title={section.parentThreadTitle}
-            className={PARENT_THREAD_TITLE_CLASS}
-            inline
-          />
-        </NavLink>
-      </span>
-    </div>
+    <ThreadRelationshipLink
+      title={section.parentThreadTitle}
+      href={section.href}
+      label={PARENT_SECTION_COPY[section.relationship].verb}
+      icon={PARENT_SECTION_ICON[section.relationship]}
+      ariaLabel={ariaLabel}
+    />
   );
 }
 
@@ -432,7 +417,7 @@ function ParentThreadSectionBody({
         <NavLink to={section.href}>
           <ThreadTitle
             title={section.parentThreadTitle}
-            className={PARENT_THREAD_TITLE_CLASS}
+            className={THREAD_RELATIONSHIP_TITLE_CLASS}
             inline
           />
         </NavLink>

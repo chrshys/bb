@@ -340,6 +340,7 @@ export const threadQueuedMessageSchema = z.object({
   origin: threadCreateOriginSchema.nullable(),
   originPluginId: z.string().nullable(),
   initiator: z.enum(["user", "agent", "system"]),
+  humanMessagePresentation: z.boolean().optional(),
   senderThreadId: z.string().nullable(),
   /**
    * The thread this row is waiting on. Redundant on the thread-scoped list

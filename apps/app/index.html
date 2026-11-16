@@ -17,50 +17,37 @@
       name="apple-mobile-web-app-status-bar-style"
       content="black-translucent"
     />
-    <meta name="apple-mobile-web-app-title" content="bb" />
-    <title>bb</title>
+    <meta name="apple-mobile-web-app-title" content="BBC" />
+    <title>BBC</title>
     <link
       rel="icon"
       type="image/png"
       sizes="32x32"
-      href="/favicon-32x32.png"
+      href="/favicon-32x32-purple.png"
       id="favicon-32"
     />
     <link
       rel="icon"
       type="image/png"
       sizes="16x16"
-      href="/favicon-16x16.png"
+      href="/favicon-16x16-purple.png"
       id="favicon-16"
     />
     <link
       rel="apple-touch-icon"
       sizes="180x180"
-      href="/apple-touch-icon.png"
+      href="/apple-touch-icon-purple.png"
       id="apple-touch-icon"
     />
     <link
       rel="manifest"
-      href="/manifest.webmanifest"
+      href="/manifest-purple.webmanifest"
       id="app-manifest"
       crossorigin="use-credentials"
     />
     <script>
       (function () {
-        var dev = "%MODE%" === "development";
-        function setFavicon(dark) {
-          var s = dev ? "-dev" : dark ? "-dark" : "";
-          document.getElementById("favicon-32").href =
-            "/favicon-32x32" + s + ".png";
-          document.getElementById("favicon-16").href =
-            "/favicon-16x16" + s + ".png";
-        }
         var mq = window.matchMedia("(prefers-color-scheme: dark)");
-        setFavicon(mq.matches);
-        if (!dev)
-          mq.addEventListener("change", function (e) {
-            setFavicon(e.matches);
-          });
         function getFaviconColorSuffix() {
           try {
             var color = localStorage.getItem("bb.faviconColor");
@@ -68,9 +55,9 @@
               color,
             )
               ? "-" + color
-              : "";
+              : "-purple";
           } catch {
-            return "";
+            return "-purple";
           }
         }
         var faviconColorSuffix = getFaviconColorSuffix();

@@ -29,12 +29,10 @@ import { cn } from "@bb/shared-ui/lib/utils";
 import { Popover, PopoverAnchor, PopoverContent } from "@bb/shared-ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import { useIsSidebarFramed } from "@/components/ui/sidebar.js";
-import { AppCommandShortcutPill } from "@/components/commands/AppCommandShortcutHint";
 import { useAppCommandShortcut } from "@/components/commands/AppCommandProvider";
 import {
   CHROME_ROW_HEIGHT_CLASS,
   getBbDesktopInfo,
-  MACOS_CHROME_CONTROL_AXIS_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
@@ -50,7 +48,6 @@ import {
   NEW_THREAD_NAVIGATION_ITEM_ID,
   type SidebarNavigationItem,
 } from "./sidebarNavigationItems";
-import { PROJECT_LIST_ACTION_BUTTON_CLASS } from "@bb/shared-ui/sidebar-row-classes";
 
 export interface NavRailCustomizeState {
   isOpen: boolean;
@@ -414,45 +411,5 @@ export function NavRailSettingsButton({
     >
       <Icon name="Settings" aria-hidden="true" />
     </RailButton>
-  );
-}
-
-export function NavRailNewThreadButton() {
-  const { items, actions, isShortcutModifierHeld } = useSidebarNavigation();
-  const split = useSidebarNavigationSplit(NEW_THREAD_NAVIGATION_ITEM_ID);
-  const [desktopInfo] = useState(getBbDesktopInfo);
-  const item = items.find(
-    (candidate) => candidate.action.kind === "new-thread",
-  );
-  if (item === undefined) return null;
-  const shortcut = isShortcutModifierHeld ? item.shortcut : null;
-
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="ghost"
-      className={cn(
-        PROJECT_LIST_ACTION_BUTTON_CLASS,
-        "w-auto flex-1",
-        shouldUseMacosDesktopChrome(desktopInfo) &&
-          MACOS_CHROME_CONTROL_AXIS_CLASS,
-      )}
-      disabled={item.isDisabled}
-      aria-keyshortcuts={item.shortcut?.ariaKeyShortcuts}
-      aria-label={
-        item.shortcut ? `${item.label} (${item.shortcut.label})` : undefined
-      }
-      {...split.splitProps}
-      onClick={(event) =>
-        actions.activate(item.id, {
-          openInSplit: event.metaKey || event.ctrlKey,
-        })
-      }
-    >
-      <SidebarNavigationIcon icon={item.icon} />
-      <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-      {shortcut ? <AppCommandShortcutPill shortcut={shortcut} /> : null}
-    </Button>
   );
 }

@@ -621,7 +621,12 @@ export function SelectableMessageProse({
   }, []);
 
   return (
-    <div ref={nodeRef} className={className} data-sidebar-swipe-selectable>
+    <div
+      ref={nodeRef}
+      className={className}
+      data-message-body=""
+      data-sidebar-swipe-selectable
+    >
       {children}
     </div>
   );

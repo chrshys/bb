@@ -336,6 +336,8 @@ function buildClientUserMessage({
       : { scope: decoded.scope }),
     initiator,
     senderThreadId,
+    humanMessagePresentation:
+      decoded.humanMessagePresentation === true && initiator === "user",
     systemMessageKind: decoded.systemMessageKind ?? "unlabeled",
     systemMessageSubject: decoded.systemMessageSubject ?? null,
     turnRequest,
@@ -506,6 +508,7 @@ export function parseProviderUserMessage(
     ...(decoded.item.parentToolCallId
       ? { parentToolCallId: decoded.item.parentToolCallId }
       : {}),
+    humanMessagePresentation: false,
     initiator: "system",
     senderThreadId: null,
     systemMessageKind: "unlabeled",

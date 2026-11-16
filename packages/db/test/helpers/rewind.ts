@@ -33,6 +33,14 @@ export function dropIdleLifecycleIndexes(db: DbConnection): void {
 }
 
 export function dropQueuedMessageEditHeldUntilColumn(db: DbConnection): void {
+  const provenanceColumns = db.$client
+    .prepare<[], { name: string }>("PRAGMA table_info(queued_thread_messages)")
+    .all();
+  for (const name of ["human_message_presentation", "system_initiated"]) {
+    if (provenanceColumns.some((column) => column.name === name)) {
+      db.$client.exec(`ALTER TABLE queued_thread_messages DROP COLUMN ${name}`);
+    }
+  }
   const columns = db.$client
     .prepare<[], { name: string }>("PRAGMA table_info(queued_thread_messages)")
     .all();

@@ -2,6 +2,7 @@
 
 import {
   cleanup,
+  act,
   fireEvent,
   render,
   screen,
@@ -21,6 +22,12 @@ import {
   resetThreadActionRegistryForTest,
 } from "@/lib/thread-actions/thread-action-registry";
 import type { ThreadDetailHeaderActionsMenuArgs } from "./ThreadDetailHeader";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@bb/shared-ui/dropdown-menu";
 
 const mocks = vi.hoisted(() => ({
   renameThreadAsync: vi.fn(),
@@ -109,50 +116,124 @@ afterEach(() => {
 });
 
 describe("ThreadDetailHeader", () => {
-  it("leaves the open right-panel collapse control to the panel header", () => {
-    render(
+  function renderInteractiveHeader() {
+    return render(
       <PaneContext.Provider value={PANE_CONTEXT}>
         <ThreadDetailHeader
-          actionsMenu={null}
+          actionsMenu={({ open, onOpenChange, onCloseAutoFocus }) => (
+            <DropdownMenu open={open} onOpenChange={onOpenChange}>
+              <DropdownMenuTrigger>Thread actions</DropdownMenuTrigger>
+              <DropdownMenuContent onCloseAutoFocus={onCloseAutoFocus}>
+                <DropdownMenuItem>Conversation action</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           childPillLabel={null}
-          isSecondaryPanelOpen
+          isSecondaryPanelOpen={false}
           onOpenThreadGitAction={vi.fn()}
           onToggleSecondaryPanel={vi.fn()}
           threadHeaderGitActions={[]}
           threadId={THREAD_ID}
-          threadTitle="Panel state"
+          threadTitle="Conversation title"
         />
       </PaneContext.Provider>,
     );
+  }
 
-    expect(
-      screen.queryByRole("button", { name: "Hide right panel" }),
-    ).toBeNull();
-  });
+  it.each([false, true])(
+    "opens the native menu from the title at compact=%s",
+    async (isCompactViewport) => {
+      viewportState.isCompactViewport = isCompactViewport;
+      renderInteractiveHeader();
+      const title = screen.getByRole("button", {
+        name: "Open actions for Conversation title",
+      });
+      if (isCompactViewport) {
+        expect(
+          screen.queryByRole("button", { name: "Thread actions" }),
+        ).toBeNull();
+      }
+      fireEvent.click(title, { detail: 1 });
+      expect(await screen.findByText("Conversation action")).not.toBeNull();
+      expect(title.getAttribute("aria-expanded")).toBe("true");
+    },
+  );
 
-  it("retains the compact trigger while the open shelf hides page actions", () => {
-    viewportState.isCompactViewport = true;
+  it.each([false, true])(
+    "double-clicking the title renames without opening the menu at compact=%s",
+    async (isCompactViewport) => {
+      viewportState.isCompactViewport = isCompactViewport;
+      renderInteractiveHeader();
+      const title = screen.getByRole("button", {
+        name: "Open actions for Conversation title",
+      });
+      fireEvent.click(title, { detail: 1 });
+      fireEvent.click(title, { detail: 2 });
+      fireEvent.doubleClick(title);
+      expect(
+        await screen.findByRole("textbox", { name: "Thread name" }),
+      ).toHaveProperty("value", "Conversation title");
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      });
+      expect(screen.queryByText("Conversation action")).toBeNull();
+    },
+  );
 
-    render(
-      <PaneContext.Provider value={PANE_CONTEXT}>
-        <ThreadDetailHeader
-          actionsMenu={null}
-          childPillLabel={null}
-          isSecondaryPanelOpen
-          onOpenThreadGitAction={vi.fn()}
-          onToggleSecondaryPanel={vi.fn()}
-          threadHeaderGitActions={[]}
-          threadId={THREAD_ID}
-          threadTitle="Panel state"
-        />
-      </PaneContext.Provider>,
-    );
+  it.each([false, true])(
+    "omits the close control while retaining menu and panel controls at compact=%s",
+    (isCompactViewport) => {
+      viewportState.isCompactViewport = isCompactViewport;
+      render(
+        <PaneContext.Provider value={PANE_CONTEXT}>
+          <ThreadDetailHeader
+            actionsMenu={() => <button>Thread actions</button>}
+            childPillLabel={null}
+            isSecondaryPanelOpen={false}
+            onOpenThreadGitAction={vi.fn()}
+            onToggleSecondaryPanel={vi.fn()}
+            threadHeaderGitActions={[]}
+            threadId={THREAD_ID}
+            threadTitle="Mobile conversation"
+          />
+        </PaneContext.Provider>,
+      );
+      expect(screen.queryByRole("button", { name: "Close pane" })).toBeNull();
+      expect(
+        screen.getByRole("button", {
+          name: "Open actions for Mobile conversation",
+        }),
+      ).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Show right panel" }),
+      ).not.toBeNull();
+    },
+  );
 
-    const trigger = screen.getByRole("button", {
-      name: "Hide right panel",
-    });
-    expect(trigger.closest("[data-thread-header-pane-actions]")).not.toBeNull();
-  });
+  it.each([false, true])(
+    "leaves the open right-panel collapse control to the panel header at compact=%s",
+    (isCompactViewport) => {
+      viewportState.isCompactViewport = isCompactViewport;
+      render(
+        <PaneContext.Provider value={PANE_CONTEXT}>
+          <ThreadDetailHeader
+            actionsMenu={null}
+            childPillLabel={null}
+            isSecondaryPanelOpen
+            onOpenThreadGitAction={vi.fn()}
+            onToggleSecondaryPanel={vi.fn()}
+            threadHeaderGitActions={[]}
+            threadId={THREAD_ID}
+            threadTitle="Panel state"
+          />
+        </PaneContext.Provider>,
+      );
+
+      expect(
+        screen.queryByRole("button", { name: "Hide right panel" }),
+      ).toBeNull();
+    },
+  );
 
   it.each([
     { expectedIcon: "PanelRight", isCompactViewport: true },
@@ -249,7 +330,6 @@ describe("ThreadDetailHeader", () => {
           )}
           childPillLabel={null}
           isSecondaryPanelOpen={false}
-          onClosePane={vi.fn()}
           onOpenThreadGitAction={vi.fn()}
           onToggleSecondaryPanel={vi.fn()}
           threadHeaderGitActions={[
@@ -266,14 +346,6 @@ describe("ThreadDetailHeader", () => {
     expect(screen.queryByText("Commit")).toBeNull();
     expect(screen.getByText("Thread menu")).not.toBeNull();
     expect(screen.getByText("Responsive menu actions")).not.toBeNull();
-    const closePane = screen.getByRole("button", { name: "Close pane" });
-    expect(closePane.classList).toContain("header-pane-action-button");
-    const closeIcon = closePane.querySelector('[data-icon="CloseThreadPane"]');
-    expect(closeIcon).not.toBeNull();
-    expect(closeIcon?.querySelectorAll("path")).toHaveLength(1);
-    expect(closeIcon?.querySelector("path")?.getAttribute("d")).toContain(
-      "M18 6L6.00081 17.9992",
-    );
   });
 
   it("keeps responsive controls inline and out of the menu for wide split panes", () => {
@@ -308,7 +380,6 @@ describe("ThreadDetailHeader", () => {
           )}
           childPillLabel={null}
           isSecondaryPanelOpen={false}
-          onClosePane={vi.fn()}
           onOpenThreadGitAction={vi.fn()}
           onToggleSecondaryPanel={vi.fn()}
           threadHeaderGitActions={[

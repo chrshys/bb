@@ -86,6 +86,7 @@ function userConversationRow(index = 1): TimelineConversationRow {
     role: "user",
     text: `Loaded after client-side navigation ${index}`,
     attachments: null,
+    humanMessagePresentation: false,
     initiator: "user",
     senderThreadId: null,
     systemMessageKind: "unlabeled",

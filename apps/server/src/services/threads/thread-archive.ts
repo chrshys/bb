@@ -1,3 +1,4 @@
+import { assertThreadsMayClose } from "./thread-close-protection.js";
 import {
   cancelProviderEnvironmentCreation,
   sweepProviderEnvironment,
@@ -139,6 +140,7 @@ function archiveThreadTrees(
   ) => ArchiveThreadEnvironment | null,
 ): string[] {
   const threads = listArchiveCandidates(deps.db, roots);
+  assertThreadsMayClose(deps.db, threads);
   for (const root of roots) archiveThread(deps.db, deps.hub, root.id);
   const archivedThreadIds: string[] = [];
 
@@ -180,7 +182,7 @@ export function countUnarchivedThreadDescendants(
   ).length;
 }
 
-function listArchiveCandidates(db: AppDeps["db"], roots: Thread[]) {
+export function listArchiveCandidates(db: AppDeps["db"], roots: Thread[]) {
   type ArchiveCandidate = Pick<
     Thread,
     | "id"

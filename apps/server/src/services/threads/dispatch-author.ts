@@ -2,6 +2,7 @@ import type { StartedOnBehalfOf, ThreadTurnInitiator } from "@bb/domain";
 
 interface ResolveDispatchAuthorArgs {
   retrying: boolean;
+  systemInitiated?: boolean;
   senderThreadId: string | null;
   startedOnBehalfOf: StartedOnBehalfOf | null;
 }
@@ -14,7 +15,7 @@ interface DispatchAuthor {
 export function resolveDispatchAuthor(
   args: ResolveDispatchAuthorArgs,
 ): DispatchAuthor {
-  if (args.retrying) {
+  if (args.retrying || args.systemInitiated === true) {
     return { initiator: "system", senderThreadId: null };
   }
   if (args.senderThreadId !== null) {

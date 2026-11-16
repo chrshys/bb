@@ -1204,6 +1204,48 @@ describe("ThreadRow", () => {
     expect(tier?.querySelector('[aria-hidden="true"].w-px')).not.toBeNull();
   });
 
+  it.each([false, true])(
+    "keeps the active thread indicator ahead of its shortcut only on mobile (compact=%s)",
+    (isCompactViewport) => {
+      renderThreadRow({
+        isCompactViewport,
+        shortcutKey: "3",
+        thread: createThread({ status: "active", runtimeStatus: "active" }),
+      });
+
+      expect(renderedIndicators()).toEqual(
+        isCompactViewport ? ["runtime"] : [],
+      );
+      expect(screen.queryByText("⌘3") !== null).toBe(!isCompactViewport);
+    },
+  );
+
+  it.each([false, true])(
+    "restores the thread context menu after activity ends (compact=%s)",
+    (isCompactViewport) => {
+      const thread = createThread({
+        status: "active",
+        runtimeStatus: "active",
+      });
+      const slot = renderThreadRow({ isCompactViewport, thread });
+      const row = screen.getByRole("link", { name: "Open Thread" });
+
+      fireEvent.contextMenu(row);
+      expect(screen.queryByRole("menuitem", { name: "Rename" }) !== null).toBe(
+        !isCompactViewport,
+      );
+      if (!isCompactViewport) return;
+
+      slot.rerenderThreadRow({
+        ...thread,
+        status: "idle",
+        runtimeStatus: "idle",
+      });
+      fireEvent.contextMenu(screen.getByRole("link", { name: "Open Thread" }));
+      expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy();
+    },
+  );
+
   it("shows its Command shortcut in place of an active indicator", () => {
     renderThreadRow({
       shortcutKey: "3",

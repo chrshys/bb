@@ -28,6 +28,8 @@ import type {
   PluginSidebarFooterActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
+  ExperimentalThreadMessageAppearanceRegistration,
+  ExperimentalThreadTimelineFooterRegistration,
   PluginThreadActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
   PluginThreadListRegistration,
@@ -254,6 +256,7 @@ const NAV_PANEL_REGISTRATION_KEYS: ReadonlySet<string> = new Set(
     path: true,
     component: true,
     fixedTabs: true,
+    experimental_showCloseButton: true,
     experimental_sidebarAccessory: true,
     headerContent: true,
   } satisfies Record<keyof PluginNavPanelRegistration, true>),
@@ -354,6 +357,8 @@ export interface CollectedPluginAppRegistrations {
   experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  threadMessageAppearances: ExperimentalThreadMessageAppearanceRegistration[];
+  threadTimelineFooters: ExperimentalThreadTimelineFooterRegistration[];
   threadActions: PluginThreadActionRegistration<unknown>[];
   browserToolbarActions: ExperimentalPluginBrowserToolbarActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];
@@ -479,6 +484,8 @@ export function collectPluginAppRegistrations(
     experimentalSidebarFooterItems: [],
     threadLists: [],
     threadHeaderActions: [],
+    threadMessageAppearances: [],
+    threadTimelineFooters: [],
     threadActions: [],
     browserToolbarActions: [],
     fileOpeners: [],
@@ -508,6 +515,8 @@ export function collectPluginAppRegistrations(
     sidebarFooterItem: new Set<string>(),
     threadList: new Set<string>(),
     threadHeaderAction: new Set<string>(),
+    threadMessageAppearance: new Set<string>(),
+    threadTimelineFooter: new Set<string>(),
     threadAction: new Set<string>(),
     browserToolbarAction: new Set<string>(),
     fileOpener: new Set<string>(),
@@ -622,6 +631,14 @@ export function collectPluginAppRegistrations(
         const id = requireSlotId(kind, registration?.id);
         requireUniqueId(kind, seenIds.navPanel, id);
         rejectStaleNavPanelKeys(kind, registration);
+        if (
+          registration.experimental_showCloseButton !== undefined &&
+          typeof registration.experimental_showCloseButton !== "boolean"
+        ) {
+          throw new Error(
+            `${kind}: "experimental_showCloseButton" must be a boolean when set`,
+          );
+        }
         const panelId = id;
         const path = requireNonEmptyString(kind, "path", registration.path);
         if (!PLUGIN_SLOT_ID_PATTERN.test(path)) {
@@ -716,6 +733,8 @@ export function collectPluginAppRegistrations(
           icon: requireNonEmptyString(kind, "icon", registration.icon),
           path,
           component: requireComponent(kind, registration.component),
+          experimental_showCloseButton:
+            registration.experimental_showCloseButton ?? true,
           ...(fixedTabs.length > 0 ? { fixedTabs } : {}),
           ...(registration.experimental_sidebarAccessory !== undefined
             ? {
@@ -779,6 +798,27 @@ export function collectPluginAppRegistrations(
             registration,
           ),
         );
+      },
+      experimental_threadTimelineFooter(registration) {
+        collected.threadTimelineFooters.push(
+          collectTitledComponent(
+            "slots.experimental_threadTimelineFooter",
+            seenIds.threadTimelineFooter,
+            registration,
+          ),
+        );
+      },
+      experimental_threadMessageAppearance(registration) {
+        const kind = "slots.experimental_threadMessageAppearance";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.threadMessageAppearance, id);
+        if (typeof registration.useAppearance !== "function") {
+          throw new Error(`${kind}: "useAppearance" must be a function`);
+        }
+        collected.threadMessageAppearances.push({
+          id,
+          useAppearance: registration.useAppearance,
+        });
       },
       experimental_threadHeaderAction(registration) {
         const kind = "slots.experimental_threadHeaderAction";

@@ -987,6 +987,7 @@ const ConversationRowContent = memo(function ConversationRowContent({
       <ConversationMessageContent
         attachments={row.attachments}
         initiator={row.initiator}
+        humanMessagePresentation={row.humanMessagePresentation}
         mentions={row.mentions}
         mobileActionDisplay={mobileActionDisplay}
         onAddToChat={onSelectionAddToChat}
@@ -1152,7 +1153,10 @@ function TimelineExpandableBody(props: TimelineExpandableBodyProps) {
   if (displayRow !== null && renderersReady) {
     return <TimelineExpandableBodyContent {...props} row={displayRow} />;
   }
-  if (displayRow === null && (deferred.isError || deferred.rows !== undefined)) {
+  if (
+    displayRow === null &&
+    (deferred.isError || deferred.rows !== undefined)
+  ) {
     return (
       <TimelineDetailLoadError
         horizontalPadding="flush"

@@ -35,6 +35,7 @@ function conversationRow(index: number): TimelineRow {
       ...base,
       text: `Request ${index / 2 + 1}: check the audit log query plan and the flag rollout.`,
       role: "user",
+      humanMessagePresentation: false,
       initiator: "user",
       senderThreadId: null,
       systemMessageKind: "unlabeled",
