@@ -128,25 +128,39 @@ or reintroduce hover toolbars when making unrelated changes.
   heading. Preserve explicit custom sections. The Section dropdown includes
   Create New… (not a separate always-visible creation button).
 - Create new bot is its own small dialog: live avatar preview, one centred name
-  input, the shape grid, the colour swatches, one optional Project folder select,
+  input, the shape grid, the colour swatches, one optional Project folder row,
   Cancel / Create. Nothing else belongs in it. Defaults at creation: first
   connected host (else the first host), role Assistant, Main section, empty
   SOUL/memory/settings, no projects. With no host, show the inline message rather
   than an unexplained disabled button. It reuses the pickers exported by
   `components/avatar-appearance.tsx`; do not fork them.
-- The Project folder select defaults to No project folder and must never block
-  Create when left alone. An existing project is linked as Member (never Owner,
-  whoever owns it) and becomes the default project. Choose a folder… expands the
-  shared `ProjectCreateForm` inline in its `onChoose` mode, the only place the
-  machine is shown; do not add a second folder browser. Choosing a folder only
-  drafts `project_create` input: the project is created when Create is pressed,
-  immediately before `bot_create`, then linked as Owner and default, and the bot
-  uses the folder's machine. Cancelling before Create leaves no project. If
-  `bot_create` fails after the project exists, keep that project selected and say
-  it stays; a retry must reuse it and never call `project_create` again. A failed
-  `project_create` creates no bot and retries with the same `requestId`. Ignore
-  select values the dialog did not offer: Radix re-emits the value through its
-  hidden form select when the choice changes programmatically.
+- The Project folder row defaults to No project folder and must never block
+  Create, whether it is left alone or its folder list is open. It is one quiet
+  row: the folder or project name, a secondary line (the path, or how the bot
+  joins), one Choose…/Change control and a clear button once something is chosen.
+  The control is a menu of Choose a folder… and the existing projects, or a plain
+  button when there are no projects. An existing project is linked as Member
+  (never Owner, whoever owns it) and becomes the default project.
+- Choosing a folder is one step everywhere in this plugin, through
+  `useFolderChooser` in `components/folder-chooser.tsx`: the create dialog, New
+  project… in the bot panel's Projects card and Project in the header + menu. It
+  opens the OS folder dialog (`experimental_useNativeFolderPicker`) when the only
+  connected machine is the one that dialog browses, and otherwise swaps in the
+  compact folder list in place. The project name is always the folder's name. Do
+  not add a name field, a path input, explanatory copy, a second Cancel/confirm
+  pair or a second folder browser. The list shows a machine select only when
+  several machines are connected, and offers New folder because `project_create`
+  creates missing folders. A failed or unavailable OS dialog falls back to the
+  list; a cancelled one changes nothing.
+- In the create dialog a chosen folder only drafts `project_create` input: the
+  project is created when Create is pressed, immediately before `bot_create`,
+  then linked as Owner and default, and the bot uses the folder's machine.
+  Cancelling before Create leaves no project. If `bot_create` fails after the
+  project exists, keep that project in the row and say it stays; a retry must
+  reuse it and never call `project_create` again. A failed `project_create`
+  creates no bot and retries with the same `requestId`. The Projects card and the
+  header's Project create as soon as the folder is chosen; the chooser keeps one
+  `requestId` per machine and path so a retry of the same folder cannot duplicate.
 - Bot editing lives in the right-hand panel, never in a modal. `components/bot-panel.tsx`
   is the only editor: a large avatar, the name and role editable in place beneath it,
   a quiet saved/saving status, then cards for Appearance, Setup, Instructions, Memory,

@@ -101,26 +101,33 @@ the role "Assistant", the Main section, empty instructions, memory and settings,
 no projects, and a random expression and idle motion. If BB has no machine at all,
 the dialog says so and cannot create a bot. Change any of these later in **Edit bot**.
 
-The dialog's **Project folder** field is optional and starts at **No project
-folder**, which leaves the bot in your personal workspace. Pick an existing
-project to link the bot to it as a member, or **Choose a folder…** to name a
-project, pick its machine and browse to a folder. Either way the project becomes
+The dialog's **Project folder** row is optional and starts at **No project
+folder**, which leaves the bot in your personal workspace. **Choose…** offers
+**Choose a folder…** and your existing projects. Choosing a folder is one step:
+in the desktop app it opens the system folder dialog; in a browser, or when the
+folder is on another machine, the row becomes a short folder list with **Use
+this folder** and **New folder**. The project takes the folder's name, and the
+row then shows that name and its path, with **Change** and a clear button. A
+machine is asked for only when more than one is connected.
+
+An existing project links the bot as a member. Either way the project becomes
 the bot's default project, where its new conversations start. A folder project
 is created only when you press **Create**, and the bot owns it and runs on that
 folder's machine; cancelling the dialog first creates nothing. If the project is
-created but saving the bot then fails, the dialog keeps that project selected
-and says so: pressing **Create** again reuses it, and it stays if you cancel.
-Choosing a folder needs a connected machine.
+created but saving the bot then fails, the row keeps that project and says so:
+pressing **Create** again reuses it, and it stays if you cancel. Choosing a
+folder needs a connected machine.
 
-You can also create a work project directly inside an existing bot's
-**Projects** card. Choose a machine and folder (or use **Browse…**). Missing folders
-are created; existing files are not changed. The bot becomes the new project's
-**Owner** straight away.
+**New project…** in an existing bot's **Projects** card and **Project** in the
+Bots header's **+** menu choose a folder the same way, then create the project
+straight away. From the card the bot becomes the new project's **Owner**.
+Missing folders are created; existing files are not changed.
 
-**Create project** is an explicit, immediate action. Unlinking the project from the
-bot later does not delete it or its files. Unsaved project forms create nothing.
-Retries retain the same request ID to avoid duplicate projects. Existing folder
-registrations are rejected rather than silently reused. Bot state stays private
+Creating a project is immediate once its folder is chosen. Unlinking the project
+from the bot later does not delete it or its files. Closing the folder list
+creates nothing. Retries of the same folder retain the same request ID to avoid
+duplicate projects. Existing folder registrations are rejected rather than
+silently reused. Bot state stays private
 in BB; a bot still needs no project or special working directory.
 
 ## State tools

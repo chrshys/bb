@@ -19,7 +19,7 @@ import {LitElement,html} from 'https://esm.sh/lit@3';
 const rows={
 fixed:[
 ['Editable machine','Create and Edit bot now share a BB Select-based MachineSelect. Saves include hostId in the same revision-checked identity/state transaction. Missing enrolled targets are rejected; an unchanged unavailable target remains editable. Offline enrolled machines remain valid future defaults. Existing threads and project sources stay in place.','app.tsx · contract.ts · server.ts · components/machine-select.tsx'],
-['Shared project control','Project creation reuses the same machine component, disabling offline entries because browsing and creating require a connection. Changing machine clears that form’s folder and invalidates pending browse results.','components/project-create-form.tsx'],
+['Shared project control','Project creation lists folders on connected machines only, because browsing and creating require a connection. Changing machine reloads the folder list and invalidates pending browse results.','components/folder-chooser.tsx'],
 ['Reconnect and races','Reconcile with bots_list after reconnect. A request sequence prevents older responses or completions after unmount from overwriting newer UI state.','app.tsx · tests/realtime-refresh.test.tsx'],
 ['UI registry and theme','components.json now points at the actual style.css. Selected bot rows use the host state-active token. BB Select retains portal scope, shared Radix behavior, and data-highlighted styling; only its three icon glyphs use local SVGs.','components.json · style.css · components/ui/select.tsx']
 ],
