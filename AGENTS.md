@@ -68,3 +68,14 @@ The product goal is a polished knowledge-work harness built on top of BB.
 - Customize presentation without silently removing native capabilities. Reuse the same underlying actions across right-click menus, overflow menus, keyboard controls, and touch surfaces.
 - Preserve native state, confirmations, permissions, and lifecycle behavior. Avoid parallel implementations of pinning, notifications, archiving, deletion, or other built-in thread actions.
 - Aim for coherent, restrained visual design, accessible controls, and low-friction knowledge work rather than novelty or duplicated features.
+
+## Maintaining the fork
+
+- `custom` is the fork's branch. `main` mirrors `upstream/main` (`get-bb/bb`) and takes no fork commits. `origin` is `chrshys/bb`, which is public.
+- Commit fork work in small, single-purpose commits on `custom`. Never leave fork work only in the working tree or only in BB's plugin cache.
+- Bots Sidebar lives in its own repository at `~/Projects/bb-bots-sidebar` (branch `custom`, `upstream` is `tobi/bb-bots-sidebar`). Edit it there, never under `<data dir>/plugins/cache`.
+- Core must not reference a plugin's class names, ids, or data. When a plugin needs something from core, add an `experimental_` extension point and have the plugin feature-detect it so it still loads on stock BB.
+- Take upstream changes by merging `upstream/main` into `custom`. Keep fork edits to upstream files minimal and unformatted beyond the lines changed, so merges stay small.
+- `HOST_DAEMON_PROTOCOL_VERSION` tracks upstream. Bump it in the fork only for a wire change the fork makes, and after a merge set it above upstream's value.
+- Fork database migrations must sort after every upstream migration, in both journal index and `when` timestamp. The migrator skips a migration whose timestamp is older than the latest applied one and then refuses to start. After merging upstream migrations, regenerate the fork's migrations on top of them, and repair the applied-migration ledger of any existing database before starting it.
+- In a sandboxed agent session, pass `--env-mode=loose` to Turbo test runs so `TMPDIR` reaches Vitest.
