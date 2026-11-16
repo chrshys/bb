@@ -1431,10 +1431,12 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Embed a thread, a new-thread prompt box, or a textarea with editable voice input",
           "Render Markdown, code, diffs, and file links, and copy text, the way bb does",
-          "Add or override app icons",
+          "Add or override app icons, and open the operating system's folder dialog",
           "Match bb's styling with no extra work",
         ],
         apiSymbols: [
+          "experimental_useNativeFolderPicker",
+          "ExperimentalNativeFolderPicker",
           "experimental_Icon",
           "experimental_ProviderIcon",
           "ExperimentalProviderIconProps",

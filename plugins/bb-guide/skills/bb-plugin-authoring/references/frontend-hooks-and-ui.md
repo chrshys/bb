@@ -41,6 +41,13 @@ Hooks:
   zero-based option index, and a way to act when the person presses one. The
   registry's `question-form` item uses it. Empty outside a pending interaction
   and in `renderSlot`.
+- `experimental_useNativeFolderPicker()` → `{ hostId, pickFolder }`: the
+  operating system's folder dialog, the one bb's Add project opens. `hostId` is
+  the machine the desktop app runs on, or null when there is no dialog (a
+  browser tab); offer your own folder list then, and for any other machine.
+  `pickFolder()` resolves with the chosen absolute path, or null when
+  cancelled, and rejects when the dialog cannot be shown. `renderSlot` takes a
+  `nativeFolderPicker` option and defaults to no dialog.
 - `useBbNavigate()` → `{ toThread(id), toProject(id), toPluginPanel(path,
 { subPath?, replace? }?), toCompose({ initialPrompt?, focusPrompt? }?),
 openThreadPanel({ actionId, title?, params? }), openUrl(url),

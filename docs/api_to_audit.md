@@ -2290,6 +2290,41 @@ returns `renderSlot`'s `pluginId` option, `test-plugin` by default.
 3. **Consumer count.** One consumer today. Confirm a second plugin needs it
    before the prefix drops.
 
+## `app.experimental_useNativeFolderPicker` (`@get-bb/plugin-sdk/app`)
+
+**What it does.** Returns `{ hostId, pickFolder }` for the operating system's
+folder dialog. `hostId` is the machine this desktop window runs on when its
+daemon can show the dialog, and null otherwise (a plain browser tab, a platform
+without one). `pickFolder()` opens the dialog and resolves with the chosen
+folder's normalized absolute path, or null when the person cancels or no dialog
+is available; it rejects when the dialog could not be shown. The test harness
+returns `renderSlot`'s `nativeFolderPicker` option, which defaults to no dialog.
+
+**Core callers.** `useNativeFolderPicker` in
+`apps/app/src/hooks/useNativeFolderPicker.ts` is the implementation and the
+only caller of `sdk.hosts.pickFolder`. Core's `useLocalPathPicker` goes through
+it for Add project (`useQuickCreateProject`), a project's path and its added
+sources, and falls back to `ProjectPathDialog` when `hostId` is not the machine
+it is choosing for. Bots Sidebar is the first plugin consumer: its project
+folder choice opens the dialog when the only connected machine is `hostId`, and
+shows its own folder list otherwise.
+
+**Audit before stabilizing.**
+
+1. **Fallback.** The hook offers only the OS dialog, so every consumer builds
+   its own list for a remote machine or a browser tab. A plugin dialog that
+   opens core's `ProjectPathDialog` would stack two modal layers from two
+   copies of the dialog primitives. Decide whether the host should own one
+   whole "choose a folder on a machine" flow instead, and where it renders.
+2. **Machine choice.** `hostId` names one machine. Confirm consumers agree with
+   core on when to skip the dialog (core does when several machines are
+   connected), or move that rule into the hook.
+3. **Result shape.** The path is a bare string. Decide whether the derived
+   project name (`deriveProjectNameFromPath`) or the machine belongs in the
+   result so consumers do not re-derive them.
+4. **Consumer count.** One plugin consumer. Confirm a second needs it before
+   the prefix drops.
+
 ## `app.experimental_useQuestionFormHost` (`@get-bb/plugin-sdk/app`)
 
 **What it does.** Returns the answer shortcuts bb binds while a pending

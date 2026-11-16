@@ -386,6 +386,7 @@ Read the installed declarations for exact current signatures.
 - `ExperimentalNativeRootsResolveInput`
 - `ExperimentalNativeRootsResolveOutput`
 - `ExperimentalProcessIdentity`
+- `ExperimentalNativeFolderPicker`
 - `ExperimentalQuestionFormHost`
 - `ExperimentalQuestionShortcut`
 - `ExperimentalSanitizeInheritedChildProcessEnvArgs`
