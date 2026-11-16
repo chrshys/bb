@@ -1,0 +1,364 @@
+name: Build BBC Desktop Test Channel
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_channel:
+        description: BBC update channel
+        required: true
+        type: choice
+        default: latest
+        options:
+          - latest
+          - nightly
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-bbc-desktop-test-${{ inputs.release_channel }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22.x"
+  PNPM_VERSION: "9.15.0"
+  BB_DESKTOP_RELEASE_CHANNEL: ${{ inputs.release_channel }}
+
+jobs:
+  guard:
+    name: Verify BBC test release target
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require the custom branch in chrshys/bb
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          test "$REPOSITORY" = "chrshys/bb" || {
+            echo "::error::BBC test builds may run only in chrshys/bb."
+            exit 1
+          }
+          test "$REF" = "refs/heads/custom" || {
+            echo "::error::BBC test builds may publish only from custom."
+            exit 1
+          }
+
+  macos:
+    name: macOS arm64 BBC installer and metadata
+    needs: guard
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Verify arm64 runner
+        run: test "$(uname -m)" = "arm64"
+
+      - name: Validate optional Apple signing and notarization credentials
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          keys=(MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD APPLE_ID APPLE_APP_PASSWORD APPLE_TEAM_ID)
+          present=0
+          for key in "${keys[@]}"; do
+            [[ -n "${!key:-}" ]] && ((present += 1))
+          done
+          if (( present != 0 && present != ${#keys[@]} )); then
+            echo "::error::Set all Apple signing/notarization secrets or leave all unset. Friendly-test builds use an ad-hoc signature and manual Mac installation."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build desktop dependencies
+        run: pnpm exec turbo run build --filter=@bb/desktop --output-logs=new-only
+
+      - name: Install Electron
+        run: ELECTRON_RUN_AS_NODE=1 pnpm --filter @bb/desktop exec electron --version
+
+      - name: Package BBC app (signed/notarized when credentials are configured)
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          CSC_NAME: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: pnpm exec turbo run desktop:build --filter=@bb/desktop --force --output-logs=new-only
+
+      - name: Generate renderer version feed
+        run: pnpm --dir apps/desktop run desktop:version-feed
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bbc-desktop-macos-arm64
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest-mac.yml
+            apps/desktop/release/nightly-mac.yml
+            apps/desktop/release/desktop-version.json
+          if-no-files-found: error
+
+  linux:
+    name: Linux x64 BBC AppImage and metadata
+    needs: guard
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Install AppImage FUSE runtime
+        uses: ./.github/actions/install-appimage-fuse
+        timeout-minutes: 5
+
+      - name: Build desktop dependencies
+        run: pnpm exec turbo run build --filter=@bb/desktop --output-logs=new-only
+
+      - name: Package BBC AppImage
+        run: pnpm exec turbo run desktop:build:linux --filter=@bb/desktop --output-logs=new-only
+
+      - name: Generate renderer version feed
+        run: pnpm --dir apps/desktop run desktop:version-feed
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bbc-desktop-linux-x64
+          path: |
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest-linux.yml
+            apps/desktop/release/nightly-linux.yml
+            apps/desktop/release/desktop-version-linux.json
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64 BBC installer and metadata
+    needs: guard
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build desktop dependencies
+        run: pnpm exec turbo run build --filter=@bb/desktop --output-logs=new-only
+
+      - name: Package BBC installer
+        env:
+          WIN_CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: pnpm exec turbo run desktop:build:win --filter=@bb/desktop --output-logs=new-only
+
+      - name: Generate renderer version feed
+        run: pnpm --dir apps/desktop run desktop:version-feed
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bbc-desktop-windows-x64
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest.yml
+            apps/desktop/release/nightly.yml
+            apps/desktop/release/desktop-version-windows.json
+          if-no-files-found: error
+
+  publish:
+    name: Publish complete BBC test channel
+    needs:
+      - guard
+      - macos
+      - linux
+      - windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bbc-desktop-macos-arm64
+          path: release/macos
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bbc-desktop-linux-x64
+          path: release/linux
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bbc-desktop-windows-x64
+          path: release/windows
+
+      - name: Replace BBC channel only after every platform succeeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.release_channel }}
+          SOURCE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test "$REPOSITORY" = "chrshys/bb"
+          case "$CHANNEL" in
+            latest) TAG="bbc-desktop-test"; MAC_YML="latest-mac.yml"; LINUX_YML="latest-linux.yml"; WINDOWS_YML="latest.yml" ;;
+            nightly) TAG="bbc-desktop-nightly"; MAC_YML="nightly-mac.yml"; LINUX_YML="nightly-linux.yml"; WINDOWS_YML="nightly.yml" ;;
+            *) echo "::error::Unsupported BBC update channel: $CHANNEL"; exit 1 ;;
+          esac
+
+          MACOS_DIR="release/macos"
+          LINUX_DIR="release/linux"
+          WINDOWS_DIR="release/windows"
+          test -s "$MACOS_DIR/$MAC_YML"
+          test -s "$MACOS_DIR/desktop-version.json"
+          test -s "$LINUX_DIR/$LINUX_YML"
+          test -s "$LINUX_DIR/desktop-version-linux.json"
+          test -s "$WINDOWS_DIR/$WINDOWS_YML"
+          test -s "$WINDOWS_DIR/desktop-version-windows.json"
+          compgen -G "$MACOS_DIR/*.dmg" >/dev/null
+          compgen -G "$MACOS_DIR/*.zip" >/dev/null
+          compgen -G "$LINUX_DIR/*.AppImage" >/dev/null
+          compgen -G "$WINDOWS_DIR/*.exe" >/dev/null
+
+          BUILD_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const expectedChannel = process.env.CHANNEL;
+          const expectedVersion = require("./apps/desktop/package.json").version;
+          const feeds = [
+            ["release/macos/desktop-version.json", "macos"],
+            ["release/linux/desktop-version-linux.json", "linux"],
+            ["release/windows/desktop-version-windows.json", "windows"],
+          ];
+          for (const [path, platform] of feeds) {
+            const feed = JSON.parse(fs.readFileSync(path, "utf8"));
+            if (feed.version !== expectedVersion || feed.channel !== expectedChannel || feed.platform !== platform) {
+              throw new Error(`Unexpected update feed metadata in ${path}`);
+            }
+          }
+          NODE
+          [[ "$BUILD_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::BBC test channels require a stable x.y.z package version, got $BUILD_VERSION."
+            exit 1
+          }
+
+          shopt -s nullglob
+          BINARIES=(
+            "$MACOS_DIR"/*.dmg "$MACOS_DIR"/*.zip "$MACOS_DIR"/*.blockmap
+            "$LINUX_DIR"/*.AppImage "$LINUX_DIR"/*.blockmap
+            "$WINDOWS_DIR"/*.exe "$WINDOWS_DIR"/*.blockmap
+          )
+          if [[ "$CHANNEL" == latest ]]; then
+            UPDATE_METADATA=("$MACOS_DIR/latest-mac.yml" "$LINUX_DIR/latest-linux.yml" "$WINDOWS_DIR/latest.yml")
+          else
+            UPDATE_METADATA=("$MACOS_DIR/nightly-mac.yml" "$LINUX_DIR/nightly-linux.yml" "$WINDOWS_DIR/nightly.yml")
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            PREVIOUS_FEED_DIR="$(mktemp -d)"
+            trap 'rm -rf "$PREVIOUS_FEED_DIR"' EXIT
+            gh release download "$TAG" --pattern desktop-version.json --dir "$PREVIOUS_FEED_DIR"
+            PREVIOUS_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('$PREVIOUS_FEED_DIR/desktop-version.json', 'utf8')).version")"
+            [[ "$PREVIOUS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "::error::Existing BBC channel version is invalid: $PREVIOUS_VERSION"
+              exit 1
+            }
+            NEWEST_VERSION="$(printf '%s\n' "$PREVIOUS_VERSION" "$BUILD_VERSION" | sort -V | tail -n 1)"
+            if [[ "$NEWEST_VERSION" != "$BUILD_VERSION" || "$BUILD_VERSION" == "$PREVIOUS_VERSION" ]]; then
+              echo "::error::BBC channel versions must increase: current $PREVIOUS_VERSION, build $BUILD_VERSION."
+              exit 1
+            fi
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "BBC desktop $CHANNEL test channel" \
+              --notes "BBC desktop $CHANNEL test build from ${SOURCE_SHA}."
+          else
+            gh release create "$TAG" \
+              --title "BBC desktop $CHANNEL test channel" \
+              --notes "BBC desktop $CHANNEL test build from ${SOURCE_SHA}."
+          fi
+          gh release upload "$TAG" "${BINARIES[@]}" --clobber
+          gh release upload "$TAG" "${UPDATE_METADATA[@]}" --clobber
+          gh release upload "$TAG" \
+            "$MACOS_DIR/desktop-version.json" \
+            "$LINUX_DIR/desktop-version-linux.json" \
+            "$WINDOWS_DIR/desktop-version-windows.json" \
+            --clobber
+
+      - name: Summarize test channel
+        env:
+          CHANNEL: ${{ inputs.release_channel }}
+        run: |
+          if [[ "$CHANNEL" == nightly ]]; then TAG="bbc-desktop-nightly"; else TAG="bbc-desktop-test"; fi
+          {
+            echo "## BBC desktop test channel"
+            echo
+            echo "- release: https://github.com/chrshys/bb/releases/tag/${TAG}"
+            echo "- macOS version feed: https://github.com/chrshys/bb/releases/download/${TAG}/desktop-version.json"
+            echo "- Linux version feed: https://github.com/chrshys/bb/releases/download/${TAG}/desktop-version-linux.json"
+            echo "- Windows version feed: https://github.com/chrshys/bb/releases/download/${TAG}/desktop-version-windows.json"
+          } >> "$GITHUB_STEP_SUMMARY"

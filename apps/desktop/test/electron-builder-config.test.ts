@@ -105,7 +105,16 @@ const electronBuilderConfigSchema = z
     appId: z.string().min(1),
     artifactName: z.string().min(1),
     productName: z.string().min(1),
-    publish: z.null(),
+    publish: z.union([
+      z.null(),
+      z.array(
+        z.object({
+          channel: z.enum(["latest", "nightly"]),
+          provider: z.literal("generic"),
+          url: z.string().url(),
+        }),
+      ),
+    ]),
     toolsets: z.object({
       appimage: z.literal("1.0.3"),
     }),
@@ -542,16 +551,22 @@ describe("electron-builder signing config", () => {
     }
   });
 
-  it("gives the fork its own app identity and no update feed", async () => {
+  it("gives the fork its own identity and BBC-only update feed", async () => {
     const { config } = await readResolvedConfig({});
 
     expect(config.appId).toBe("dev.bbc.desktop");
     expect(config.productName).toBe("BBC");
     expect(config.linux.executableName).toBe("bbc");
-    expect(config.publish).toBeNull();
+    expect(config.publish).toEqual([
+      {
+        channel: "latest",
+        provider: "generic",
+        url: "https://github.com/chrshys/bb/releases/download/bbc-desktop-test/",
+      },
+    ]);
   });
 
-  it("creates a separate nightly app identity without an update feed", async () => {
+  it("creates a separate nightly app identity and BBC-only update feed", async () => {
     const { config } = await readResolvedConfig({
       BB_DESKTOP_RELEASE_CHANNEL: "nightly",
     });
@@ -568,7 +583,13 @@ describe("electron-builder signing config", () => {
     await expect(
       access(resolve(desktopPackageRoot, "assets/icon-nightly.png")),
     ).resolves.toBeUndefined();
-    expect(config.publish).toBeNull();
+    expect(config.publish).toEqual([
+      {
+        channel: "nightly",
+        provider: "generic",
+        url: "https://github.com/chrshys/bb/releases/download/bbc-desktop-nightly/",
+      },
+    ]);
   });
 
   it("rejects unknown desktop release channels", async () => {
@@ -595,7 +616,7 @@ describe("electron-builder signing config", () => {
       CSC_IDENTITY_AUTO_DISCOVERY: "false",
     });
 
-    expect(config.mac.identity).toBeNull();
+    expect(config.mac.identity).toBe("-");
     expect(config.mac.notarize).toBe(false);
   });
 

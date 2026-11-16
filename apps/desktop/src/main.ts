@@ -182,10 +182,10 @@ import {
 } from "./desktop-platform.js";
 import { createDesktopUpdateService } from "./desktop-update-check.js";
 import {
-  createDesktopUpdateFeedUrl,
   DESKTOP_AUTO_UPDATE_FEED_CONFIG,
   DESKTOP_RELEASE_CHANNEL,
   DESKTOP_RELEASE_INFO,
+  resolveDesktopVersionFeedUrl,
   resolveDesktopUpdateSupport,
 } from "./desktop-update-provider.js";
 import type { DesktopUpdateService } from "./desktop-update-scheduler.js";
@@ -402,6 +402,8 @@ let currentAppKeybindings: AppKeybindings = [];
 let currentApplicationMenuAccelerators = DEFAULT_APPLICATION_MENU_ACCELERATORS;
 let desktopUpdateService: DesktopUpdateService | null = null;
 let desktopAutoUpdateService: DesktopAutoUpdateService | null = null;
+let desktopUpdateInstallMode: "automatic" | "manual" = "automatic";
+let desktopUpdateDownloadUrl: string | undefined;
 let currentRuntime: DesktopRuntime | null = null;
 let currentWindowUrl: string | null = null;
 let logViewerLineBuffer: LogLineBuffer | null = null;
@@ -491,11 +493,11 @@ function canReplaceAppImage(appImagePath: string): boolean {
 function resolveDesktopUpdateFeedUrl(
   args: ResolveDesktopUpdateFeedUrlArgs,
 ): string | null {
-  const rawFeedUrl = args.env.BB_DESKTOP_VERSION_FEED_URL?.trim();
-  if (rawFeedUrl === undefined || rawFeedUrl.length === 0) {
-    return createDesktopUpdateFeedUrl(args.platform);
-  }
-  return rawFeedUrl;
+  return resolveDesktopVersionFeedUrl(
+    args.platform,
+    DESKTOP_RELEASE_CHANNEL,
+    args.env.BB_DESKTOP_VERSION_FEED_URL?.trim() || undefined,
+  );
 }
 
 function readDesktopAboutFacts(applicationName: string): DesktopAboutFacts {
@@ -546,6 +548,10 @@ function getCurrentDesktopInfo(): BbDesktopInfo | null {
   }
   return {
     ...info,
+    installMode: desktopUpdateInstallMode,
+    ...(desktopUpdateDownloadUrl === undefined
+      ? {}
+      : { updateDownloadUrl: desktopUpdateDownloadUrl }),
     serverDaemonLogsAvailable: shouldEnableServerDaemonLogsMenu(),
   };
 }
@@ -2914,10 +2920,13 @@ async function runDesktopApp(): Promise<void> {
 
   const desktopUpdateSupport = resolveDesktopUpdateSupport({
     canReplaceAppImage,
+    channel: DESKTOP_RELEASE_CHANNEL,
     env: process.env,
     platform: desktopPlatform,
     updateReleaseBaseUrl: DESKTOP_RELEASE_INFO.updateReleaseBaseUrl,
   });
+  desktopUpdateInstallMode = desktopUpdateSupport.installMode;
+  desktopUpdateDownloadUrl = desktopUpdateSupport.updateDownloadUrl;
   desktopUpdateService = createDesktopUpdateService({
     channel: DESKTOP_RELEASE_CHANNEL,
     currentVersion: desktopVersion,

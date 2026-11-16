@@ -87,8 +87,8 @@ function logSigningPlan(signingPlan) {
       "macOS code signing via keychain auto-discovery; artifacts stay unsigned if no identity is installed. Notarization skipped.",
     );
   } else {
-    logWarning(
-      "macOS signing skipped: CSC_IDENTITY_AUTO_DISCOVERY=false and no signing secrets found. Artifacts will be unsigned.",
+    console.log(
+      "macOS Developer ID signing and notarization skipped; packaging uses ad-hoc signing for friendly-test builds.",
     );
   }
 
@@ -114,10 +114,10 @@ function autoDiscoveryExplicitlyDisabled(env) {
  *   notarization is unnecessary, but a valid signature is not optional: an
  *   unsigned bundle is provenance-tracked by macOS, which forces syspolicyd to
  *   evaluate every exec in the app's process tree and can stall execs
- *   system-wide. Machines without a signing identity fall back to unsigned
- *   artifacts inside electron-builder.
- * - "disabled": no secrets and CSC_IDENTITY_AUTO_DISCOVERY=false — explicitly
- *   unsigned (the CI path for workflow-artifact-only builds).
+ *   system-wide. Machines without a signing identity can still create a local
+ *   unsigned artifact.
+ * - "disabled": no secrets and CSC_IDENTITY_AUTO_DISCOVERY=false — use an
+ *   ad-hoc signature without Developer ID or notarization.
  */
 function createSigningPlan(env) {
   const presentSigningKeys = presentEnvironmentKeys(
@@ -170,7 +170,7 @@ function resolveElectronBuilderConfig(baseConfig, env, electronBuilderArgs) {
   };
 
   if (signingPlan.mode === "disabled") {
-    mac.identity = null;
+    mac.identity = "-";
   } else if (signingPlan.identityName) {
     mac.identity = signingPlan.identityName;
   } else {

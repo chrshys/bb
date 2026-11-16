@@ -16,6 +16,7 @@ const bbDesktopDownloadStateSchema = z.enum([
 
 export const bbDesktopInfoSchema = z.object({
   downloadState: bbDesktopDownloadStateSchema.optional(),
+  installMode: z.enum(["automatic", "manual"]).optional(),
   lastCheckedAt: isoUtcDateTimeSchema.nullable(),
   latestVersion: z.string().min(1).nullable(),
   pendingVersion: z.string().min(1).nullable(),
@@ -23,6 +24,7 @@ export const bbDesktopInfoSchema = z.object({
   serverDaemonLogsAvailable: z.boolean().optional(),
   updateAvailable: z.boolean(),
   updateDownloaded: z.boolean(),
+  updateDownloadUrl: z.string().url().optional(),
   version: z.string().min(1),
 });
 export type BbDesktopInfo = z.infer<typeof bbDesktopInfoSchema>;

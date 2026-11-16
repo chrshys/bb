@@ -14,7 +14,7 @@ export interface DesktopReleaseConfig {
   iconFileName: "icon.png" | "icon-nightly.png";
   linuxExecutableName: "bbc" | "bbc-nightly";
   macIconPath: "assets/icon.icns" | "assets/icon-nightly.icns";
-  releaseTag: "desktop-latest" | "desktop-nightly";
+  releaseTag: "bbc-desktop-test" | "bbc-desktop-nightly";
   updateMetadataFileNames: DesktopUpdateMetadataFileNames;
   windowsInstallName: "bbc" | "bbc-nightly";
 }
@@ -33,4 +33,4 @@ export function createDesktopReleaseConfig(
 
 export function createDesktopUpdateReleaseBaseUrl(
   releaseTag: DesktopReleaseConfig["releaseTag"],
-): string | null;
+): string;

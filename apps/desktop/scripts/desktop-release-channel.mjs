@@ -1,4 +1,6 @@
 const DESKTOP_RELEASE_CHANNEL_ENV_NAME = "BB_DESKTOP_RELEASE_CHANNEL";
+const DESKTOP_UPDATE_RELEASES_BASE_URL =
+  "https://github.com/chrshys/bb/releases/download/";
 
 export function resolveDesktopReleaseChannel(env) {
   const rawChannel = env[DESKTOP_RELEASE_CHANNEL_ENV_NAME]?.trim();
@@ -41,7 +43,7 @@ export function createDesktopReleaseConfig(channel) {
       // installed at once without one shadowing the other on PATH.
       linuxExecutableName: "bbc-nightly",
       macIconPath: "assets/icon-nightly.icns",
-      releaseTag: "desktop-nightly",
+      releaseTag: "bbc-desktop-nightly",
       windowsInstallName: "bbc-nightly",
       updateMetadataFileNames: {
         linux: "nightly-linux.yml",
@@ -58,7 +60,7 @@ export function createDesktopReleaseConfig(channel) {
     iconFileName: "icon.png",
     linuxExecutableName: "bbc",
     macIconPath: "assets/icon.icns",
-    releaseTag: "desktop-latest",
+    releaseTag: "bbc-desktop-test",
     windowsInstallName: "bbc",
     updateMetadataFileNames: {
       linux: "latest-linux.yml",
@@ -68,10 +70,6 @@ export function createDesktopReleaseConfig(channel) {
   };
 }
 
-const DESKTOP_UPDATE_RELEASES_URL = null;
-
 export function createDesktopUpdateReleaseBaseUrl(releaseTag) {
-  return DESKTOP_UPDATE_RELEASES_URL === null
-    ? null
-    : `${DESKTOP_UPDATE_RELEASES_URL}${releaseTag}/`;
+  return `${DESKTOP_UPDATE_RELEASES_BASE_URL}${releaseTag}/`;
 }

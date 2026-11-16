@@ -5,31 +5,40 @@ import {
 
 type DesktopReleaseChannel = "latest" | "nightly";
 
-const DESKTOP_UPDATE_RELEASES_URL: string | null = null;
+const DESKTOP_UPDATE_RELEASES_BASE_URL =
+  "https://github.com/chrshys/bb/releases/download/";
+
+function resolveDesktopUpdateReleaseBaseUrl(releaseTag: string): string {
+  const expectedUrl = `${DESKTOP_UPDATE_RELEASES_BASE_URL}${releaseTag}/`;
+  const builtUrl = process.env.BB_DESKTOP_UPDATE_RELEASE_BASE_URL;
+  if (builtUrl !== undefined && builtUrl !== expectedUrl) {
+    throw new Error(
+      `Built BBC update URL must be ${expectedUrl}, got ${builtUrl}.`,
+    );
+  }
+  return expectedUrl;
+}
 
 interface DesktopReleaseInfo {
   applicationName: "BBC" | "BBC Nightly";
   channel: DesktopReleaseChannel;
   iconFileName: "icon.png" | "icon-nightly.png";
-  releaseTag: "desktop-latest" | "desktop-nightly";
-  updateReleaseBaseUrl: string | null;
+  releaseTag: "bbc-desktop-test" | "bbc-desktop-nightly";
+  updateReleaseBaseUrl: string;
 }
 
 export function createDesktopReleaseInfo(
   channel: DesktopReleaseChannel,
 ): DesktopReleaseInfo {
   const nightly = channel === "nightly";
-  const releaseTag = nightly ? "desktop-nightly" : "desktop-latest";
+  const releaseTag = nightly ? "bbc-desktop-nightly" : "bbc-desktop-test";
 
   return {
     applicationName: nightly ? "BBC Nightly" : "BBC",
     channel,
     iconFileName: nightly ? "icon-nightly.png" : "icon.png",
     releaseTag,
-    updateReleaseBaseUrl:
-      DESKTOP_UPDATE_RELEASES_URL === null
-        ? null
-        : `${DESKTOP_UPDATE_RELEASES_URL}${releaseTag}/`,
+    updateReleaseBaseUrl: resolveDesktopUpdateReleaseBaseUrl(releaseTag),
   };
 }
 
@@ -54,15 +63,11 @@ export const DESKTOP_RELEASE_CHANNEL = resolveBuiltDesktopReleaseChannel(
 export const DESKTOP_RELEASE_INFO = createDesktopReleaseInfo(
   DESKTOP_RELEASE_CHANNEL,
 );
-const DESKTOP_UPDATE_RELEASE_BASE_URL =
-  DESKTOP_RELEASE_INFO.updateReleaseBaseUrl;
 
 export function createDesktopUpdateFeedUrl(
   platform: BbDesktopVersionFeedPlatform,
-): string | null {
-  return DESKTOP_UPDATE_RELEASE_BASE_URL === null
-    ? null
-    : `${DESKTOP_UPDATE_RELEASE_BASE_URL}${createBbDesktopVersionFeedFileName(platform)}`;
+): string {
+  return `${DESKTOP_RELEASE_INFO.updateReleaseBaseUrl}${createBbDesktopVersionFeedFileName(platform)}`;
 }
 
 export interface DesktopAutoUpdateFeedConfig {
@@ -71,22 +76,40 @@ export interface DesktopAutoUpdateFeedConfig {
   url: string;
 }
 
-export const DESKTOP_AUTO_UPDATE_FEED_CONFIG: DesktopAutoUpdateFeedConfig | null =
-  DESKTOP_UPDATE_RELEASE_BASE_URL === null
-    ? null
-    : {
-        channel: DESKTOP_RELEASE_CHANNEL,
-        provider: "generic",
-        url: DESKTOP_UPDATE_RELEASE_BASE_URL,
-      };
+export function createDesktopUpdateReleasePageUrl(channel: DesktopReleaseChannel): string {
+  return `https://github.com/chrshys/bb/releases/tag/${createDesktopReleaseInfo(channel).releaseTag}`;
+}
+
+export function resolveDesktopVersionFeedUrl(
+  platform: BbDesktopVersionFeedPlatform,
+  channel: DesktopReleaseChannel,
+  configuredUrl: string | undefined,
+): string {
+  const expectedUrl = `${createDesktopReleaseInfo(channel).updateReleaseBaseUrl}${createBbDesktopVersionFeedFileName(platform)}`;
+  if (configuredUrl !== undefined && configuredUrl !== expectedUrl) {
+    throw new Error(
+      `Built BBC version feed URL must be ${expectedUrl}, got ${configuredUrl}.`,
+    );
+  }
+  return expectedUrl;
+}
+
+export const DESKTOP_AUTO_UPDATE_FEED_CONFIG: DesktopAutoUpdateFeedConfig = {
+  channel: DESKTOP_RELEASE_CHANNEL,
+  provider: "generic",
+  url: DESKTOP_RELEASE_INFO.updateReleaseBaseUrl,
+};
 
 interface DesktopUpdateSupport {
   autoUpdate: boolean;
+  installMode: "automatic" | "manual";
+  updateDownloadUrl?: string;
   versionCheck: boolean;
 }
 
 interface ResolveDesktopUpdateSupportArgs {
   canReplaceAppImage: (appImagePath: string) => boolean;
+  channel: DesktopReleaseChannel;
   env: NodeJS.ProcessEnv;
   platform: BbDesktopVersionFeedPlatform;
   updateReleaseBaseUrl: string | null;
@@ -96,19 +119,29 @@ export function resolveDesktopUpdateSupport(
   args: ResolveDesktopUpdateSupportArgs,
 ): DesktopUpdateSupport {
   if (args.updateReleaseBaseUrl === null) {
-    return { autoUpdate: false, versionCheck: false };
+    return { autoUpdate: false, installMode: "manual", versionCheck: false };
   }
-  if (args.platform === "macos" || args.platform === "windows") {
-    return { autoUpdate: true, versionCheck: true };
+  if (args.platform === "macos") {
+    return {
+      autoUpdate: false,
+      installMode: "manual",
+      updateDownloadUrl: createDesktopUpdateReleasePageUrl(args.channel),
+      versionCheck: true,
+    };
+  }
+  if (args.platform === "windows") {
+    return { autoUpdate: true, installMode: "automatic", versionCheck: true };
   }
 
   const appImagePath = args.env.APPIMAGE?.trim() ?? "";
   if (appImagePath.length === 0) {
-    return { autoUpdate: false, versionCheck: true };
+    return { autoUpdate: false, installMode: "manual", versionCheck: true };
   }
 
+  const autoUpdate = args.canReplaceAppImage(appImagePath);
   return {
-    autoUpdate: args.canReplaceAppImage(appImagePath),
+    autoUpdate,
+    installMode: autoUpdate ? "automatic" : "manual",
     versionCheck: true,
   };
 }
