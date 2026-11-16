@@ -4,6 +4,7 @@ import { experimental_NewThreadComposer as NewThreadComposer, useBbNavigate, use
 import type { NewThreadRequest, PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import type { BotMetadata, rpcContract } from "../contract";
 import { conversationDraftKey } from "../lib/worktree-launch";
+import { useBotPageOpener } from "../hooks/use-bot-page-opener";
 
 export type ConversationTarget = {
   bot: BotMetadata;
@@ -36,6 +37,14 @@ type ConversationLaunch = z.infer<typeof launchSchema>;
 export function conversationPanelPath(target: ConversationTarget): string {
   const { bot, ...seed } = target;
   return btoa(JSON.stringify(launchSchema.parse({ ...seed, botId: bot.id, launchId: crypto.randomUUID() }))).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+function parseLaunch(subPath: string): ConversationLaunch {
+  return launchSchema.parse(JSON.parse(atob(subPath.replaceAll("-", "+").replaceAll("_", "/"))));
+}
+
+export function conversationLaunchBotId(subPath: string): string | null {
+  try { return parseLaunch(subPath).botId; } catch { return null; }
 }
 
 const submissions = new Map<string, Promise<{ threadId: string }>>();
@@ -91,6 +100,7 @@ function ConversationChat({ launch, bot }: { launch: ConversationLaunch; bot: Bo
 
 function ConversationLoader({ subPath }: { subPath: string }) {
   const rpc = useRpc<typeof rpcContract>();
+  useBotPageOpener("conversation", conversationLaunchBotId(subPath));
   const [target, setTarget] = useState<{ launch: ConversationLaunch; bot: BotMetadata } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -98,7 +108,7 @@ function ConversationLoader({ subPath }: { subPath: string }) {
     let cancelled = false;
     setError(null);
     void (async () => {
-      const launch = launchSchema.parse(JSON.parse(atob(subPath.replaceAll("-", "+").replaceAll("_", "/"))));
+      const launch = parseLaunch(subPath);
       const bot = await rpc.call("bot_prepare", { botId: launch.botId });
       if (!bot.stateReady) throw new Error("The bot’s private state could not be prepared. Try again.");
       if (!cancelled) setTarget({ launch, bot });
