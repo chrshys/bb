@@ -73,6 +73,7 @@ import {
 } from "./lib/route-paths";
 import { AppCommandProvider } from "./components/commands/AppCommandProvider";
 import { WindowFindHost } from "./components/layout/WindowFindHost";
+import { DesktopChromePreview } from "./components/layout/DesktopChromePreview";
 import { DesktopZoomIndicator } from "./components/layout/DesktopZoomIndicator";
 import { ProviderCliInstallLogDialogHost } from "./components/provider-cli/provider-cli-install";
 import { ServerMoveOverlay } from "./components/machines/ServerMoveOverlay";
@@ -495,6 +496,7 @@ export function App() {
               </Routes>
               <WindowFindHost />
               <DesktopZoomIndicator />
+              <DesktopChromePreview />
               <ProviderCliInstallLogDialogHost />
               <ServerMoveOverlay />
               <AppUpdateHost />

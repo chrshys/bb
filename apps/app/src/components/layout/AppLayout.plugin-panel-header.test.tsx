@@ -134,6 +134,7 @@ vi.mock("@/lib/bb-desktop", () => ({
   MACOS_WINDOW_DRAG_CLASS: "",
   MACOS_WINDOW_NO_DRAG_CLASS: "",
   getBbDesktopInfo: () => null,
+  getSimulatedDesktopInfo: () => null,
   shouldReserveMacosTrafficLights: () => false,
   shouldUseMacosDesktopChrome: () => viewportState.macosChrome,
 }));
@@ -280,59 +281,26 @@ describe("AppLayout plugin panel header", () => {
     ).toBeUndefined();
   });
 
-  it("moves the trigger and history controls into a window title bar beside the macOS rail", () => {
+  it("keeps macOS in the floating shell with a reachable sidebar toggle", () => {
     viewportState.macosChrome = true;
     renderPluginPanelRoute();
 
-    const titleBar = screen.getByTestId("app-window-title-bar");
-    expect(screen.getByTestId("app-layout-root").dataset.framed).toBe("");
-    expect(
-      titleBar.contains(
-        screen.getByRole("button", { name: /^Toggle sidebar/ }),
-      ),
-    ).toBe(true);
-    expect(
-      titleBar.contains(screen.getByRole("button", { name: "Go back" })),
-    ).toBe(true);
-    expect(screen.queryByTestId("app-desktop-sidebar-trigger")).toBeNull();
-  });
-
-  it("adds the right panel toggle to the macOS title bar row only while a page has a right panel", () => {
-    viewportState.macosChrome = true;
-    function RightPanelPage({ isOpen }: { isOpen: boolean }) {
-      useWindowRightPanel({ isOpen, enabled: true });
-      return null;
-    }
-    function renderRoute(page: ReactNode) {
-      return (
-        <MemoryRouter initialEntries={["/plugins/helm-wiki/wiki"]}>
-          <AppLayout>{page}</AppLayout>
-        </MemoryRouter>
-      );
-    }
-    const view = render(renderRoute(null));
-    expect(screen.queryByTestId("window-right-panel-toggle")).toBeNull();
-
-    view.rerender(renderRoute(<RightPanelPage isOpen={false} />));
-    const toggle = screen.getByTestId("window-right-panel-toggle");
-    expect(screen.getByTestId("app-window-title-bar").contains(toggle)).toBe(
-      true,
+    expect(screen.getByTestId("app-layout-root").dataset.floatingChrome).toBe(
+      "",
     );
-    expect(toggle.getAttribute("aria-label")).toBe("Show right panel");
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
-
-    view.rerender(renderRoute(<RightPanelPage isOpen />));
+    expect(
+      screen.getByTestId("app-layout-root").dataset.framed,
+    ).toBeUndefined();
+    expect(screen.queryByTestId("app-window-title-bar")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Toggle sidebar/ }));
     expect(
       screen
-        .getByTestId("window-right-panel-toggle")
-        .getAttribute("aria-label"),
-    ).toBe("Hide right panel");
-
-    view.rerender(renderRoute(null));
-    expect(screen.queryByTestId("window-right-panel-toggle")).toBeNull();
+        .getByRole("button", { name: /^Toggle sidebar/ })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
-  it("keeps the sidebar toggle in the rail column and no title bar on wide web, Windows, and Linux windows", () => {
+  it("keeps the floating sidebar toggle and page-owned panel controls on web, Windows, and Linux", () => {
     function RightPanelPage() {
       useWindowRightPanel({ isOpen: false, enabled: true });
       return null;

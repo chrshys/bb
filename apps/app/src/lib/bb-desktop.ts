@@ -40,7 +40,7 @@ export function getBbDesktopInfo(): BbDesktopInfoResult {
 export function shouldUseMacosDesktopChrome(
   desktopInfo: BbDesktopInfoResult,
 ): boolean {
-  return desktopInfo?.platform === "macos";
+  return (desktopInfo ?? getSimulatedDesktopInfo())?.platform === "macos";
 }
 
 export function shouldReserveMacosTrafficLights({
@@ -86,4 +86,23 @@ export function getDesktopBrowserApi(): BbDesktopBrowserApi | null {
 
 export function isDesktopBrowserAvailable(): boolean {
   return getDesktopBrowserApi() !== null;
+}
+
+export function getSimulatedDesktopInfo(): {
+  platform: "macos";
+  isFullScreen: boolean;
+} | null {
+  if (!import.meta.env.DEV || typeof window === "undefined" || window.bbDesktop)
+    return null;
+  const requestedMode = new URLSearchParams(window.location.search).get(
+    "desktopChrome",
+  );
+  let mode = requestedMode;
+  try {
+    if (requestedMode !== null)
+      sessionStorage.setItem("bbc.desktopChrome", requestedMode);
+    mode ??= sessionStorage.getItem("bbc.desktopChrome");
+  } catch {}
+  if (mode !== "macos" && mode !== "fullscreen") return null;
+  return { platform: "macos", isFullScreen: mode === "fullscreen" };
 }

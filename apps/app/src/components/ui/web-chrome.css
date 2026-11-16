@@ -73,3 +73,63 @@
     background: transparent;
   }
 }
+
+:where([data-floating-chrome]) [data-testid="app-nav-rail"] {
+  display: none;
+}
+:where([data-floating-chrome]) [data-testid="nav-rail-sidebar-body"] > div {
+  width: 100%;
+}
+:where([data-floating-chrome])
+  [data-testid="sidebar-footer-row"]
+  > :first-child {
+  width: auto;
+  flex: 0 1 50%;
+  justify-content: stretch;
+  padding: 8px;
+  background: transparent;
+}
+:where([data-floating-chrome])
+  [data-testid="sidebar-footer-row"]
+  button[aria-label^="Settings"] {
+  width: 100%;
+  justify-content: flex-start;
+  padding-inline: 8px;
+  gap: 8px;
+  min-height: 36px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+}
+:where([data-floating-chrome])
+  [data-testid="sidebar-footer-row"]
+  button[aria-label^="Settings"]::after {
+  content: "Settings";
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+:where([data-floating-chrome]) [data-testid="app-sidebar-top-reserve-row"] {
+  padding-left: calc(
+    var(--bb-sidebar-control-size, 28px) + 2 *
+      var(--bb-sidebar-rail-padding, 8px) + 8px
+  );
+}
+:where([data-floating-chrome]):has([data-traffic-light-reserve])
+  [data-testid="app-sidebar-top-reserve-row"] {
+  padding-left: calc(84px + var(--bb-sidebar-control-size, 28px) + 8px);
+}
+@media (min-width: 768px) {
+  :where([data-floating-chrome]):has(
+    [data-testid="app-desktop-sidebar-trigger"]
+  ) {
+    --bb-macos-chrome-control-y: calc(26px - var(--bb-web-chrome-gap) - var(--bb-app-chrome-row-height) / 2);
+  }
+  :where([data-floating-chrome]) [data-testid="app-desktop-sidebar-trigger"] {
+    top: var(--bb-web-chrome-gap);
+  }
+  :where([data-floating-chrome])
+    [data-testid="app-desktop-sidebar-trigger"]:not(
+      [data-traffic-light-reserve]
+    ) {
+    left: var(--bb-web-chrome-gap);
+  }
+}

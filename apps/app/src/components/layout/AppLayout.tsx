@@ -18,7 +18,6 @@ import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-  useIsSidebarFramed,
   useSidebar,
 } from "@/components/ui/sidebar.js";
 import {
@@ -76,7 +75,6 @@ import {
   MACOS_CHROME_CONTROL_AXIS_CLASS,
   MACOS_CHROME_CONTROL_NO_DRAG_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
-  MACOS_TRAFFIC_LIGHT_RESERVE_PADDING_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
   shouldReserveMacosTrafficLights,
   shouldUseMacosDesktopChrome,
@@ -104,9 +102,6 @@ import { dispatchBrowserViewBoundsSync } from "@/lib/browser-view-bounds-sync";
 import { useFaviconBadge } from "@/lib/favicon-color-preference";
 import { shouldShowFaviconAttentionDot } from "./faviconAttentionDot";
 import { AppLayoutSidebar } from "./AppLayoutSidebar";
-import { WindowRightPanelToggle } from "./WindowRightPanelToggle";
-import { NAV_RAIL_COLLAPSED_SIDEBAR_WIDTH } from "@/components/sidebar/navRailWidth";
-import { SidebarHistoryNavigationControls } from "@/components/sidebar/SidebarHistoryNavigationControls";
 import {
   useAppCommandHandler,
   useAppCommandShortcut,
@@ -178,14 +173,13 @@ const sidebarOpenAtom = atomWithStorage<boolean>(
 );
 
 interface SidebarStateBridgeProps {
-  framed: boolean;
   children: ReactNode;
 }
 
 type SidebarResizeMouseEvent = ReactMouseEvent<HTMLDivElement>;
 type SidebarOpenChangeHandler = (open: boolean) => void;
 
-function SidebarStateBridge({ framed, children }: SidebarStateBridgeProps) {
+function SidebarStateBridge({ children }: SidebarStateBridgeProps) {
   const [open, setOpen] = useAtom(sidebarOpenAtom);
   const sidebarWidth = useAtomValue(sidebarWidthAtom);
   const sidebarLiveWidth = useAtomValue(sidebarLiveWidthAtom);
@@ -203,9 +197,7 @@ function SidebarStateBridge({ framed, children }: SidebarStateBridgeProps) {
   return (
     <SidebarProvider
       width={`${sidebarLiveWidth ?? sidebarWidth}px`}
-      collapsedRailWidth={framed ? NAV_RAIL_COLLAPSED_SIDEBAR_WIDTH : undefined}
-      framed={framed}
-      data-floating-chrome={!framed ? "" : undefined}
+      data-floating-chrome=""
       data-testid="app-layout-root"
       open={open}
       onOpenChange={handleOpenChange}
@@ -233,7 +225,6 @@ function SidebarTriggerOverlay({
 }: SidebarTriggerOverlayProps) {
   const isCompactViewport = useIsCompactViewport();
   const { openMobile } = useSidebar();
-  const isFramed = useIsSidebarFramed();
   const panelShelfState = usePanelShelfState({
     isCompactViewport,
     isSidebarDrawerOpen: openMobile,
@@ -245,45 +236,11 @@ function SidebarTriggerOverlay({
       : "Toggle sidebar",
     "aria-keyshortcuts": shortcut?.ariaKeyshortcuts,
   };
-  if (isFramed) {
-    return (
-      <div
-        data-testid="app-window-title-bar"
-        style={{ zIndex: APP_OVERLAY_LAYER.sidebarTrigger }}
-        className={cn(
-          "fixed inset-x-0 top-0 pr-[calc(var(--bb-window-frame-lip)_+_var(--bb-panel-chrome-padding)_+_1px)]",
-          "flex h-(--bb-window-title-bar-height) items-center [--bb-macos-chrome-control-y:calc(26px_-_var(--bb-window-title-bar-height)/2)]",
-          reserveMacosTrafficLights
-            ? MACOS_TRAFFIC_LIGHT_RESERVE_PADDING_CLASS
-            : BROWSER_SIDEBAR_TRIGGER_INSET_CLASS,
-          MACOS_WINDOW_DRAG_CLASS,
-        )}
-      >
-        <div
-          className={cn(
-            "flex items-center gap-(--bb-chrome-control-gap)",
-            MACOS_CHROME_CONTROL_NO_DRAG_CLASS,
-          )}
-        >
-          <SidebarHistoryNavigationControls />
-          <div className="relative flex items-center">
-            <SidebarTrigger {...triggerProps} />
-            <AppCommandShortcutHint
-              shortcut={shortcut}
-              className="absolute left-full ml-1"
-            />
-          </div>
-        </div>
-        <WindowRightPanelToggle
-          className={cn("ml-auto", MACOS_CHROME_CONTROL_NO_DRAG_CLASS)}
-        />
-      </div>
-    );
-  }
   if (usesDesktopChrome) {
     return (
       <div
         data-testid="app-desktop-sidebar-trigger"
+        data-traffic-light-reserve={reserveMacosTrafficLights ? "" : undefined}
         data-panel-shelf={panelShelfState}
         style={{ zIndex: APP_OVERLAY_LAYER.sidebarTrigger }}
         className={cn(
@@ -822,7 +779,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <ProjectActionsProvider>
         <ThreadTitleMentionResourcesProvider {...titleMentionResources}>
           <ThreadActionsProvider>
-            <SidebarStateBridge framed={usesDesktopChrome}>
+            <SidebarStateBridge>
               {backToAppRoutePath !== null && !isSidebarResizing ? (
                 <BackToAppCommandHandler routePath={backToAppRoutePath} />
               ) : null}
