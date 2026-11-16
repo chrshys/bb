@@ -889,7 +889,11 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
       {creatingProject ? <ProjectCreateDialog hosts={hosts} {...projectActions} onClose={() => setCreatingProject(false)} onCreated={(project) => { setCreatingProject(false); navigate.toProject(project.id); onNavigate(); }} /> : null}
       {creatingBot ? (
         <BotCreateDialog
+          {...projectActions}
           hosts={hosts}
+          projects={projects}
+          owners={projectOwners}
+          botNames={new Map(bots.map((entry) => [entry.id, entry.name]))}
           onClose={() => setCreatingBot(false)}
           onCreate={async (value) => {
             const created = await rpc.call("bot_create", value);

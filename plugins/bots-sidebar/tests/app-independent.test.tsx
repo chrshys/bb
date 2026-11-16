@@ -230,7 +230,8 @@ describe("independent bot identities", () => {
     const { slot } = await mount({ bots: [], bindings: [] });
     await createFromMenu(slot, "Bot");
     const dialog = await screen.findByRole("dialog", { name: "Create new bot" });
-    expect(within(dialog).queryByRole("combobox")).toBeNull();
+    expect(within(dialog).getAllByRole("combobox").map((control) => control.getAttribute("aria-label"))).toEqual(["Project folder"]);
+    expect(within(dialog).getByRole("combobox", { name: "Project folder" }).textContent).toBe("No project folder");
     expect(within(dialog).queryByRole("textbox", { name: /folder|path|directory/i })).toBeNull();
     expect(within(dialog).queryByRole("button", { name: /Use custom|Use automatic/ })).toBeNull();
     expect(dialog.textContent).not.toMatch(/~\/bots|Home folder|Working directory/);
