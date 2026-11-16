@@ -239,10 +239,31 @@ describe("WebSocketManager thread-open signals", () => {
     };
     dispatchRaw(signal);
 
-    expect(threadOpen).toHaveBeenCalledWith(signal);
+    expect(threadOpen).toHaveBeenCalledWith({ ...signal, panelTab: null });
     expect(changed).not.toHaveBeenCalled();
     expect(manager.consumePendingOpenFile("thr_1")).toEqual(signal.file);
     expect(manager.consumePendingOpenFile("thr_1")).toBeNull();
+  });
+
+  it("passes a pinned panel tab request through to layout listeners", () => {
+    const { manager } = createConnectedManager();
+    const threadOpen = vi.fn();
+    manager.onThreadOpen(threadOpen);
+
+    const signal = {
+      type: "thread-open",
+      projectId: "proj_1",
+      threadId: "thr_1",
+      split: "replace",
+      file: null,
+      panelTab: {
+        tab: { kind: "plugin", pluginId: "bots-sidebar", tabId: "bots" },
+        target: { botId: "atlas" },
+      },
+    };
+    dispatchRaw(signal);
+
+    expect(threadOpen).toHaveBeenCalledWith(signal);
   });
 
   it("still routes changed messages to onChanged", () => {

@@ -257,6 +257,8 @@ Opening threads and files in the app:
   bb thread open <thread-id> [path]        Open a thread, optionally with a panel file
     --line <number>                        Line number to focus
     --split <placement>                    right, down, left, top, or replace
+    --panel-tab <tab>                      Select a pinned right-panel tab: info, changes, or <plugin-id>/<tab-id>
+    --panel-target-json <json>             JSON target for a pinned tab that accepts one; requires --panel-tab
   bb thread pane <action> [thread-id]      Maximize, restore, toggle, spotlight, or clear spotlight
 
   Inside a BB thread, BB_THREAD_ID selects the current thread automatically and
@@ -264,6 +266,11 @@ Opening threads and files in the app:
   pass the thread ID as the first argument. A thread already open in a pane is focused instead of
   duplicated. Edge placement creates panes through the eighth pane; at eight
   panes, it replaces the focused pane.
+  --panel-tab opens the right panel on that pinned tab once the thread is on
+  screen. Changes accepts {"kind":"file","path":"..."} or
+  {"kind":"commit","sha":"..."} as its target; a plugin tab validates its own.
+  A tab that does not exist for the thread, or a target it rejects, leaves the
+  panel as it was.
   Pane actions broadcast to connected BB app windows and affect the matching
   already-open pane without changing its split tree. Spotlight focuses that
   pane and dims the others; clear-spotlight focuses it and removes split dimming.

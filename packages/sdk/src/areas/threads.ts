@@ -57,6 +57,7 @@ import type {
   ThreadWithIncludesResponse,
   TimelineTurnSummaryDetailsResponse,
   ThreadOpenFile,
+  ThreadOpenPanelTab,
   ThreadOpenSplit,
   PromptHistoryQuery,
   ReorderPinnedThreadRequest,
@@ -222,8 +223,7 @@ export type ThreadStorageFilesResult = ThreadStorageFileListResponse;
 export type ThreadStorageLocationResult = ThreadStorageLocationResponse;
 export type ThreadStoragePathsResult = ThreadStoragePathListResponse;
 export type ThreadChildSummaryResult = ThreadChildSummaryResponse;
-export type ThreadDefaultExecutionOptionsResult =
-  ResolvedThreadExecutionOptions | null;
+export type ThreadDefaultExecutionOptionsResult = ResolvedThreadExecutionOptions | null;
 export type ThreadConversationOutlineResult = ThreadConversationOutlineResponse;
 export type ThreadTimelineTurnSummaryDetailsResult =
   TimelineTurnSummaryDetailsResponse;
@@ -403,6 +403,12 @@ export interface ThreadOpenArgs {
   threadId: string;
   split?: ThreadOpenSplit;
   file: ThreadOpenFile | null;
+  /**
+   * Also select a pinned tab in the thread's right panel: BB's own `info` or
+   * `changes`, or a plugin's `experimental_threadPinnedTab`. `target` is
+   * handed to the tab when it accepts one.
+   */
+  panelTab?: ThreadOpenPanelTab;
 }
 
 export interface ThreadPaneActionArgs {
@@ -1405,6 +1411,9 @@ export function createThreadsArea(args: CreateSdkAreaArgs): ThreadsArea {
           json: {
             ...(input.split === undefined ? {} : { split: input.split }),
             file: input.file,
+            ...(input.panelTab === undefined
+              ? {}
+              : { panelTab: input.panelTab }),
           },
         }),
       );

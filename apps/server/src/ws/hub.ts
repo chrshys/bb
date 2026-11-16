@@ -28,6 +28,7 @@ import {
   threadPaneActionSignalSchema,
   type ThreadPaneAction,
   type ThreadOpenFile,
+  type ThreadOpenPanelTab,
   type ThreadOpenSplit,
   type TerminalServerMessage,
 } from "@bb/server-contract";
@@ -864,7 +865,11 @@ export class NotificationHub implements DbNotifier {
 
   notifyThreadOpen(
     thread: { projectId: string; threadId: string },
-    request: { split: ThreadOpenSplit; file: ThreadOpenFile | null },
+    request: {
+      split: ThreadOpenSplit;
+      file: ThreadOpenFile | null;
+      panelTab: ThreadOpenPanelTab | null;
+    },
   ): number {
     return this.broadcastToAllClients(
       JSON.stringify(
@@ -874,6 +879,7 @@ export class NotificationHub implements DbNotifier {
           threadId: thread.threadId,
           split: request.split,
           file: request.file,
+          panelTab: request.panelTab,
         }),
       ),
     );

@@ -74,6 +74,7 @@ describe("public thread open", () => {
           path: "src/index.ts",
           lineNumber: 42,
         },
+        panelTab: null,
       });
 
       expect(getThread(harness.db, thread.id)).toEqual(before);
@@ -148,6 +149,46 @@ describe("public thread open", () => {
     });
   });
 
+  it("relays a pinned panel tab request and rejects a malformed one", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-open-panel-tab",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-open-panel-tab-source",
+      });
+      const thread = seedThread(harness.deps, { projectId: project.id });
+      const socket = createMockHubSocket();
+      harness.deps.hub.registerClient(socket);
+
+      const panelTab = {
+        tab: { kind: "plugin", pluginId: "bots-sidebar", tabId: "bots" },
+        target: { botId: "atlas", section: "projects" },
+      };
+      const response = await postOpen(harness, thread.id, {
+        file: null,
+        panelTab,
+      });
+      expect(response.status).toBe(200);
+      expect(JSON.parse(socket.messages[0]!)).toEqual({
+        type: "thread-open",
+        projectId: project.id,
+        threadId: thread.id,
+        split: "replace",
+        file: null,
+        panelTab,
+      });
+
+      const unknownCoreTab = await postOpen(harness, thread.id, {
+        file: null,
+        panelTab: { tab: { kind: "core", id: "terminal" }, target: null },
+      });
+      expect(unknownCoreTab.status).toBe(400);
+      expect(socket.messages).toHaveLength(1);
+    });
+  });
+
   it("opens a thread without a file and validates split placement", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
@@ -172,6 +213,7 @@ describe("public thread open", () => {
         threadId: thread.id,
         split: "right",
         file: null,
+        panelTab: null,
       });
 
       const invalid = await postOpen(harness, thread.id, {

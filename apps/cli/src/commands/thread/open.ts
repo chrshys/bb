@@ -2,9 +2,11 @@ import path from "node:path";
 import { Command } from "commander";
 import { isRawThreadId } from "@bb/domain";
 import {
+  threadOpenPanelTabSchema,
   threadOpenSplitSchema,
   type PanelFileSource,
   type ThreadOpenFile,
+  type ThreadOpenPanelTab,
 } from "@bb/server-contract";
 import { action } from "../../action.js";
 import { createCliBbSdk } from "../../client.js";
@@ -18,6 +20,8 @@ import {
 interface ThreadOpenCommandOptions {
   line?: string;
   json?: boolean;
+  panelTab?: string;
+  panelTargetJson?: string;
   split?: string;
 }
 
@@ -52,6 +56,14 @@ export function registerOpenCommand(
       "--split <placement>",
       "Open in right, down, left, top, or replace placement; edge placements add panes through pane 8, then replace the focused pane",
     )
+    .option(
+      "--panel-tab <tab>",
+      "Select a pinned right-panel tab: info, changes, or <plugin-id>/<tab-id> for a plugin's pinned thread tab",
+    )
+    .option(
+      "--panel-target-json <json>",
+      "JSON target handed to the pinned tab, for tabs that accept one; requires --panel-tab",
+    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(
@@ -67,6 +79,7 @@ export function registerOpenCommand(
               ? undefined
               : threadOpenSplitSchema.parse(opts.split);
           const split = requestedSplit ?? "replace";
+          const panelTab = parsePanelTab(opts);
           if (target.inputPath === null && lineNumber !== null) {
             throw new Error("--line requires a file path.");
           }
@@ -86,6 +99,7 @@ export function registerOpenCommand(
             threadId: target.threadId,
             ...(requestedSplit === undefined ? {} : { split: requestedSplit }),
             file,
+            ...(panelTab === null ? {} : { panelTab }),
           });
 
           if (
@@ -93,6 +107,7 @@ export function registerOpenCommand(
               threadId: target.threadId,
               split,
               file,
+              panelTab,
               delivered: result.delivered,
               inputPath: target.inputPath,
             })
@@ -109,6 +124,9 @@ export function registerOpenCommand(
             if (file.lineNumber !== null) {
               console.log(`Line: ${file.lineNumber}`);
             }
+          }
+          if (panelTab !== null) {
+            console.log(`Panel tab: ${opts.panelTab}`);
           }
           console.log(`Delivered: ${result.delivered}`);
         },
@@ -143,6 +161,42 @@ function resolveThreadOpenTarget(
     inputPath: first ?? null,
     resolved: { id: contextThreadId, source: "env" },
   };
+}
+
+function parsePanelTab(
+  opts: ThreadOpenCommandOptions,
+): ThreadOpenPanelTab | null {
+  if (opts.panelTab === undefined) {
+    if (opts.panelTargetJson !== undefined) {
+      throw new Error("--panel-target-json requires --panel-tab.");
+    }
+    return null;
+  }
+  const value = opts.panelTab.trim();
+  let target: unknown = null;
+  if (opts.panelTargetJson !== undefined) {
+    try {
+      target = JSON.parse(opts.panelTargetJson);
+    } catch {
+      throw new Error("Invalid --panel-target-json value. Pass valid JSON.");
+    }
+  }
+  const separator = value.lastIndexOf("/");
+  const tab =
+    value === "info" || value === "changes"
+      ? { kind: "core", id: value }
+      : {
+          kind: "plugin",
+          pluginId: value.slice(0, Math.max(separator, 0)),
+          tabId: value.slice(separator + 1),
+        };
+  const parsed = threadOpenPanelTabSchema.safeParse({ tab, target });
+  if (!parsed.success) {
+    throw new Error(
+      "Invalid --panel-tab value. Pass info, changes, or <plugin-id>/<tab-id>.",
+    );
+  }
+  return parsed.data;
 }
 
 function parseLineNumber(value: string | undefined): number | null {

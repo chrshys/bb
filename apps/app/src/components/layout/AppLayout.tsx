@@ -110,6 +110,7 @@ import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { useMobileVisualViewportHeight } from "./useMobileVisualViewportHeight";
 import { isIOSWebKit } from "@/lib/ios-webkit";
 import { wsManager } from "@/lib/ws";
+import { openThreadOpenSignalPanelTab } from "@/components/secondary-panel/thread-open-panel-tab";
 import { splitLayoutAtom } from "@/lib/split-layout/atoms";
 import { findPaneByThread } from "@/lib/split-layout";
 import { applyThreadOpenToLayout } from "@/views/thread-detail/splitThreadNavigation";
@@ -462,6 +463,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           store.set(splitLayoutAtom, next);
         }
         void navigate(route, alreadyOpen ? { replace: true } : undefined);
+        if (signal.panelTab !== null) {
+          openThreadOpenSignalPanelTab({
+            panelTab: signal.panelTab,
+            threadId: signal.threadId,
+          });
+        }
       }),
     [isCompactViewport, navigate, store],
   );

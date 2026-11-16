@@ -48,6 +48,7 @@ import {
 import { resetAllCrashedPluginSlotsForTest } from "@/components/plugin/PluginSlotMount";
 import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 import { GIT_DIFF_FIXED_TAB_REFERENCE } from "./git-diff/git-diff-fixed-tab-navigation";
+import { openThreadOpenSignalPanelTab } from "./thread-open-panel-tab";
 import { THREAD_INFO_FIXED_TAB_REFERENCE } from "./thread-info-fixed-tab-navigation";
 import {
   getThreadFixedTabTargetScopeId,
@@ -566,6 +567,83 @@ describe("opening a fixed tab for a thread from outside its view", () => {
       }),
     ).toBe(false);
     expect(navigateToThread).not.toHaveBeenCalled();
+  });
+});
+
+describe("pinned tab requests on the thread-open signal", () => {
+  it("resolves core and plugin tab names to the same destinations the view uses", () => {
+    registerBotsPlugin();
+    const { delivered, host, selected } = createRecordingHost();
+    const destinations = pinnedDestinations(host);
+    registerThreadFixedTabSurface("thr_cli", (intent) =>
+      openAppFixedTabFromDestinations(destinations, intent),
+    );
+
+    expect(
+      openThreadOpenSignalPanelTab({
+        panelTab: { tab: { kind: "core", id: "info" }, target: null },
+        threadId: "thr_cli",
+      }),
+    ).toBe(true);
+    expect(
+      openThreadOpenSignalPanelTab({
+        panelTab: {
+          tab: { kind: "core", id: "changes" },
+          target: { kind: "commit", sha: "abc123" },
+        },
+        threadId: "thr_cli",
+      }),
+    ).toBe(true);
+    expect(host.gitDiff.openCommit).toHaveBeenCalledWith("abc123");
+    expect(
+      openThreadOpenSignalPanelTab({
+        panelTab: {
+          tab: { kind: "plugin", pluginId: "bots", tabId: "bots" },
+          target: { botId: "atlas" },
+        },
+        threadId: "thr_cli",
+      }),
+    ).toBe(true);
+    expect(selected.map((tab) => tab.kind)).toEqual([
+      "thread-info",
+      "plugin-pinned",
+    ]);
+    expect(delivered.map((entry) => entry.target)).toEqual([
+      { botId: "atlas" },
+    ]);
+    expect(
+      openThreadOpenSignalPanelTab({
+        panelTab: {
+          tab: { kind: "plugin", pluginId: "bots", tabId: "bots" },
+          target: { nope: true },
+        },
+        threadId: "thr_cli",
+      }),
+    ).toBe(false);
+  });
+
+  it("waits for the thread view when the signal arrives before it mounts", () => {
+    registerBotsPlugin();
+    expect(
+      openThreadOpenSignalPanelTab({
+        panelTab: {
+          tab: { kind: "plugin", pluginId: "bots", tabId: "plain" },
+          target: null,
+        },
+        threadId: "thr_later",
+      }),
+    ).toBe(true);
+    const { host, selected } = createRecordingHost();
+    const destinations = pinnedDestinations(host);
+    registerThreadFixedTabSurface("thr_later", (intent) =>
+      openAppFixedTabFromDestinations(destinations, intent),
+    );
+    expect(selected.map((tab) => tab.id)).toEqual([
+      createPluginPinnedFixedPanelTab({
+        pinnedTabId: "plain",
+        pluginId: "bots",
+      }).id,
+    ]);
   });
 });
 

@@ -148,6 +148,10 @@ For review or fix pipelines, get the environment ID from
   eighth pane; at eight panes, they replace the focused pane.
 - A file path is optional when a thread ID is explicit:
   `bb thread open <thread-id> [path] [--split <placement>]`.
+- Add `--panel-tab info|changes|<plugin-id>/<tab-id>` to open the thread's
+  right panel on that pinned tab, and `--panel-target-json '<json>'` for a tab
+  that accepts a target (Changes takes `{"kind":"file","path":"..."}` or
+  `{"kind":"commit","sha":"..."}`).
 - Paths can be thread-relative workspace paths, or absolute paths inside the
   target thread workspace.
 - Absolute paths under `BB_THREAD_STORAGE` open as thread-storage files for the

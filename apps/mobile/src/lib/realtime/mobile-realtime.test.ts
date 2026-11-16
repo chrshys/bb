@@ -303,6 +303,7 @@ describe("createMobileRealtime", () => {
         threadId: "t1",
         split: "replace",
         file: { source: "workspace", path: "src/a.ts", lineNumber: 3 },
+        panelTab: null,
       },
     ]);
   });
