@@ -1278,7 +1278,6 @@ function SecondaryPanelResizeHandle({
   matchesSplitDividers,
   hitTargetRef,
 }: SecondaryPanelResizeHandleProps) {
-  const isResizing = useAtomValue(threadSecondaryPanelResizingAtom);
   return (
     <PanelResizeHandle
       id="thread-detail-secondary-panel-handle"
@@ -1293,18 +1292,16 @@ function SecondaryPanelResizeHandle({
         isConversationCollapsed ? "cursor-default" : "cursor-col-resize",
         matchesSplitDividers
           ? [
-              "bg-border-seam hover:bg-ring/40",
+              "bg-border-seam",
               isOpen && !isConversationCollapsed
                 ? "w-px opacity-100"
                 : "pointer-events-none w-0 opacity-0",
-              isResizing && "bg-ring/40",
             ]
           : [
               "bg-transparent",
               isOpen && !isConversationCollapsed
                 ? "w-0 opacity-100"
                 : "pointer-events-none w-0 opacity-0",
-              isResizing && "bg-accent/20",
             ],
       )}
       aria-label="Resize thread and right panel"
@@ -1315,16 +1312,6 @@ function SecondaryPanelResizeHandle({
         data-panel-resize-hit-target=""
         className={PANEL_RESIZE_HIT_TARGET_CLASS}
       />
-      {matchesSplitDividers ? null : (
-        <span
-          className={cn(
-            "pointer-events-none absolute inset-y-0 left-full z-10 w-px transition-colors",
-            isResizing
-              ? "bg-accent-foreground/50"
-              : "bg-border-seam group-hover:bg-accent-foreground/35",
-          )}
-        />
-      )}
     </PanelResizeHandle>
   );
 }
