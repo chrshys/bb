@@ -197,13 +197,19 @@ function resolveElectronBuilderConfig(baseConfig, env, electronBuilderArgs) {
   config.appId = releaseConfig.appId;
   config.artifactName = releaseConfig.artifactName;
   config.productName = releaseConfig.applicationName;
-  config.publish = [
-    {
-      channel: releaseChannel,
-      provider: "generic",
-      url: createDesktopUpdateReleaseBaseUrl(releaseConfig.releaseTag),
-    },
-  ];
+  const updateReleaseBaseUrl = createDesktopUpdateReleaseBaseUrl(
+    releaseConfig.releaseTag,
+  );
+  config.publish =
+    updateReleaseBaseUrl === null
+      ? null
+      : [
+          {
+            channel: releaseChannel,
+            provider: "generic",
+            url: updateReleaseBaseUrl,
+          },
+        ];
 
   return {
     config,

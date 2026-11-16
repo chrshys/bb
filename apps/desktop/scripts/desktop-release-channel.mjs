@@ -33,16 +33,16 @@ export function resolveDesktopBuildPlatform(nodePlatform) {
 export function createDesktopReleaseConfig(channel) {
   if (channel === "nightly") {
     return {
-      appId: "dev.bb.desktop.nightly",
-      applicationName: "bb Nightly",
-      artifactName: "bb-nightly-${version}-${arch}.${ext}",
+      appId: "dev.bbc.desktop.nightly",
+      applicationName: "BBC Nightly",
+      artifactName: "BBC-nightly-${version}-${arch}.${ext}",
       iconFileName: "icon-nightly.png",
       // The Linux binary name must differ from stable so both channels can be
       // installed at once without one shadowing the other on PATH.
-      linuxExecutableName: "bb-nightly",
+      linuxExecutableName: "bbc-nightly",
       macIconPath: "assets/icon-nightly.icns",
       releaseTag: "desktop-nightly",
-      windowsInstallName: "bb-nightly",
+      windowsInstallName: "bbc-nightly",
       updateMetadataFileNames: {
         linux: "nightly-linux.yml",
         macos: "nightly-mac.yml",
@@ -52,14 +52,14 @@ export function createDesktopReleaseConfig(channel) {
   }
 
   return {
-    appId: "dev.bb.desktop",
-    applicationName: "bb",
+    appId: "dev.bbc.desktop",
+    applicationName: "BBC",
     artifactName: "${productName}-${version}-${arch}.${ext}",
     iconFileName: "icon.png",
-    linuxExecutableName: "bb",
+    linuxExecutableName: "bbc",
     macIconPath: "assets/icon.icns",
     releaseTag: "desktop-latest",
-    windowsInstallName: "bb",
+    windowsInstallName: "bbc",
     updateMetadataFileNames: {
       linux: "latest-linux.yml",
       macos: "latest-mac.yml",
@@ -68,6 +68,10 @@ export function createDesktopReleaseConfig(channel) {
   };
 }
 
+const DESKTOP_UPDATE_RELEASES_URL = null;
+
 export function createDesktopUpdateReleaseBaseUrl(releaseTag) {
-  return `https://github.com/get-bb/bb/releases/download/${releaseTag}/`;
+  return DESKTOP_UPDATE_RELEASES_URL === null
+    ? null
+    : `${DESKTOP_UPDATE_RELEASES_URL}${releaseTag}/`;
 }

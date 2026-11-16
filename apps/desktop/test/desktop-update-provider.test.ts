@@ -1,20 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
+  createDesktopReleaseInfo,
   createDesktopUpdateFeedUrl,
+  DESKTOP_AUTO_UPDATE_FEED_CONFIG,
   resolveDesktopUpdateSupport,
 } from "../src/desktop-update-provider.js";
 
-describe("desktop update feed url", () => {
-  it("gives each platform its own feed file inside one release tag", () => {
-    expect(createDesktopUpdateFeedUrl("macos")).toBe(
-      "https://github.com/get-bb/bb/releases/download/desktop-latest/desktop-version.json",
-    );
-    expect(createDesktopUpdateFeedUrl("linux")).toBe(
-      "https://github.com/get-bb/bb/releases/download/desktop-latest/desktop-version-linux.json",
-    );
-    expect(createDesktopUpdateFeedUrl("windows")).toBe(
-      "https://github.com/get-bb/bb/releases/download/desktop-latest/desktop-version-windows.json",
-    );
+const RELEASE_BASE_URL = "https://example.test/releases/desktop-latest/";
+
+describe("desktop update feed", () => {
+  it("has no feed until the fork publishes its own", () => {
+    expect(createDesktopReleaseInfo("latest").updateReleaseBaseUrl).toBeNull();
+    expect(createDesktopReleaseInfo("nightly").updateReleaseBaseUrl).toBeNull();
+    expect(createDesktopUpdateFeedUrl("macos")).toBeNull();
+    expect(DESKTOP_AUTO_UPDATE_FEED_CONFIG).toBeNull();
+  });
+
+  it("turns off both update paths without a feed", () => {
+    expect(
+      resolveDesktopUpdateSupport({
+        canReplaceAppImage: () => true,
+        env: {},
+        platform: "macos",
+        updateReleaseBaseUrl: null,
+      }),
+    ).toEqual({ autoUpdate: false, versionCheck: false });
   });
 });
 
@@ -29,6 +39,7 @@ describe("desktop update support", () => {
         canReplaceAppImage: neverReplaceable,
         env: {},
         platform: "macos",
+        updateReleaseBaseUrl: RELEASE_BASE_URL,
       }),
     ).toEqual({ autoUpdate: true, versionCheck: true });
   });
@@ -39,6 +50,7 @@ describe("desktop update support", () => {
         canReplaceAppImage: alwaysReplaceable,
         env: { APPIMAGE: APP_IMAGE_PATH },
         platform: "windows",
+        updateReleaseBaseUrl: RELEASE_BASE_URL,
       }),
     ).toEqual({ autoUpdate: true, versionCheck: true });
   });
@@ -49,6 +61,7 @@ describe("desktop update support", () => {
         canReplaceAppImage: alwaysReplaceable,
         env: { APPIMAGE: APP_IMAGE_PATH },
         platform: "linux",
+        updateReleaseBaseUrl: RELEASE_BASE_URL,
       }),
     ).toEqual({ autoUpdate: true, versionCheck: true });
     expect(
@@ -56,6 +69,7 @@ describe("desktop update support", () => {
         canReplaceAppImage: alwaysReplaceable,
         env: {},
         platform: "linux",
+        updateReleaseBaseUrl: RELEASE_BASE_URL,
       }),
     ).toEqual({ autoUpdate: false, versionCheck: true });
     expect(
@@ -63,6 +77,7 @@ describe("desktop update support", () => {
         canReplaceAppImage: alwaysReplaceable,
         env: { APPIMAGE: "  " },
         platform: "linux",
+        updateReleaseBaseUrl: RELEASE_BASE_URL,
       }),
     ).toEqual({ autoUpdate: false, versionCheck: true });
   });
@@ -78,6 +93,7 @@ describe("desktop update support", () => {
         },
         env: { APPIMAGE: APP_IMAGE_PATH },
         platform: "linux",
+        updateReleaseBaseUrl: RELEASE_BASE_URL,
       }),
     ).toEqual({ autoUpdate: false, versionCheck: true });
     expect(checked).toEqual([APP_IMAGE_PATH]);
@@ -93,6 +109,7 @@ describe("desktop update support", () => {
       },
       env: { APPIMAGE: APP_IMAGE_PATH },
       platform: "macos",
+      updateReleaseBaseUrl: RELEASE_BASE_URL,
     });
 
     expect(consulted).toBe(false);

@@ -15,12 +15,14 @@ import {
   type DesktopAutoUpdateNotAvailableHandler,
   type DesktopAutoUpdaterAdapter,
 } from "../src/desktop-auto-update.js";
-import {
-  DESKTOP_AUTO_UPDATE_FEED_CONFIG,
-  type DesktopAutoUpdateFeedConfig,
-} from "../src/desktop-update-provider.js";
+import type { DesktopAutoUpdateFeedConfig } from "../src/desktop-update-provider.js";
 
 const checkedAt = "2026-05-21T00:00:00.000Z";
+const testFeed: DesktopAutoUpdateFeedConfig = {
+  channel: "latest",
+  provider: "generic",
+  url: "https://example.test/desktop-latest/",
+};
 
 interface LoggerMessages {
   errors: string[];
@@ -208,13 +210,13 @@ function createDeferredDownload(): DeferredDownload {
 }
 
 describe("desktop auto-update service", () => {
-  it("configures electron-updater for the desktop-latest GitHub release assets", () => {
+  it("configures electron-updater with the given feed", () => {
     const updater = new DesktopAutoUpdaterAdapterStub();
     const messages = createLoggerMessages();
 
     createDesktopAutoUpdateService({
       currentVersion: "0.0.1",
-      enabled: true,
+      feed: testFeed,
       forceDevUpdateConfig: false,
       logger: createLogger(messages),
       now: () => Date.parse(checkedAt),
@@ -222,11 +224,33 @@ describe("desktop auto-update service", () => {
       updater,
     });
 
-    expect(updater.feedConfigs).toEqual([DESKTOP_AUTO_UPDATE_FEED_CONFIG]);
+    expect(updater.feedConfigs).toEqual([testFeed]);
     expect(updater.autoDownload).toBe(false);
     expect(updater.autoInstallOnAppQuit).toBe(true);
     expect(updater.forceDevUpdateConfig).toBe(false);
     expect(updater.logger).not.toBeNull();
+  });
+
+  it("leaves electron-updater untouched without a feed", async () => {
+    const updater = new DesktopAutoUpdaterAdapterStub();
+    const messages = createLoggerMessages();
+
+    const service = createDesktopAutoUpdateService({
+      currentVersion: "0.0.1",
+      feed: null,
+      forceDevUpdateConfig: false,
+      logger: createLogger(messages),
+      now: () => Date.parse(checkedAt),
+      platform: "macos",
+      updater,
+    });
+    service.start();
+    await service.checkForUpdates();
+    service.stop();
+
+    expect(updater.feedConfigs).toEqual([]);
+    expect(updater.checkForUpdatesCalls).toBe(0);
+    expect(updater.logger).toBeNull();
   });
 
   it("updates state from updater events and downloads available updates in the background", () => {
@@ -234,7 +258,7 @@ describe("desktop auto-update service", () => {
     const messages = createLoggerMessages();
     const service = createDesktopAutoUpdateService({
       currentVersion: "0.0.1",
-      enabled: true,
+      feed: testFeed,
       forceDevUpdateConfig: false,
       logger: createLogger(messages),
       now: () => Date.parse(checkedAt),
@@ -282,7 +306,7 @@ describe("desktop auto-update service", () => {
     updater.downloadUpdateResult = download.promise;
     createDesktopAutoUpdateService({
       currentVersion: "0.0.1",
-      enabled: true,
+      feed: testFeed,
       forceDevUpdateConfig: false,
       logger: createLogger(createLoggerMessages()),
       now: () => Date.parse(checkedAt),
@@ -310,7 +334,7 @@ describe("desktop auto-update service", () => {
     const messages = createLoggerMessages();
     const service = createDesktopAutoUpdateService({
       currentVersion: "0.0.1",
-      enabled: true,
+      feed: testFeed,
       forceDevUpdateConfig: false,
       logger: createLogger(messages),
       now: () => Date.parse(checkedAt),
@@ -344,7 +368,7 @@ describe("desktop auto-update service", () => {
     updater.updateCheckResult = createUpdateCheckResult("0.0.2");
     const service = createDesktopAutoUpdateService({
       currentVersion: "0.0.1",
-      enabled: true,
+      feed: testFeed,
       forceDevUpdateConfig: false,
       logger: createLogger(createLoggerMessages()),
       now: () => Date.parse(checkedAt),
@@ -373,7 +397,7 @@ describe("desktop auto-update service", () => {
     let currentTime = Date.parse(checkedAt);
     const service = createDesktopAutoUpdateService({
       currentVersion: "0.0.1",
-      enabled: true,
+      feed: testFeed,
       forceDevUpdateConfig: false,
       logger: createLogger(createLoggerMessages()),
       now: () => currentTime,
@@ -410,7 +434,7 @@ describe("desktop auto-update service", () => {
     });
     const service = createDesktopAutoUpdateService({
       currentVersion: "0.0.1",
-      enabled,
+      feed: enabled ? testFeed : null,
       forceDevUpdateConfig: false,
       logger: createLogger(createLoggerMessages()),
       now: () => Date.parse(checkedAt),

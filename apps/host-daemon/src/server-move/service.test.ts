@@ -189,7 +189,7 @@ describe("ServerMoveService.prepare", () => {
       JSON.stringify(originalConfig),
     );
     await writeFileWithDirs(
-      join(fixture.homeDir, ".bb", "bb.db"),
+      join(fixture.homeDir, ".bbc", "bb.db"),
       "standalone server",
     );
     const command = await prepareCommand(fixture, {
@@ -197,10 +197,10 @@ describe("ServerMoveService.prepare", () => {
     });
 
     const result = await fixture.service.prepare(command);
-    expect(await exists(join(fixture.homeDir, ".bb"))).toBe(false);
+    expect(await exists(join(fixture.homeDir, ".bbc"))).toBe(false);
     expect(
       (await readdir(fixture.homeDir)).some((name) =>
-        name.startsWith(".bb.before-move-"),
+        name.startsWith(".bbc.before-move-"),
       ),
     ).toBe(true);
 
@@ -223,7 +223,7 @@ describe("ServerMoveService.prepare", () => {
     expect(await exists(join(fixture.dataDir, "server-move-incoming"))).toBe(
       false,
     );
-    expect(await readFile(join(fixture.homeDir, ".bb", "bb.db"), "utf8")).toBe(
+    expect(await readFile(join(fixture.homeDir, ".bbc", "bb.db"), "utf8")).toBe(
       "standalone server",
     );
     await expect(
@@ -248,14 +248,14 @@ describe("ServerMoveService.prepare", () => {
     expect(await readServerConnectHoldFile(fixture.dataDir)).toBeNull();
   });
 
-  it("refuses to archive ~/.bb while bb is running from it", async () => {
+  it("refuses to archive ~/.bbc while bb is running from it", async () => {
     const fixture = await createFixture();
     await writeFileWithDirs(
-      join(fixture.homeDir, ".bb", "bb.db"),
+      join(fixture.homeDir, ".bbc", "bb.db"),
       "standalone server",
     );
     await writeBbAppRuntime({
-      dataDir: join(fixture.homeDir, ".bb"),
+      dataDir: join(fixture.homeDir, ".bbc"),
       serverPort: 38_886,
     });
     const command = await prepareCommand(fixture, {
@@ -264,10 +264,10 @@ describe("ServerMoveService.prepare", () => {
 
     await expect(fixture.service.prepare(command)).rejects.toMatchObject({
       code: "server_move_rejected",
-      message: `bb is running from ${join(fixture.homeDir, ".bb")} on this machine (pid ${process.pid}). Quit bb there first, then start the move again.`,
+      message: `bb is running from ${join(fixture.homeDir, ".bbc")} on this machine (pid ${process.pid}). Quit bb there first, then start the move again.`,
     });
     expect(fixture.source.archiveRequests).toEqual([]);
-    expect(await readFile(join(fixture.homeDir, ".bb", "bb.db"), "utf8")).toBe(
+    expect(await readFile(join(fixture.homeDir, ".bbc", "bb.db"), "utf8")).toBe(
       "standalone server",
     );
 
@@ -281,11 +281,11 @@ describe("ServerMoveService.prepare", () => {
       },
     });
     await writeFileWithDirs(
-      join(stopped.homeDir, ".bb", "bb.db"),
+      join(stopped.homeDir, ".bbc", "bb.db"),
       "standalone server",
     );
     await writeBbAppRuntime({
-      dataDir: join(stopped.homeDir, ".bb"),
+      dataDir: join(stopped.homeDir, ".bbc"),
       serverPort: 38_886,
     });
     await expect(
@@ -293,7 +293,7 @@ describe("ServerMoveService.prepare", () => {
         await prepareCommand(stopped, { archiveExistingServerData: true }),
       ),
     ).resolves.toMatchObject({ pid: expect.any(Number) });
-    expect(await exists(join(stopped.homeDir, ".bb"))).toBe(false);
+    expect(await exists(join(stopped.homeDir, ".bbc"))).toBe(false);
   });
 });
 
@@ -690,10 +690,10 @@ describe("ServerMoveService own data dir guards", () => {
     expect(fixture.launches).toEqual([]);
   });
 
-  it("hides ~/.bb when it is this daemon's data dir and refuses to archive it", async () => {
+  it("hides ~/.bbc when it is this daemon's data dir and refuses to archive it", async () => {
     const fixture = await createFixture();
     await writeFile(join(fixture.dataDir, "bb.db"), "old server");
-    await symlink(fixture.dataDir, join(fixture.homeDir, ".bb"));
+    await symlink(fixture.dataDir, join(fixture.homeDir, ".bbc"));
 
     const result = await fixture.service.inspect({
       type: "server_move.inspect",
@@ -716,7 +716,7 @@ describe("ServerMoveService own data dir guards", () => {
     );
     expect(
       (await readdir(fixture.homeDir)).filter((name) =>
-        name.startsWith(".bb.before-move-"),
+        name.startsWith(".bbc.before-move-"),
       ),
     ).toEqual([]);
     expect(await readFile(join(fixture.dataDir, "bb.db"), "utf8")).toBe(
@@ -807,7 +807,7 @@ describe("ServerMoveService.inspect and probe", () => {
     const fixture = await createFixture({
       env: { BB_SERVER_MOVE_SERVICE_MANAGER: "none", BB_APP_VERSION: "1.2.3" },
     });
-    await writeFileWithDirs(join(fixture.homeDir, ".bb", "bb.db"), "12345");
+    await writeFileWithDirs(join(fixture.homeDir, ".bbc", "bb.db"), "12345");
     await writeFileWithDirs(join(fixture.homeDir, ".codex", "auth.json"), "{}");
     await writeFileWithDirs(join(fixture.homeDir, "tools", "bin", "gh"), "");
 
@@ -830,7 +830,7 @@ describe("ServerMoveService.inspect and probe", () => {
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       bbAppVersion: "1.2.3",
       serverEntryAvailable: true,
-      existingServerData: { path: join(fixture.homeDir, ".bb"), sizeBytes: 5 },
+      existingServerData: { path: join(fixture.homeDir, ".bbc"), sizeBytes: 5 },
       dataDirHasServerData: false,
       portAvailable: true,
       ghAuthenticated: null,

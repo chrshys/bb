@@ -8,15 +8,15 @@ export interface DesktopUpdateMetadataFileNames {
 }
 
 export interface DesktopReleaseConfig {
-  appId: "dev.bb.desktop" | "dev.bb.desktop.nightly";
-  applicationName: "bb" | "bb Nightly";
+  appId: "dev.bbc.desktop" | "dev.bbc.desktop.nightly";
+  applicationName: "BBC" | "BBC Nightly";
   artifactName: string;
   iconFileName: "icon.png" | "icon-nightly.png";
-  linuxExecutableName: "bb" | "bb-nightly";
+  linuxExecutableName: "bbc" | "bbc-nightly";
   macIconPath: "assets/icon.icns" | "assets/icon-nightly.icns";
   releaseTag: "desktop-latest" | "desktop-nightly";
   updateMetadataFileNames: DesktopUpdateMetadataFileNames;
-  windowsInstallName: "bb" | "bb-nightly";
+  windowsInstallName: "bbc" | "bbc-nightly";
 }
 
 export function resolveDesktopReleaseChannel(
@@ -33,4 +33,4 @@ export function createDesktopReleaseConfig(
 
 export function createDesktopUpdateReleaseBaseUrl(
   releaseTag: DesktopReleaseConfig["releaseTag"],
-): string;
+): string | null;

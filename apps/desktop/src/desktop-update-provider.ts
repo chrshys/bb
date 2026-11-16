@@ -5,12 +5,14 @@ import {
 
 type DesktopReleaseChannel = "latest" | "nightly";
 
+const DESKTOP_UPDATE_RELEASES_URL: string | null = null;
+
 interface DesktopReleaseInfo {
-  applicationName: "bb" | "bb Nightly";
+  applicationName: "BBC" | "BBC Nightly";
   channel: DesktopReleaseChannel;
   iconFileName: "icon.png" | "icon-nightly.png";
   releaseTag: "desktop-latest" | "desktop-nightly";
-  updateReleaseBaseUrl: string;
+  updateReleaseBaseUrl: string | null;
 }
 
 export function createDesktopReleaseInfo(
@@ -20,11 +22,14 @@ export function createDesktopReleaseInfo(
   const releaseTag = nightly ? "desktop-nightly" : "desktop-latest";
 
   return {
-    applicationName: nightly ? "bb Nightly" : "bb",
+    applicationName: nightly ? "BBC Nightly" : "BBC",
     channel,
     iconFileName: nightly ? "icon-nightly.png" : "icon.png",
     releaseTag,
-    updateReleaseBaseUrl: `https://github.com/get-bb/bb/releases/download/${releaseTag}/`,
+    updateReleaseBaseUrl:
+      DESKTOP_UPDATE_RELEASES_URL === null
+        ? null
+        : `${DESKTOP_UPDATE_RELEASES_URL}${releaseTag}/`,
   };
 }
 
@@ -54,8 +59,10 @@ const DESKTOP_UPDATE_RELEASE_BASE_URL =
 
 export function createDesktopUpdateFeedUrl(
   platform: BbDesktopVersionFeedPlatform,
-): string {
-  return `${DESKTOP_UPDATE_RELEASE_BASE_URL}${createBbDesktopVersionFeedFileName(platform)}`;
+): string | null {
+  return DESKTOP_UPDATE_RELEASE_BASE_URL === null
+    ? null
+    : `${DESKTOP_UPDATE_RELEASE_BASE_URL}${createBbDesktopVersionFeedFileName(platform)}`;
 }
 
 export interface DesktopAutoUpdateFeedConfig {
@@ -64,11 +71,14 @@ export interface DesktopAutoUpdateFeedConfig {
   url: string;
 }
 
-export const DESKTOP_AUTO_UPDATE_FEED_CONFIG: DesktopAutoUpdateFeedConfig = {
-  channel: DESKTOP_RELEASE_CHANNEL,
-  provider: "generic",
-  url: DESKTOP_UPDATE_RELEASE_BASE_URL,
-};
+export const DESKTOP_AUTO_UPDATE_FEED_CONFIG: DesktopAutoUpdateFeedConfig | null =
+  DESKTOP_UPDATE_RELEASE_BASE_URL === null
+    ? null
+    : {
+        channel: DESKTOP_RELEASE_CHANNEL,
+        provider: "generic",
+        url: DESKTOP_UPDATE_RELEASE_BASE_URL,
+      };
 
 interface DesktopUpdateSupport {
   autoUpdate: boolean;
@@ -79,11 +89,15 @@ interface ResolveDesktopUpdateSupportArgs {
   canReplaceAppImage: (appImagePath: string) => boolean;
   env: NodeJS.ProcessEnv;
   platform: BbDesktopVersionFeedPlatform;
+  updateReleaseBaseUrl: string | null;
 }
 
 export function resolveDesktopUpdateSupport(
   args: ResolveDesktopUpdateSupportArgs,
 ): DesktopUpdateSupport {
+  if (args.updateReleaseBaseUrl === null) {
+    return { autoUpdate: false, versionCheck: false };
+  }
   if (args.platform === "macos" || args.platform === "windows") {
     return { autoUpdate: true, versionCheck: true };
   }

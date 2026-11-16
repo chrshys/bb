@@ -28,6 +28,7 @@ import {
   APP_SURFACE_ENV_NAME,
 } from "@bb/config/app-surface";
 import { findMachineServiceFile } from "@bb/config/machine-service";
+import { resolveProdDataDir } from "@bb/config/runtime";
 import {
   deriveConnectBaseUrl,
   type ConnectCredential,
@@ -182,6 +183,7 @@ import {
 import { createDesktopUpdateService } from "./desktop-update-check.js";
 import {
   createDesktopUpdateFeedUrl,
+  DESKTOP_AUTO_UPDATE_FEED_CONFIG,
   DESKTOP_RELEASE_CHANNEL,
   DESKTOP_RELEASE_INFO,
   resolveDesktopUpdateSupport,
@@ -488,7 +490,7 @@ function canReplaceAppImage(appImagePath: string): boolean {
 
 function resolveDesktopUpdateFeedUrl(
   args: ResolveDesktopUpdateFeedUrlArgs,
-): string {
+): string | null {
   const rawFeedUrl = args.env.BB_DESKTOP_VERSION_FEED_URL?.trim();
   if (rawFeedUrl === undefined || rawFeedUrl.length === 0) {
     return createDesktopUpdateFeedUrl(args.platform);
@@ -659,7 +661,7 @@ const desktopLogger: DesktopAutoUpdateLogger = {
 function resolveDataDirFromEnv(args: ResolveDataDirFromEnvArgs): string {
   const rawDataDir = args.env.BB_DATA_DIR?.trim();
   if (rawDataDir === undefined || rawDataDir.length === 0) {
-    return join(args.homeDir, ".bb");
+    return resolveProdDataDir({ homeDir: args.homeDir });
   }
   if (rawDataDir === "~") {
     return args.homeDir;
@@ -2914,25 +2916,29 @@ async function runDesktopApp(): Promise<void> {
     canReplaceAppImage,
     env: process.env,
     platform: desktopPlatform,
+    updateReleaseBaseUrl: DESKTOP_RELEASE_INFO.updateReleaseBaseUrl,
   });
   desktopUpdateService = createDesktopUpdateService({
     channel: DESKTOP_RELEASE_CHANNEL,
     currentVersion: desktopVersion,
-    enabled:
+    feedUrl:
       desktopUpdateSupport.versionCheck &&
-      (app.isPackaged || process.env.BB_DESKTOP_VERSION_CHECK === "1"),
-    feedUrl: desktopUpdateFeedUrl,
+      (app.isPackaged || process.env.BB_DESKTOP_VERSION_CHECK === "1")
+        ? desktopUpdateFeedUrl
+        : null,
     logger: desktopLogger,
     platform: desktopPlatform,
   });
   desktopAutoUpdateService = createDesktopAutoUpdateService({
     currentVersion: desktopVersion,
-    enabled:
+    feed:
       desktopUpdateSupport.autoUpdate &&
       shouldEnableDesktopAutoUpdate({
         env: process.env,
         isPackaged: app.isPackaged,
-      }),
+      })
+        ? DESKTOP_AUTO_UPDATE_FEED_CONFIG
+        : null,
     forceDevUpdateConfig:
       !app.isPackaged && process.env.BB_DESKTOP_AUTO_UPDATE === "1",
     logger: desktopLogger,

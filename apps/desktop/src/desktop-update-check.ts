@@ -41,8 +41,7 @@ type DesktopVersionFeedParseResult =
 interface CreateDesktopUpdateServiceArgs {
   channel: BbDesktopVersionFeed["channel"];
   currentVersion: string;
-  enabled: boolean;
-  feedUrl: string;
+  feedUrl: string | null;
   fetchImpl?: typeof fetch;
   logger: DesktopUpdateLogger;
   now?: () => number;
@@ -165,8 +164,9 @@ export function createDesktopUpdateService(
   args: CreateDesktopUpdateServiceArgs,
 ): DesktopUpdateService {
   const fetchImpl = args.fetchImpl ?? fetch;
+  const feedUrl = args.feedUrl;
   const scheduler = createDesktopUpdateScheduler({
-    enabled: args.enabled,
+    enabled: feedUrl !== null,
     initialInfo: createBaseInfo(args.currentVersion, args.platform),
     now: args.now ?? (() => Date.now()),
     runCheck,
@@ -181,10 +181,13 @@ export function createDesktopUpdateService(
   }
 
   async function runCheck(checkedAt: string): Promise<void> {
+    if (feedUrl === null) {
+      return;
+    }
     let payloadText: string;
     try {
       payloadText = await fetchDesktopVersionFeed({
-        feedUrl: args.feedUrl,
+        feedUrl,
         fetchImpl,
       });
     } catch (error) {

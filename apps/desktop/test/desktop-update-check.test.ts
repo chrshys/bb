@@ -200,7 +200,6 @@ describe("desktop update service", () => {
     const service = createDesktopUpdateService({
       channel: "latest",
       currentVersion: "0.0.1",
-      enabled: true,
       feedUrl: "https://example.test/desktop-version.json",
       fetchImpl,
       logger: { warn() {} },
@@ -260,7 +259,6 @@ describe("desktop update service", () => {
       const service = createDesktopUpdateService({
         channel: "latest",
         currentVersion: "0.0.1",
-        enabled: true,
         feedUrl: "https://example.test/desktop-version.json",
         fetchImpl,
         logger: { warn() {} },
@@ -299,7 +297,6 @@ describe("desktop update service", () => {
     const service = createDesktopUpdateService({
       channel: "latest",
       currentVersion: "0.0.1",
-      enabled: true,
       feedUrl: "https://example.test/desktop-version.json",
       fetchImpl,
       logger: { warn() {} },
@@ -327,12 +324,33 @@ describe("desktop update service", () => {
     const service = createDesktopUpdateService({
       channel: "latest",
       currentVersion: "0.0.1",
-      enabled: false,
-      feedUrl: "https://example.test/desktop-version.json",
+      feedUrl: null,
       logger: { warn() {} },
       platform: "linux",
     });
 
     expect(service.getInfo().platform).toBe("linux");
+  });
+
+  it("never fetches when there is no feed", async () => {
+    let fetchCount = 0;
+    const service = createDesktopUpdateService({
+      channel: "latest",
+      currentVersion: "0.0.1",
+      feedUrl: null,
+      fetchImpl: async () => {
+        fetchCount += 1;
+        return new Response("{}");
+      },
+      logger: { warn() {} },
+      platform: "macos",
+    });
+
+    service.start();
+    await service.checkForUpdates();
+    service.stop();
+
+    expect(fetchCount).toBe(0);
+    expect(service.getInfo().lastCheckedAt).toBeNull();
   });
 });

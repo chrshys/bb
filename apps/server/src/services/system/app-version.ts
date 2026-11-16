@@ -31,6 +31,7 @@ interface AppVersionGetSystemVersionArgs {
 
 interface CreateAppVersionServiceArgs {
   installKind: AppInstallKind | null;
+  npmReleaseCheck: boolean;
   sourceCommit: string | null;
   config: Pick<ServerRuntimeConfig, "appVersion" | "isDevelopment">;
   fetchImpl?: typeof fetch;
@@ -59,6 +60,7 @@ export function createAppVersionService(
   const logger = args.logger;
   const config = args.config;
   const installKind = args.installKind;
+  const npmReleaseCheck = args.npmReleaseCheck;
   const sourceCommit = args.sourceCommit;
   const distTag = resolveDistTag(config.appVersion);
 
@@ -173,7 +175,11 @@ export function createAppVersionService(
         upgradeCommand: `npx bb-app@${distTag}`,
       };
 
-      if (config.isDevelopment || installKind === "source") {
+      if (
+        !npmReleaseCheck ||
+        config.isDevelopment ||
+        installKind === "source"
+      ) {
         return baseResponse;
       }
 

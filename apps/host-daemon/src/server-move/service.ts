@@ -6,6 +6,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { readBbAppRuntimeFile } from "@bb/config/app-runtime-file";
 import { resolveCodexHome } from "@bb/config/codex-home";
 import { isLoopbackHostname } from "@bb/config/loopback";
+import { BB_PROD_DATA_DIR_NAME } from "@bb/config/runtime";
 import { createNodeVerifiedProcessOps } from "@bb/config/verified-process-stop";
 import type { ServerMoveStepId } from "@bb/domain";
 import type {
@@ -141,7 +142,7 @@ const PROGRESS_INTERVAL_MS = 1_000;
 const BB_APP_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 const SERVER_DATABASE_PATHS = ["bb.db", "bb.db-wal", "bb.db-shm"] as const;
 const HOST_ARTIFACT_DIGEST_FILE_NAME = "host-artifact.sha256";
-const STANDALONE_DATA_DIR_NAME = ".bb";
+const STANDALONE_DATA_DIR_NAME = BB_PROD_DATA_DIR_NAME;
 const SERVER_DATABASE_FILE_NAME = "bb.db";
 const SERVER_MOVE_LOG_FILE_NAME = "server-move.log";
 const INSTALL_DAEMON_PID_FILE_NAME = "install-daemon.pid";
