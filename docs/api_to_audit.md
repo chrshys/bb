@@ -2293,21 +2293,39 @@ returns `renderSlot`'s `pluginId` option, `test-plugin` by default.
 ## `app.experimental_useNativeFolderPicker` (`@get-bb/plugin-sdk/app`)
 
 **What it does.** Returns `{ hostId, pickFolder }` for the operating system's
-folder dialog. `hostId` is the machine this desktop window runs on when its
-daemon can show the dialog, and null otherwise (a plain browser tab, a platform
-without one). `pickFolder()` opens the dialog and resolves with the chosen
-folder's normalized absolute path, or null when the person cancels or no dialog
-is available; it rejects when the dialog could not be shown. The test harness
-returns `renderSlot`'s `nativeFolderPicker` option, which defaults to no dialog.
+folder dialog. `hostId` is the machine this window runs on when a dialog can be
+opened there, and null otherwise. `pickFolder()` opens the dialog and resolves
+with the chosen folder's normalized absolute path, or null when the person
+cancels or no dialog is available; it rejects when the dialog could not be
+shown. The test harness returns `renderSlot`'s `nativeFolderPicker` option,
+which defaults to no dialog.
+
+**How the dialog opens.** There are two routes, and `hostId` is the local
+daemon's host id on both.
+
+- Desktop shell: `window.bbDesktop.pickFolder()` invokes
+  `bb-desktop:pick-folder`, and `apps/desktop/src/desktop-folder-dialog.ts`
+  opens Electron's `dialog.showOpenDialog` (directories, can create
+  directories) as a sheet on the requesting window. No server or daemon request
+  is made. This route is used only when the window's own server lists the local
+  daemon's host as connected, so the path is for a machine that server can use:
+  the built-in server, or a remote server this machine's daemon is enrolled
+  with. It does not depend on the platform, so it also covers the Windows and
+  Linux desktop builds.
+- Daemon: `sdk.hosts.pickFolder` reaches `host.pick_folder`, which runs
+  `osascript` on the daemon's machine. It is used in a plain browser tab, in a
+  desktop shell that predates `pickFolder`, and when the window's server does
+  not list this machine as connected. It needs a daemon that reports
+  `supportsNativeFolderPicker`, which is macOS only.
 
 **Core callers.** `useNativeFolderPicker` in
 `apps/app/src/hooks/useNativeFolderPicker.ts` is the implementation and the
-only caller of `sdk.hosts.pickFolder`. Core's `useLocalPathPicker` goes through
-it for Add project (`useQuickCreateProject`), a project's path and its added
-sources, and falls back to `ProjectPathDialog` when `hostId` is not the machine
-it is choosing for. Bots Sidebar is the first plugin consumer: its project
-folder choice opens the dialog when the only connected machine is `hostId`, and
-shows its own folder list otherwise.
+only caller of `sdk.hosts.pickFolder` and `bbDesktop.pickFolder`. Core's
+`useLocalPathPicker` goes through it for Add project (`useQuickCreateProject`),
+a project's path and its added sources, and falls back to `ProjectPathDialog`
+when `hostId` is not the machine it is choosing for. Bots Sidebar is the first
+plugin consumer: its project folder choice opens the dialog when the only
+connected machine is `hostId`, and shows its own folder list otherwise.
 
 **Audit before stabilizing.**
 

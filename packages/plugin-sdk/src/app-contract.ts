@@ -139,9 +139,10 @@ export interface ExperimentalQuestionShortcut {
  */
 export interface ExperimentalNativeFolderPicker {
   /**
-   * The machine whose folders the dialog browses: the one this desktop app
-   * runs on. Null when no dialog is available, as in a plain browser tab or
-   * on a platform without one; choose a folder another way there.
+   * The machine whose folders the dialog browses: the one this window runs
+   * on. The desktop app opens its own dialog on every platform; a browser tab
+   * asks the local daemon, which has one on macOS. Null when neither applies;
+   * choose a folder another way there.
    */
   hostId: string | null;
   /**
