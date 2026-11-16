@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { rpcContract, type BotMetadata, type BotStateFile, type ProjectOwner } from "../contract";
-import { resetBotPanelBridgeForTest } from "../lib/bot-panel-bridge";
+import { resetBotPagesForTest } from "../lib/bot-panel-tab";
 import { resetFieldDraftsForTest } from "../lib/field-drafts";
 import { bot as baseBot, personalProjectId } from "./fixtures";
 
@@ -16,7 +16,7 @@ function hashed(bot: BotMetadata): BotMetadata {
 
 export function resetPanelState() {
   resetFieldDraftsForTest();
-  resetBotPanelBridgeForTest();
+  resetBotPagesForTest();
 }
 
 export function panelBackend(seed: Array<Partial<BotMetadata>> = [{}]) {
@@ -127,14 +127,15 @@ export type PanelBackend = ReturnType<typeof panelBackend>;
 
 const app = await loadPluginApp(() => import("../app"));
 export const pluginApp = app;
-export const botPanelAction = app.threadPanelActions.find((action) => action.id === "bot")!;
+export const botsPinnedTab = app.threadPinnedTabs.find((tab) => tab.id === "bots")!;
 
 export function writes(slot: { inspection: { rpcCalls: { method: string; input: unknown }[] } }) {
   return slot.inspection.rpcCalls.filter((call) => !["bots_list", "thread_bot", "state_read", "project_browse"].includes(call.method));
 }
 
 export async function mountBotPanel(backend: PanelBackend, { botId = "bot", threadId = "thread" }: { botId?: string | null; threadId?: string } = {}) {
-  const slot = renderSlot(botPanelAction, { threadId, params: botId === null ? null : { botId } }, { rpc: backend.rpc });
+  if (botId !== null) backend.world.threadBots.set(threadId, botId);
+  const slot = renderSlot(botsPinnedTab, { threadId, projectId: "project" }, { rpc: backend.rpc });
   if (botId !== null) await slot.findByRole("region", { name: `${backend.bot(botId).name} bot settings` });
   return slot;
 }

@@ -1,5 +1,8 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { atom, useAtomValue, useStore } from "jotai";
+import { atomFamily } from "jotai-family";
 import type { JsonValue } from "@get-bb/plugin-sdk";
+import { jsonValueSchema } from "@bb/domain";
 import type {
   AppFixedTabOpenIntent,
   AppFixedTabReference,
@@ -15,6 +18,10 @@ export function getPluginFixedTabOwnerId(
   panelId: string,
 ): string {
   return `plugin:${pluginId}:${panelId}`;
+}
+
+export function getPluginPinnedTabOwnerId(pluginId: string): string {
+  return `plugin-pinned:${pluginId}`;
 }
 
 export function openAppFixedTabFromDestinations(
@@ -38,6 +45,105 @@ interface AppFixedTabTargetSnapshot {
 
 export interface AppFixedTabTargetState extends AppFixedTabTargetSnapshot {
   clear(): void;
+}
+
+interface AppFixedTabSessionTarget {
+  sequence: number;
+  target: JsonValue;
+}
+
+type AppFixedTabTargetStore = ReturnType<typeof useStore>;
+
+const appFixedTabTargetAtomFamily = atomFamily((_targetId: string) =>
+  atom<AppFixedTabSessionTarget | null>(null),
+);
+
+function getAppFixedTabTargetAtom(
+  scopeId: string,
+  reference: AppFixedTabReference,
+) {
+  return appFixedTabTargetAtomFamily(
+    `${scopeId}\0${reference.ownerId}\0${reference.tabId}`,
+  );
+}
+
+export function deliverAppFixedTabTarget(
+  store: AppFixedTabTargetStore,
+  scopeId: string,
+  reference: AppFixedTabReference,
+  target: JsonValue,
+): void {
+  store.set(getAppFixedTabTargetAtom(scopeId, reference), (current) => ({
+    sequence: (current?.sequence ?? 0) + 1,
+    target,
+  }));
+}
+
+export function useScopedAppFixedTabTargetState(
+  scopeId: string,
+  reference: AppFixedTabReference,
+): AppFixedTabTargetState | null {
+  const store = useStore();
+  const { ownerId, tabId } = reference;
+  const targetAtom = getAppFixedTabTargetAtom(scopeId, { ownerId, tabId });
+  const snapshot = useAtomValue(targetAtom);
+  return useMemo<AppFixedTabTargetState | null>(() => {
+    if (snapshot === null) return null;
+    const { sequence } = snapshot;
+    return {
+      ...snapshot,
+      ownerId,
+      tabId,
+      clear: () => {
+        store.set(targetAtom, (current) =>
+          current?.sequence === sequence ? null : current,
+        );
+      },
+    };
+  }, [ownerId, snapshot, store, tabId, targetAtom]);
+}
+
+export interface AppFixedTabTargetValidator {
+  validate(value: JsonValue): boolean;
+}
+
+export function resolveOwnerValidatedFixedTabTarget(
+  validator: AppFixedTabTargetValidator | undefined,
+  target: JsonValue,
+): { accepted: true; target: JsonValue } | { accepted: false } {
+  const result = jsonValueSchema.safeParse(target);
+  if (!result.success || validator === undefined) return { accepted: false };
+  try {
+    if (!validator.validate(result.data)) return { accepted: false };
+  } catch {
+    return { accepted: false };
+  }
+  return { accepted: true, target: result.data };
+}
+
+export function createOwnerValidatedFixedTabDestination({
+  deliverTarget,
+  select,
+  tab,
+  validator,
+}: {
+  deliverTarget: (target: JsonValue) => void;
+  select: () => void;
+  tab: AppFixedTabReference;
+  validator: AppFixedTabTargetValidator | undefined;
+}): AppFixedTabDestination {
+  return {
+    tab,
+    open(target) {
+      if (target !== undefined) {
+        const resolved = resolveOwnerValidatedFixedTabTarget(validator, target);
+        if (!resolved.accepted) return false;
+        deliverTarget(resolved.target);
+      }
+      select();
+      return true;
+    },
+  };
 }
 
 const AppFixedTabTargetContext = createContext<AppFixedTabTargetState | null>(
@@ -64,4 +170,88 @@ export function useAppFixedTabTarget(
 ): AppFixedTabTargetState | null {
   const state = useContext(AppFixedTabTargetContext);
   return state?.ownerId === ownerId && state.tabId === tabId ? state : null;
+}
+
+export const PENDING_FIXED_TAB_TTL_MS = 30_000;
+
+type FixedTabSurfaceOpener = (intent: AppFixedTabOpenIntent) => boolean;
+
+interface PendingFixedTabIntent {
+  intent: AppFixedTabOpenIntent;
+  queuedAt: number;
+}
+
+const fixedTabSurfaceOpeners = new Map<string, FixedTabSurfaceOpener[]>();
+const pendingFixedTabIntents = new Map<string, PendingFixedTabIntent>();
+
+export function getThreadFixedTabSurfaceKey(threadId: string): string {
+  return `thread:${threadId}`;
+}
+
+export function getNavPanelFixedTabSurfaceKey(
+  pluginId: string,
+  panelId: string,
+): string {
+  return `nav-panel:${pluginId}:${panelId}`;
+}
+
+function drainPendingFixedTabIntent(
+  surfaceKey: string,
+  opener: FixedTabSurfaceOpener,
+): void {
+  const pending = pendingFixedTabIntents.get(surfaceKey);
+  if (pending === undefined) return;
+  if (Date.now() - pending.queuedAt > PENDING_FIXED_TAB_TTL_MS) {
+    pendingFixedTabIntents.delete(surfaceKey);
+    return;
+  }
+  if (opener(pending.intent)) {
+    pendingFixedTabIntents.delete(surfaceKey);
+  }
+}
+
+export function registerFixedTabSurface(
+  surfaceKey: string,
+  opener: FixedTabSurfaceOpener,
+): () => void {
+  fixedTabSurfaceOpeners.set(surfaceKey, [
+    ...(fixedTabSurfaceOpeners.get(surfaceKey) ?? []),
+    opener,
+  ]);
+  drainPendingFixedTabIntent(surfaceKey, opener);
+  return () => {
+    const remaining = (fixedTabSurfaceOpeners.get(surfaceKey) ?? []).filter(
+      (candidate) => candidate !== opener,
+    );
+    if (remaining.length > 0) fixedTabSurfaceOpeners.set(surfaceKey, remaining);
+    else fixedTabSurfaceOpeners.delete(surfaceKey);
+  };
+}
+
+export function openAppFixedTabOnSurface({
+  intent,
+  isSurfaceFocused,
+  navigateToSurface,
+  surfaceKey,
+}: {
+  intent: AppFixedTabOpenIntent;
+  isSurfaceFocused: boolean;
+  navigateToSurface: () => void;
+  surfaceKey: string;
+}): boolean {
+  const opener = fixedTabSurfaceOpeners.get(surfaceKey)?.at(-1);
+  if (opener === undefined) {
+    pendingFixedTabIntents.set(surfaceKey, { intent, queuedAt: Date.now() });
+    navigateToSurface();
+    return true;
+  }
+  if (!opener(intent)) return false;
+  pendingFixedTabIntents.delete(surfaceKey);
+  if (!isSurfaceFocused) navigateToSurface();
+  return true;
+}
+
+export function resetFixedTabSurfacesForTest(): void {
+  fixedTabSurfaceOpeners.clear();
+  pendingFixedTabIntents.clear();
 }

@@ -10,6 +10,7 @@ import { Icon } from "@bb/shared-ui/icon";
 import { TabPill } from "@/components/ui/tab-pill";
 import { MACOS_APP_REGION_NO_DRAG_CLASS } from "@/lib/bb-desktop";
 import { PANEL_TAB_CONTROL_CLASS } from "./panelChromeClasses";
+import { PinnedPanelTabStrip } from "./PinnedPanelTabStrip";
 
 const MAX_TAB_WIDTH_PX = 144;
 const TAB_GAP_PX = 4;
@@ -140,22 +141,20 @@ export function MobilePanelTabPager({
       className={`flex min-w-0 flex-1 items-center gap-2 ${MACOS_APP_REGION_NO_DRAG_CLASS}`}
       data-testid="mobile-panel-tab-pager"
     >
-      <div className="flex shrink-0 items-center gap-1 [&_button]:size-8 max-md:pointer-coarse:[&_button]:size-9">
-        {fixedTabs.map((tab) => (
-          <TabPill
-            compact
-            key={tab.id}
-            label={tab.label}
-            ariaLabel={tab.ariaLabel}
-            iconOnly
-            leadingVisual={tab.leadingVisual}
-            title={tab.label}
-            isActive={tab.id === activeTabId}
-            onSelect={tab.onSelect}
-            closeAction={null}
-          />
-        ))}
-      </div>
+      <PinnedPanelTabStrip
+        compact
+        className="[&_button]:size-8 max-md:pointer-coarse:[&_button]:size-9"
+        items={fixedTabs.map((tab) => ({
+          ariaLabel: tab.ariaLabel,
+          id: tab.id,
+          isActive: tab.id === activeTabId,
+          label: tab.label,
+          leadingVisual: tab.leadingVisual,
+          onSelect: tab.onSelect,
+          title: tab.label,
+        }))}
+        showTooltips={false}
+      />
       <div
         ref={navigationRef}
         className="flex min-w-0 flex-1 items-center gap-1"

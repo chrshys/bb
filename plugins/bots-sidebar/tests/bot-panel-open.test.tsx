@@ -4,14 +4,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { conversationPanelPath } from "../components/conversation-panel";
-import { botPanelAction, panelBackend, pluginApp, resetPanelState, writes } from "./bot-panel-fixture";
+import { botsPinnedTab, panelBackend, pluginApp, resetPanelState, writes } from "./bot-panel-fixture";
 import { personalEnvironment, personalProjectId, thread } from "./fixtures";
 
 afterEach(() => { cleanup(); resetPanelState(); vi.restoreAllMocks(); });
 
-const header = (threadId: string) => createElement(pluginApp.threadHeaderActions[0]!.component, { key: `header-${threadId}`, threadId, projectId: "project", isCompactViewport: false });
-const coordinatorPage = (botId: string) => createElement(pluginApp.navPanels.find((panel) => panel.id === "coordinator")!.component, { key: "page", subPath: botId });
-const panelOpen = { method: "openThreadPanel", options: { actionId: "bot", title: "Test bot", params: { botId: "bot" } } };
+const page = (id: "conversation" | "coordinator", subPath: string) => createElement(pluginApp.navPanels.find((panel) => panel.id === id)!.component, { key: "page", subPath });
+const noSection = { botId: "bot", section: null };
 
 async function mount({ activeThreadId, coordinatorThreadId = null, accept = true }: { activeThreadId: string | null; coordinatorThreadId?: string | null; accept?: boolean }) {
   const backend = panelBackend([{ coordinatorThreadId }]);
@@ -22,7 +21,7 @@ async function mount({ activeThreadId, coordinatorThreadId = null, accept = true
   const slot = renderSlot(pluginApp.threadLists[0]!, sidebarProps, {
     sidebarThreads: { projects: [], threads: [thread("main", 100), thread("elsewhere", 90), ...(coordinatorThreadId ? [thread(coordinatorThreadId, 80)] : [])] },
     rpc: { ...backend.rpc, bot_prepare: () => backend.bot() },
-    openThreadPanel: () => accept,
+    experimental_openThreadPinnedTab: () => accept,
     experimental_openFixedTab: () => accept,
   });
   const sidebar = createElement(pluginApp.threadLists[0]!.component, { key: "sidebar", ...sidebarProps });
@@ -32,95 +31,98 @@ async function mount({ activeThreadId, coordinatorThreadId = null, accept = true
     fireEvent.contextMenu(await slot.findByText("Test bot"));
     fireEvent.click(await slot.findByRole("menuitem", { name: item }));
   }
-  const panelOpens = () => slot.inspection.navigateCalls.filter((call) => call.method === "openThreadPanel");
-  return { slot, backend, onNavigate, show, choose, panelOpens };
+  return { slot, backend, onNavigate, show, choose };
 }
 
-it("opens the bot panel beside the conversation when Edit bot is chosen inside one of the bot's conversations", async () => {
-  const { slot, onNavigate, show, choose, panelOpens } = await mount({ activeThreadId: "main" });
-  show(header("main"));
+it("registers one pinned Bots tab and no closable bot tab or header button", () => {
+  expect(pluginApp.threadPinnedTabs.map(({ id, title, icon, layout }) => ({ id, title, icon, layout }))).toEqual([{ id: "bots", title: "Bots", icon: "Bot", layout: "flush" }]);
+  expect(pluginApp.threadPanelActions).toEqual([]);
+  expect(pluginApp.threadHeaderActions).toEqual([]);
+});
+
+it("opens the pinned Bots tab beside the conversation when Edit bot is chosen inside one of the bot's conversations", async () => {
+  const { slot, onNavigate, choose } = await mount({ activeThreadId: "main" });
   await choose("Edit bot…");
-  expect(panelOpens()).toEqual([panelOpen]);
-  expect(slot.inspection.navigateCalls).toHaveLength(1);
+  expect(slot.inspection.experimental_threadPinnedTabOpenCalls).toEqual([{ threadId: "main", tabId: "bots", target: noSection }]);
+  expect(slot.inspection.navigateCalls).toEqual([]);
   expect(slot.inspection.sidebarActionCalls).toEqual([]);
+  expect(slot.inspection.experimental_fixedTabOpenCalls).toEqual([]);
   expect(slot.queryByRole("dialog")).toBeNull();
   expect(onNavigate).toHaveBeenCalledOnce();
   expect(writes(slot)).toEqual([]);
 });
 
-it("goes to the bot's coordinator and opens the panel there instead of beside an unrelated conversation", async () => {
-  const { slot, show, choose, panelOpens } = await mount({ activeThreadId: "elsewhere", coordinatorThreadId: "coordinator" });
-  show(header("elsewhere"));
+it("asks the host for the bot's coordinator instead of opening beside an unrelated conversation", async () => {
+  const { slot, choose } = await mount({ activeThreadId: "elsewhere", coordinatorThreadId: "coordinator" });
   await choose("Edit bot…");
-  expect(slot.inspection.sidebarActionCalls).toEqual([{ method: "open", threadId: "coordinator" }]);
-  expect(panelOpens()).toEqual([]);
-  show(header("coordinator"));
-  await waitFor(() => expect(panelOpens()).toEqual([panelOpen]));
-  show(header("elsewhere"));
-  show(header("coordinator"));
-  expect(panelOpens()).toHaveLength(1);
-});
-
-it("opens the fixed bot tab on the coordinator page when the bot has no conversation yet", async () => {
-  const { slot, show, choose, panelOpens } = await mount({ activeThreadId: null });
-  await choose("Edit bot…");
-  expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "coordinator", options: { subPath: "bot" } }]);
-  expect(slot.inspection.experimental_fixedTabOpenCalls).toEqual([]);
-  show(coordinatorPage("bot"));
-  await waitFor(() => expect(slot.inspection.experimental_fixedTabOpenCalls).toEqual([{ surface: { kind: "current" }, panelId: "coordinator", tabId: "bot" }]));
-  await choose("Edit bot…");
-  expect(slot.inspection.experimental_fixedTabOpenCalls).toHaveLength(2);
-  expect(slot.inspection.navigateCalls).toHaveLength(1);
-  expect(panelOpens()).toEqual([]);
-});
-
-it("says so when the host declines to open the panel beside the conversation", async () => {
-  const { slot, show, choose } = await mount({ activeThreadId: "main", accept: false });
-  show(header("main"));
-  await choose("Edit bot…");
-  expect((await slot.findByRole("alert")).textContent).toBe("The bot panel could not be opened here.");
+  expect(slot.inspection.experimental_threadPinnedTabOpenCalls).toEqual([{ threadId: "coordinator", tabId: "bots", target: noSection }]);
   expect(slot.inspection.sidebarActionCalls).toEqual([]);
 });
 
-it("returns to the conversation and opens the panel there when its view is not on screen", async () => {
-  const { slot, show, choose, panelOpens } = await mount({ activeThreadId: "main" });
+it("opens the fixed bot tab on the coordinator page when the bot has no conversation yet", async () => {
+  const { slot, choose } = await mount({ activeThreadId: null });
   await choose("Edit bot…");
-  expect(slot.inspection.sidebarActionCalls).toEqual([{ method: "open", threadId: "main" }]);
-  expect(slot.queryByRole("alert")).toBeNull();
-  show(header("main"));
-  await waitFor(() => expect(panelOpens()).toEqual([panelOpen]));
+  expect(slot.inspection.experimental_fixedTabOpenCalls).toEqual([{ surface: { kind: "navPanel", panelId: "coordinator", subPath: "bot" }, panelId: "coordinator", tabId: "bot", target: noSection }]);
+  expect(slot.inspection.experimental_threadPinnedTabOpenCalls).toEqual([]);
 });
 
-it("forgets a queued open that no conversation picked up in time", async () => {
-  const { show, choose, panelOpens } = await mount({ activeThreadId: null, coordinatorThreadId: "coordinator" });
-  const now = Date.now();
+it("opens the fixed bot tab in place when one of the bot's new-conversation pages is showing", async () => {
+  const { slot, backend, show, choose } = await mount({ activeThreadId: "elsewhere", coordinatorThreadId: "coordinator" });
+  const subPath = conversationPanelPath({ bot: backend.bot(), kind: "bot", projectId: personalProjectId, environment: personalEnvironment, makeMain: false });
+  show(page("conversation", subPath));
   await choose("Edit bot…");
-  vi.spyOn(Date, "now").mockReturnValue(now + 31_000);
-  show(header("coordinator"));
-  await Promise.resolve();
-  expect(panelOpens()).toEqual([]);
+  expect(slot.inspection.experimental_fixedTabOpenCalls).toEqual([{ surface: { kind: "navPanel", panelId: "conversation", subPath }, panelId: "conversation", tabId: "bot", target: noSection }]);
+  expect(slot.inspection.experimental_threadPinnedTabOpenCalls).toEqual([]);
+  show();
+  await choose("Edit bot…");
+  expect(slot.inspection.experimental_threadPinnedTabOpenCalls).toEqual([{ threadId: "coordinator", tabId: "bots", target: noSection }]);
 });
 
-it("brings Projects into view for Add / manage projects…", async () => {
+it("says so when the host declines to open the panel", async () => {
+  const { slot, onNavigate, choose } = await mount({ activeThreadId: "main", accept: false });
+  await choose("Edit bot…");
+  expect((await slot.findByRole("alert")).textContent).toBe("The bot panel could not be opened here.");
+  expect(onNavigate).not.toHaveBeenCalled();
+});
+
+it("asks for the Projects section from Add / manage projects…", async () => {
+  const { slot, choose } = await mount({ activeThreadId: "main" });
+  await choose("Add / manage projects…");
+  expect(slot.inspection.experimental_threadPinnedTabOpenCalls).toEqual([{ threadId: "main", tabId: "bots", target: { botId: "bot", section: "projects" } }]);
+});
+
+it("brings a requested section into view once and then forgets the request", async () => {
   const scrolled: Array<string | null> = [];
   HTMLElement.prototype.scrollIntoView = function scrollIntoView(this: HTMLElement) { scrolled.push(this.getAttribute("data-bot-panel-section")); };
-  const { slot, show, choose, panelOpens } = await mount({ activeThreadId: "main" });
-  show(header("main"));
-  await choose("Add / manage projects…");
-  expect(panelOpens()).toEqual([panelOpen]);
-  show(header("main"), createElement(botPanelAction.component, { key: "panel", threadId: "main", params: { botId: "bot" } }));
-  await slot.findByRole("region", { name: "Test bot bot settings" });
-  await waitFor(() => expect(scrolled).toContain("projects"));
+  const backend = panelBackend([{ name: "Atlas" }]);
+  backend.world.threadBots.set("main", "bot");
+  const slot = renderSlot(botsPinnedTab, { threadId: "main", projectId: "project" }, { rpc: backend.rpc, experimental_threadPinnedTabTarget: { tabId: "bots", target: { botId: "bot", section: "projects" } } });
+  await slot.findByRole("region", { name: "Atlas bot settings" });
+  await waitFor(() => expect(scrolled).toEqual(["projects"]));
+  slot.lifecycle.rerender(createElement(botsPinnedTab.component, { threadId: "main", projectId: "project" }));
+  await slot.findByRole("region", { name: "Atlas bot settings" });
+  expect(scrolled).toEqual(["projects"]);
 });
 
-it("offers the bot's settings from the header of its own conversations only", async () => {
-  const { slot, show, panelOpens } = await mount({ activeThreadId: "main" });
-  show(header("elsewhere"));
-  await waitFor(() => expect(slot.inspection.rpcCalls).toContainEqual({ method: "thread_bot", input: { threadId: "elsewhere" } }));
-  expect(slot.queryByRole("button", { name: /bot settings$/ })).toBeNull();
-  show(header("main"));
-  fireEvent.click(await slot.findByRole("button", { name: "Open Test bot bot settings" }));
-  expect(panelOpens()).toEqual([panelOpen]);
+it("shows the conversation's own bot even when a request named another bot", async () => {
+  const backend = panelBackend([{ name: "Atlas" }, { name: "Borealis" }]);
+  backend.world.threadBots.set("main", "bot");
+  const scrollIntoView = vi.fn();
+  HTMLElement.prototype.scrollIntoView = scrollIntoView;
+  const slot = renderSlot(botsPinnedTab, { threadId: "main", projectId: "project" }, { rpc: backend.rpc, experimental_threadPinnedTabTarget: { tabId: "bots", target: { botId: "bot-2", section: "memory" } } });
+  await slot.findByRole("region", { name: "Atlas bot settings" });
+  expect(slot.queryByRole("region", { name: "Borealis bot settings" })).toBeNull();
+  expect(scrollIntoView).not.toHaveBeenCalled();
+});
+
+it("rejects a target that is not a bot and section", () => {
+  const { validate } = botsPinnedTab.experimental_target!;
+  expect(validate({ botId: "bot", section: "projects" })).toBe(true);
+  expect(validate({ botId: "bot", section: null })).toBe(true);
+  expect(validate({ botId: "bot", section: "nope" })).toBe(false);
+  expect(validate({ botId: "", section: null })).toBe(false);
+  expect(validate({ botId: "bot", section: null, extra: 1 })).toBe(false);
+  expect(validate("bot")).toBe(false);
 });
 
 it("pins the same panel as a fixed tab on both new-conversation pages", async () => {

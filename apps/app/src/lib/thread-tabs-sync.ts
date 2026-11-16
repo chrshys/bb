@@ -36,17 +36,27 @@ const writeQueues = new WeakMap<QueryClient, Map<string, Promise<void>>>();
 const pendingWriteCounts = new WeakMap<QueryClient, Map<string, number>>();
 const attemptedLocalMigrations = new WeakMap<QueryClient, Set<string>>();
 
+type ClientOnlyFixedPanelTab = Extract<
+  FixedPanelTab,
+  { kind: "plugin-page-fixed" | "plugin-pinned" }
+>;
 type PersistedThreadFixedPanelTab = Exclude<
   FixedPanelTab,
-  { kind: "plugin-page-fixed" }
+  ClientOnlyFixedPanelTab
 >;
+
+function isClientOnlyTab(
+  tab: FixedPanelTab | ThreadTab,
+): tab is ClientOnlyFixedPanelTab {
+  return tab.kind === "plugin-page-fixed" || tab.kind === "plugin-pinned";
+}
 
 function persistedThreadTabs(
   tabs: readonly (FixedPanelTab | ThreadTab)[],
 ): readonly PersistedThreadFixedPanelTab[] {
   return tabs.filter(
     (tab): tab is PersistedThreadFixedPanelTab =>
-      tab.kind !== "side-chat" && tab.kind !== "plugin-page-fixed",
+      tab.kind !== "side-chat" && !isClientOnlyTab(tab),
   );
 }
 
@@ -72,7 +82,11 @@ export function reconcileFixedPanelTabsState(
   if (areThreadTabListsEquivalent(current.secondary.tabs, serverTabs)) {
     return current;
   }
-  const tabs = persistedThreadTabs(serverTabs);
+  const clientOnlyTabs = current.secondary.tabs.filter(isClientOnlyTab);
+  const tabs: readonly FixedPanelTab[] = [
+    ...clientOnlyTabs,
+    ...persistedThreadTabs(serverTabs),
+  ];
   const retainedIds = new Set(tabs.map((tab) => tab.id));
   let reconciled = current;
   for (const tab of current.secondary.tabs) {

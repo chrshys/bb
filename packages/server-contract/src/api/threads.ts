@@ -781,6 +781,21 @@ const threadOpenFileLenientSchema = z.object({
   lineNumber: z.number().int().positive().nullable(),
 });
 
+const threadOpenPanelTabReferenceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("core"), id: z.enum(["info", "changes"]) }),
+  z.object({
+    kind: z.literal("plugin"),
+    pluginId: z.string().min(1).max(200),
+    tabId: z.string().min(1).max(200),
+  }),
+]);
+
+export const threadOpenPanelTabSchema = z.object({
+  tab: threadOpenPanelTabReferenceSchema,
+  target: jsonValueSchema.nullable(),
+});
+export type ThreadOpenPanelTab = z.infer<typeof threadOpenPanelTabSchema>;
+
 export const threadOpenSignalSchema = z
   .object({
     type: z.literal("thread-open"),
@@ -788,6 +803,7 @@ export const threadOpenSignalSchema = z
     threadId: z.string().min(1),
     split: threadOpenSplitSchema,
     file: threadOpenFileSchema.nullable(),
+    panelTab: threadOpenPanelTabSchema.nullable(),
   })
   .strict();
 export type ThreadOpenSignal = z.infer<typeof threadOpenSignalSchema>;
@@ -798,12 +814,14 @@ export const threadOpenSignalLenientSchema = z.object({
   threadId: z.string(),
   split: threadOpenSplitSchema,
   file: threadOpenFileLenientSchema.nullable(),
+  panelTab: threadOpenPanelTabSchema.nullable().default(null),
 });
 
 export const threadOpenRequestSchema = z
   .object({
     split: threadOpenSplitSchema.optional(),
     file: threadOpenFileSchema.nullable(),
+    panelTab: threadOpenPanelTabSchema.optional(),
   })
   .strict();
 export type ThreadOpenRequest = z.infer<typeof threadOpenRequestSchema>;

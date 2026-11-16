@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { resolveThreadPinnedTabs } from "@/components/secondary-panel/thread-pinned-tabs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -177,19 +178,15 @@ describe("docs anatomy manifest", () => {
   });
 
   it("keeps the Info tab before the Diff tab, as the Plugin Guide's right-panel fixture draws them", () => {
-    const source = readFileSync(
-      resolve(
-        import.meta.dirname,
-        "../../views/thread-detail/ThreadDetailView.tsx",
-      ),
-      "utf8",
-    );
-    const info = source.indexOf("createThreadInfoFixedPanelTab()");
-    const diff = source.indexOf("createGitDiffFixedPanelTab()");
+    const pinnedTabs = resolveThreadPinnedTabs({
+      gitDiffTabStatus: "eligible",
+      pluginPinnedTabs: [],
+    });
 
-    expect(info).toBeGreaterThan(-1);
-    expect(diff).toBeGreaterThan(-1);
-    expect(info).toBeLessThan(diff);
+    expect(pinnedTabs.map((pinnedTab) => pinnedTab.tab.kind)).toEqual([
+      "thread-info",
+      "git-diff",
+    ]);
   });
 
   it("matches AppSidebar's section order", () => {

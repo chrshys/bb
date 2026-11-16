@@ -130,6 +130,90 @@ describe("collectPluginAppRegistrations — experimental_threadAction", () => {
   });
 });
 
+describe("collectPluginAppRegistrations — experimental_threadPinnedTab", () => {
+  const validate = (value: unknown): value is { id: string } =>
+    typeof value === "object" && value !== null;
+
+  it("collects a pinned thread tab with its layout and target validator", () => {
+    const definition = definePluginApp((app) => {
+      app.slots.experimental_threadPinnedTab({
+        id: "bots",
+        title: "Bots",
+        icon: "Bot",
+        component: Component,
+        layout: "flush",
+        experimental_target: { validate },
+      });
+      app.slots.experimental_threadPinnedTab({
+        id: "plain",
+        title: "Plain",
+        icon: "Zap",
+        component: Component,
+      });
+    });
+    expect(collectPluginAppRegistrations(definition).threadPinnedTabs).toEqual([
+      {
+        id: "bots",
+        title: "Bots",
+        icon: "Bot",
+        component: Component,
+        layout: "flush",
+        experimental_target: { validate },
+      },
+      { id: "plain", title: "Plain", icon: "Zap", component: Component },
+    ]);
+  });
+
+  it("rejects two pinned thread tabs with the same id", () => {
+    const definition = definePluginApp((app) => {
+      for (const title of ["One", "Two"]) {
+        app.slots.experimental_threadPinnedTab({
+          id: "bots",
+          title,
+          icon: "Bot",
+          component: Component,
+        });
+      }
+    });
+    expect(() => collectPluginAppRegistrations(definition)).toThrow(/bots/);
+  });
+
+  it.each([
+    [
+      "a missing icon",
+      { id: "bots", title: "Bots", component: Component },
+      /icon/,
+    ],
+    [
+      "an unknown layout",
+      {
+        id: "bots",
+        title: "Bots",
+        icon: "Bot",
+        component: Component,
+        layout: "wide",
+      },
+      /layout/,
+    ],
+    [
+      "a target without a validate function",
+      {
+        id: "bots",
+        title: "Bots",
+        icon: "Bot",
+        component: Component,
+        experimental_target: {},
+      },
+      /experimental_target\.validate/,
+    ],
+  ])("rejects %s", (_name, registration, message) => {
+    const definition = definePluginApp((app) => {
+      app.slots.experimental_threadPinnedTab(registration as never);
+    });
+    expect(() => collectPluginAppRegistrations(definition)).toThrow(message);
+  });
+});
+
 describe("collectPluginAppRegistrations — experimental_threadHeaderAction", () => {
   it("collects a header action", () => {
     const definition = definePluginApp((app) => {

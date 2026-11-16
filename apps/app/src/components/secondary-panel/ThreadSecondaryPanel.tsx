@@ -47,6 +47,7 @@ import {
 import { SecondaryPanelHostLayoutContext } from "./SecondaryPanelHostLayoutContext";
 import { useWindowTitleBarHostsRightPanelToggle } from "@/components/layout/WindowRightPanelToggle";
 import { MobilePanelTabPager } from "./MobilePanelTabPager";
+import { PinnedPanelTabStrip } from "./PinnedPanelTabStrip";
 import { SecondaryPanelTabStrip } from "./SecondaryPanelTabStrip";
 import { ImageTabLightboxProvider } from "./ImageTabLightboxContext";
 import { FilePreviewScrollPositionContext } from "./filePreviewScrollPositionContext";
@@ -99,7 +100,6 @@ import type {
 import { useAppCommandShortcut } from "@/components/commands/AppCommandProvider";
 import { AppCommandShortcutHint } from "@/components/commands/AppCommandShortcutHint";
 import type { AppShortcutPresentation } from "@/lib/app-keybindings";
-import { TabPill } from "@/components/ui/tab-pill";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import { dispatchBrowserViewBoundsSync } from "@/lib/browser-view-bounds-sync";
 import type { SplitSide } from "@/lib/split-layout";
@@ -678,35 +678,43 @@ function ThreadSecondaryPanelContent({
 
     return (
       <>
-        {fixedSurfaceTabs.map((fixedTab) => {
-          const shortcut =
-            fixedTab.tab.kind === "git-diff" ? diffShortcut : null;
-          return (
-            <PinnedIconTab
-              key={fixedTab.tab.id}
-              ariaLabel={
-                shortcut
-                  ? `${fixedTab.ariaLabel} (${shortcut.label})`
-                  : fixedTab.ariaLabel
-              }
-              ariaKeyshortcuts={shortcut?.ariaKeyshortcuts}
-              isActive={
+        <PinnedPanelTabStrip
+          itemClassName={
+            usesDesktopChrome ? MACOS_WINDOW_NO_DRAG_CLASS : undefined
+          }
+          items={fixedSurfaceTabs.map((fixedTab) => {
+            const shortcut =
+              fixedTab.tab.kind === "git-diff" ? diffShortcut : null;
+            return {
+              ariaKeyshortcuts: shortcut?.ariaKeyshortcuts,
+              ariaLabel: shortcut
+                ? `${fixedTab.ariaLabel} (${shortcut.label})`
+                : fixedTab.ariaLabel,
+              id: fixedTab.tab.id,
+              isActive:
                 activeSurfaceFixedTab?.tab.id === fixedTab.tab.id &&
-                !hasActiveSurfaceTab
-              }
-              label={fixedTab.label}
-              leadingVisual={fixedTab.leadingVisual}
-              onClick={fixedTab.onSelect}
-              onPointerDown={
-                onBeginTabDrag
-                  ? (event) => onBeginTabDrag(fixedTab.tab.id, event)
-                  : undefined
-              }
-              title={fixedTab.title}
-              usesDesktopChrome={usesDesktopChrome}
-            />
-          );
-        })}
+                !hasActiveSurfaceTab,
+              label: fixedTab.label,
+              leadingVisual: fixedTab.leadingVisual,
+              onPointerDown: onBeginTabDrag
+                ? (event) => onBeginTabDrag(fixedTab.tab.id, event)
+                : undefined,
+              onSelect: fixedTab.onSelect,
+              testId:
+                fixedTab.tab.kind === "thread-info"
+                  ? "thread-info-tab"
+                  : undefined,
+              title: fixedTab.title,
+            };
+          })}
+        />
+        {fixedSurfaceTabs.length > 0 && visibleSurfaceTabs.length > 0 ? (
+          <span
+            aria-hidden
+            data-pinned-panel-tab-divider=""
+            className="h-4 w-px shrink-0 bg-border-seam"
+          />
+        ) : null}
         {visibleSurfaceTabs.length > 0 ? (
           <SecondaryPanelTabStrip
             activeTabId={activeSurfaceTabId}
@@ -1182,58 +1190,6 @@ interface NewTabButtonProps {
   onOpenNewTab: () => void;
   shortcut: AppShortcutPresentation | null;
   usesDesktopChrome: boolean;
-}
-
-interface PinnedIconTabProps {
-  ariaLabel: string;
-  ariaKeyshortcuts?: string;
-  isActive: boolean;
-  label: string;
-  leadingVisual: ReactNode;
-  onClick: () => void;
-  onPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
-  title: string;
-  usesDesktopChrome: boolean;
-}
-
-function PinnedIconTab({
-  ariaLabel,
-  ariaKeyshortcuts,
-  isActive,
-  label,
-  leadingVisual,
-  onClick,
-  onPointerDown,
-  title,
-  usesDesktopChrome,
-}: PinnedIconTabProps) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          data-testid={label === "Info" ? "thread-info-tab" : undefined}
-          className={cn(
-            "shrink-0",
-            usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
-          )}
-          onPointerDown={onPointerDown}
-        >
-          <TabPill
-            label={label}
-            ariaLabel={ariaLabel}
-            ariaKeyshortcuts={ariaKeyshortcuts}
-            iconOnly
-            leadingVisual={leadingVisual}
-            title={title}
-            isActive={isActive}
-            onSelect={onClick}
-            closeAction={null}
-          />
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>{title}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 function NewTabButton({

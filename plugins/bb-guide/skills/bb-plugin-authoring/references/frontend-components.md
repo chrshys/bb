@@ -190,7 +190,12 @@ className? }` —
   state. The frontend harness records accepted calls in
   `experimental_fixedTabOpenCalls`, gates them with
   `experimental_openFixedTab`, and seeds state with
-  `experimental_fixedTabTarget`.
+  `experimental_fixedTabTarget`. `openThreadPinnedTab({ threadId, tab,
+  target? })` selects one of the plugin's `experimental_threadPinnedTab` tabs
+  for any thread from any surface, navigating to the thread first when needed;
+  the harness records it in `experimental_threadPinnedTabOpenCalls`, gates it
+  with `experimental_openThreadPinnedTab`, and seeds state with
+  `experimental_threadPinnedTabTarget`.
 - `experimental_NewThreadComposer` — bb's complete compose surface for
   CREATING a thread (the create-side counterpart to `ThreadChat`): prompt
   editor with @-mentions and expand, `+` attachments,

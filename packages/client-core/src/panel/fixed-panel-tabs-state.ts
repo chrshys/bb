@@ -80,6 +80,14 @@ const pluginPageFixedPanelTabSchema = z
     pluginId: z.string().min(1),
   })
   .strict();
+const pluginPinnedFixedPanelTabSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.literal("plugin-pinned"),
+    pinnedTabId: z.string().min(1),
+    pluginId: z.string().min(1),
+  })
+  .strict();
 const workspaceFilePreviewFixedPanelTabSchema = z
   .object({
     environmentId: z.string().min(1).nullable(),
@@ -166,6 +174,7 @@ const secondaryFixedPanelTabSchema = z.union([
   threadInfoFixedPanelTabSchema,
   gitDiffFixedPanelTabSchema,
   pluginPageFixedPanelTabSchema,
+  pluginPinnedFixedPanelTabSchema,
   pluginPanelFixedPanelTabSchema,
   workspaceFilePreviewFixedPanelTabSchema,
   hostFilePreviewFixedPanelTabSchema,
@@ -222,10 +231,18 @@ export interface PluginPageFixedPanelTab {
   pluginId: string;
 }
 
+export interface PluginPinnedFixedPanelTab {
+  id: string;
+  kind: "plugin-pinned";
+  pinnedTabId: string;
+  pluginId: string;
+}
+
 export type FixedPanelViewTab =
   | ThreadInfoFixedPanelTab
   | GitDiffFixedPanelTab
-  | PluginPageFixedPanelTab;
+  | PluginPageFixedPanelTab
+  | PluginPinnedFixedPanelTab;
 
 export interface PluginPanelFixedPanelTab {
   actionId: string;
@@ -301,6 +318,7 @@ export type SecondaryFixedPanelTab =
   | ThreadInfoFixedPanelTab
   | GitDiffFixedPanelTab
   | PluginPageFixedPanelTab
+  | PluginPinnedFixedPanelTab
   | PluginPanelFixedPanelTab
   | WorkspaceFilePreviewFixedPanelTab
   | HostFilePreviewFixedPanelTab
@@ -420,6 +438,11 @@ interface CreatePluginPanelFixedPanelTabArgs {
 interface CreatePluginPageFixedPanelTabArgs {
   fixedTabId: string;
   pageId: string;
+  pluginId: string;
+}
+
+interface CreatePluginPinnedFixedPanelTabArgs {
+  pinnedTabId: string;
   pluginId: string;
 }
 
@@ -567,6 +590,22 @@ export function createPluginPageFixedPanelTab({
     }),
     kind: "plugin-page-fixed",
     pageId,
+    pluginId,
+  };
+}
+
+export function createPluginPinnedFixedPanelTab({
+  pinnedTabId,
+  pluginId,
+}: CreatePluginPinnedFixedPanelTabArgs): PluginPinnedFixedPanelTab {
+  return {
+    id: buildFixedPanelTabId({
+      environmentId: null,
+      kind: "plugin-pinned",
+      path: `${pluginId}:${pinnedTabId}`,
+    }),
+    kind: "plugin-pinned",
+    pinnedTabId,
     pluginId,
   };
 }
@@ -750,6 +789,13 @@ function normalizeFixedPanelTabId(tab: FixedPanelTab): FixedPanelTab {
       }).id;
       return tab.id === id ? tab : { ...tab, id };
     }
+    case "plugin-pinned": {
+      const id = createPluginPinnedFixedPanelTab({
+        pinnedTabId: tab.pinnedTabId,
+        pluginId: tab.pluginId,
+      }).id;
+      return tab.id === id ? tab : { ...tab, id };
+    }
     case "workspace-file-preview": {
       const id = buildWorkspaceFilePreviewTabId({
         environmentId: tab.environmentId,
@@ -881,6 +927,7 @@ function stripTransientFixedPanelTabForStorage(
     case "thread-info":
     case "git-diff":
     case "plugin-page-fixed":
+    case "plugin-pinned":
     case "attachment-file-preview":
     case "browser":
     case "new-tab":
@@ -1096,6 +1143,12 @@ export function areFixedPanelTabsEquivalent(
         a.pluginId === b.pluginId &&
         a.pageId === b.pageId &&
         a.fixedTabId === b.fixedTabId
+      );
+    case "plugin-pinned":
+      return (
+        b.kind === "plugin-pinned" &&
+        a.pluginId === b.pluginId &&
+        a.pinnedTabId === b.pinnedTabId
       );
     case "plugin-panel":
       return (

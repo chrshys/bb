@@ -15,7 +15,7 @@ import {
 import { nanoid } from "nanoid";
 import { useSystemProviderInfo } from "@/hooks/queries/system-queries";
 import { useImmediateRouteNavigate } from "@/components/ui/app-route-anchor";
-import { useAtom } from "jotai";
+import { useAtom, useStore } from "jotai";
 import { useDesktopBrowserReveal } from "@/lib/use-desktop-browser-reveal";
 import { atomWithStorage } from "jotai/utils";
 import {
@@ -45,7 +45,6 @@ import type {
 import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
 import { appToast } from "@/components/ui/app-toast";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
-import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {
   PluginDetailPanelContext,
   usePluginDetailPanelState,
@@ -151,14 +150,13 @@ import {
   type ThreadRoutePathArgs,
 } from "@/lib/route-paths";
 import { useGitDiffPanel } from "@/components/secondary-panel/git-diff/useGitDiffPanel";
+import { GIT_DIFF_FIXED_TAB_REFERENCE } from "@/components/secondary-panel/git-diff/git-diff-fixed-tab-navigation";
+import { THREAD_INFO_FIXED_TAB_REFERENCE } from "@/components/secondary-panel/thread-info-fixed-tab-navigation";
 import {
-  createGitDiffFixedTabDestination,
-  GIT_DIFF_FIXED_TAB_REFERENCE,
-} from "@/components/secondary-panel/git-diff/git-diff-fixed-tab-navigation";
-import {
-  createThreadInfoFixedTabDestination,
-  THREAD_INFO_FIXED_TAB_REFERENCE,
-} from "@/components/secondary-panel/thread-info-fixed-tab-navigation";
+  getThreadFixedTabTargetScopeId,
+  useThreadPinnedTabs,
+  type ThreadPinnedTabHost,
+} from "@/components/secondary-panel/thread-pinned-tabs";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import {
   ThreadDetailPromptArea,
@@ -219,7 +217,12 @@ import {
   AppNavigationHostProvider,
   type AppFixedTabOpenIntent,
 } from "@/lib/app-navigation-host";
-import { openAppFixedTabFromDestinations } from "@/lib/app-fixed-tab-navigation";
+import {
+  deliverAppFixedTabTarget,
+  openAppFixedTabFromDestinations,
+  getThreadFixedTabSurfaceKey,
+  registerFixedTabSurface,
+} from "@/lib/app-fixed-tab-navigation";
 import { getFileBasename } from "@/lib/live-file-navigation";
 import { getFilePreviewLineRangeStart } from "@bb/client-core";
 import { getBrowserUrlHost } from "@/lib/browser-url";
@@ -266,12 +269,12 @@ import {
 import {
   useFixedPanelTabsStorageMaintenance,
   useReconciledFixedPanelTabsState,
+  useSelectFixedPanelViewTab,
   useTouchFixedPanelTabsState,
   useUpdateFixedPanelTabsState,
 } from "@/lib/fixed-panel-tabs";
 import {
-  createGitDiffFixedPanelTab,
-  createThreadInfoFixedPanelTab,
+  type FixedPanelViewTab,
   type SecondaryFileFixedPanelTab,
 } from "@/lib/fixed-panel-tabs-state";
 import { resolveGitDiffTabStatus } from "@/components/secondary-panel/gitDiffTabEligibility";
@@ -316,7 +319,6 @@ const pullRequestMergeMethodAtom = atomWithStorage<PullRequestMergeMethod>(
 type MergeBasePickerOpenChangeHandler = NonNullable<
   ContextBannerMergeBaseConfig["onPickerOpenChange"]
 >;
-type SecondaryPanelChangeHandler = (panel: ThreadSecondaryPanelTab) => void;
 type OpenInEditorHandler = NonNullable<
   ReturnType<typeof buildOpenInEditorHandler>
 >;
@@ -542,14 +544,10 @@ function ThreadDetailViewInternal(
     hasResolvedThread: thread !== undefined,
     threadArchived: thread?.archivedAt != null || executionUnavailable,
   });
+  const threadPinnedTabs = useThreadPinnedTabs(gitDiffTabStatus);
   const threadFixedViewTabs = useMemo(
-    () => [
-      createThreadInfoFixedPanelTab(),
-      ...(gitDiffTabStatus === "ineligible"
-        ? []
-        : [createGitDiffFixedPanelTab()]),
-    ],
-    [gitDiffTabStatus],
+    () => threadPinnedTabs.map((pinnedTab) => pinnedTab.tab),
+    [threadPinnedTabs],
   );
   const fixedPanelTabsState = useReconciledFixedPanelTabsState({
     fixedTabs: threadFixedViewTabs,
@@ -1185,7 +1183,6 @@ function ThreadDetailViewInternal(
     openDiffFile: openGitDiffFileDestination,
     openDiffPanel: openGitDiffDestination,
     openHostFile,
-    openPanel: openFixedViewDestination,
     openStorageFile,
     openWorkspaceFile,
     togglePanel: toggleWorkspacePanel,
@@ -1212,43 +1209,67 @@ function ThreadDetailViewInternal(
     if (pluginDetails.activePluginId !== null) closeSecondaryPanel();
     else toggleWorkspacePanel();
   }, [pluginDetails.activePluginId, closeSecondaryPanel, toggleWorkspacePanel]);
-  const openThreadInfo = useCallback(
-    () => openFixedViewDestination("thread-info"),
-    [openFixedViewDestination],
+  const selectPersistedFixedViewTab = useSelectFixedPanelViewTab(
+    threadId,
+    threadId,
   );
-  const fixedTabDestinations = useMemo(
-    () => [
-      createThreadInfoFixedTabDestination(() =>
-        openFixedViewDestination("thread-info"),
-      ),
-      createGitDiffFixedTabDestination({
+  const fixedTabTargetStore = useStore();
+  const threadPinnedTabHost = useMemo<ThreadPinnedTabHost>(
+    () => ({
+      deliverTarget: (reference, target) =>
+        deliverAppFixedTabTarget(
+          fixedTabTargetStore,
+          getThreadFixedTabTargetScopeId(threadId),
+          reference,
+          target,
+        ),
+      gitDiff: {
         eligible: canUseGitUi,
         openCommit: openGitDiffCommitDestination,
         openFile: openGitDiffFileDestination,
         openOrdinary: openGitDiffDestination,
-      }),
-    ],
+      },
+      select: (tab: FixedPanelViewTab) => {
+        selectPersistedFixedViewTab(tab);
+        openCompactDrawer();
+      },
+    }),
     [
       canUseGitUi,
-      openFixedViewDestination,
+      fixedTabTargetStore,
+      openCompactDrawer,
       openGitDiffCommitDestination,
       openGitDiffDestination,
       openGitDiffFileDestination,
+      selectPersistedFixedViewTab,
+      threadId,
     ],
+  );
+  const fixedTabDestinations = useMemo(
+    () =>
+      threadPinnedTabs.map((pinnedTab) =>
+        pinnedTab.createDestination(threadPinnedTabHost),
+      ),
+    [threadPinnedTabHost, threadPinnedTabs],
   );
   const openFixedTab = useCallback(
     (intent: AppFixedTabOpenIntent): boolean =>
       openAppFixedTabFromDestinations(fixedTabDestinations, intent),
     [fixedTabDestinations],
   );
-  const openSecondaryPanel = useCallback(
-    (panel: ThreadSecondaryPanelTab) =>
+  useEffect(
+    () =>
+      registerFixedTabSurface(
+        getThreadFixedTabSurfaceKey(threadId),
+        openFixedTab,
+      ),
+    [openFixedTab, threadId],
+  );
+  const openThreadInfo = useCallback(
+    () =>
       openFixedTab({
         surface: { kind: "current" },
-        tab:
-          panel === "git-diff"
-            ? GIT_DIFF_FIXED_TAB_REFERENCE
-            : THREAD_INFO_FIXED_TAB_REFERENCE,
+        tab: THREAD_INFO_FIXED_TAB_REFERENCE,
       }),
     [openFixedTab],
   );
@@ -1338,35 +1359,44 @@ function ThreadDetailViewInternal(
         setHasRequestedMergeBaseOptions(true);
       }
     }, []);
-  const handleSecondaryPanelChange = useCallback<SecondaryPanelChangeHandler>(
-    (panel) => {
-      clearActiveFileTabs();
-      openSecondaryPanel(panel);
-    },
-    [clearActiveFileTabs, openSecondaryPanel],
-  );
   const secondaryPanelFixedTabs = useMemo<readonly SecondaryPanelFixedTab[]>(
     () =>
-      threadFixedViewTabs.map((tab) =>
-        tab.kind === "thread-info"
-          ? {
-              ariaLabel: "Show thread info panel",
-              label: "Info",
-              leadingVisual: <Icon name="Info" />,
-              onSelect: () => handleSecondaryPanelChange("thread-info"),
-              tab,
-              title: "Thread info",
-            }
-          : {
-              ariaLabel: "Show diff panel",
-              label: "Diff",
-              leadingVisual: <Icon name="FileDiff" />,
-              onSelect: () => handleSecondaryPanelChange("git-diff"),
-              tab,
-              title: "Diff",
-            },
-      ),
-    [handleSecondaryPanelChange, threadFixedViewTabs],
+      threadPinnedTabs.map((pinnedTab) => {
+        const { renderContent } = pinnedTab;
+        return {
+          ariaLabel: pinnedTab.ariaLabel,
+          contentFillsRegion: pinnedTab.contentFillsRegion,
+          label: pinnedTab.label,
+          leadingVisual: pinnedTab.leadingVisual,
+          onSelect: () => {
+            clearActiveFileTabs();
+            openFixedTab({
+              surface: { kind: "current" },
+              tab: pinnedTab.reference,
+            });
+          },
+          ...(renderContent === null
+            ? {}
+            : {
+                renderContent: () =>
+                  renderContent({
+                    isPanelOpen: isSecondaryPanelOpen,
+                    projectId,
+                    threadId,
+                  }),
+              }),
+          tab: pinnedTab.tab,
+          title: pinnedTab.title,
+        };
+      }),
+    [
+      clearActiveFileTabs,
+      isSecondaryPanelOpen,
+      openFixedTab,
+      projectId,
+      threadId,
+      threadPinnedTabs,
+    ],
   );
   const openAttachment = useCallback(
     (attachment: OpenAttachmentRequest) => {

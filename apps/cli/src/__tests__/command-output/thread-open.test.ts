@@ -79,6 +79,65 @@ describe("bb thread open command output", () => {
     ]);
   });
 
+  it("asks for a core pinned tab and for a plugin pinned tab with a target", async () => {
+    const { openThread } = stubThreadOpenApi({
+      open: async () => ({ delivered: 1 }),
+    });
+
+    await runCommand(
+      ["thread", "open", "thr_target", "--panel-tab", "changes"],
+      register,
+    );
+    expect(openThread).toHaveBeenLastCalledWith({
+      param: { id: "thr_target" },
+      json: {
+        file: null,
+        panelTab: { tab: { kind: "core", id: "changes" }, target: null },
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Thread: thr_target",
+      "Split: replace",
+      "Panel tab: changes",
+      "Delivered: 1",
+    ]);
+
+    await runCommand(
+      [
+        "thread",
+        "open",
+        "thr_target",
+        "--panel-tab",
+        "bots-sidebar/bots",
+        "--panel-target-json",
+        '{"botId":"atlas","section":null}',
+      ],
+      register,
+    );
+    expect(openThread).toHaveBeenLastCalledWith({
+      param: { id: "thr_target" },
+      json: {
+        file: null,
+        panelTab: {
+          tab: { kind: "plugin", pluginId: "bots-sidebar", tabId: "bots" },
+          target: { botId: "atlas", section: null },
+        },
+      },
+    });
+  });
+
+  it.each([
+    [["--panel-tab", "bots"]],
+    [["--panel-tab", "info", "--panel-target-json", "{"]],
+    [["--panel-target-json", "{}"]],
+  ])("rejects %j before calling the server", async (flags) => {
+    const { openThread } = stubThreadOpenApi({});
+    await expect(
+      runCommand(["thread", "open", "thr_target", ...flags], register),
+    ).rejects.toThrow("process.exit:1");
+    expect(openThread).not.toHaveBeenCalled();
+  });
+
   it("resolves an absolute workspace path through the target thread environment", async () => {
     vi.stubEnv("BB_THREAD_ID", "thread-workspace");
     const thread = fixtures.makeThread({

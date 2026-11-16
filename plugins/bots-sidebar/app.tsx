@@ -16,6 +16,7 @@ import {
   experimental_useSidebarThreadActions,
   experimental_useSidebarThreadSplit,
   experimental_useSidebarThreads,
+  experimental_useAppPanel,
   useBbNavigate,
 } from "@get-bb/plugin-sdk/app";
 import type {
@@ -27,8 +28,8 @@ import type {
 } from "@get-bb/plugin-sdk/app";
 import type { BotMetadata, BotSection } from "./contract";
 import { useBotData, type ProjectOption } from "./hooks/use-bot-data";
-import { BOT_PANEL_ACTION_ID, BOT_PANEL_TAB_ID, hasBotPanelOpener, openBotPanelOn, pageSurface, threadSurface, type BotPanelSection } from "./lib/bot-panel-bridge";
-import { BotHeaderAction, BotThreadPanel, ConversationBotTab, CoordinatorBotTab } from "./components/bot-panel-surfaces";
+import { botPageTabs, botsPinnedTab, shownBotPage, type BotPanelSection } from "./lib/bot-panel-tab";
+import { BotsPinnedTab, ConversationBotTab, CoordinatorBotTab } from "./components/bot-panel-surfaces";
 import { orderedBotConversationTree, conversationOwners, conversationTree } from "./lib/conversations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -380,6 +381,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
   const sidebar = experimental_useSidebarThreads();
   const actions = experimental_useSidebarThreadActions();
   const navigate = useBbNavigate();
+  const appPanel = experimental_useAppPanel();
   const portalScope = usePortalScopeProps();
   function openConversation(target: ConversationTarget) {
     navigate.toPluginPanel("conversation", { subPath: conversationPanelPath(target) });
@@ -552,13 +554,14 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
   }
 
   function editBot(bot: BotMetadata, section: BotPanelSection | null = null) {
-    const request = { botId: bot.id, title: bot.name, section };
+    const target = { botId: bot.id, section };
     const coordinator = (threadsByBot.get(bot.id) ?? []).find(thread => thread.id === bot.coordinatorThreadId && !thread.isArchived);
-    const threadId = activeThreadId && owners.get(activeThreadId) === bot.id ? activeThreadId : hasBotPanelOpener(pageSurface(bot.id)) ? null : coordinator?.id ?? null;
-    const outcome = openBotPanelOn(threadId ? threadSurface(threadId) : pageSurface(bot.id), request);
-    if (outcome === "declined") { setActionError("The bot panel could not be opened here."); return; }
-    if (threadId && (outcome === "queued" || threadId !== activeThreadId)) actions.open(threadId);
-    if (!threadId && outcome === "queued") navigate.toPluginPanel("coordinator", { subPath: bot.id });
+    const page = shownBotPage(bot.id);
+    const threadId = activeThreadId && owners.get(activeThreadId) === bot.id ? activeThreadId : page ? null : coordinator?.id ?? null;
+    const opened = threadId
+      ? appPanel.openThreadPinnedTab({ threadId, tab: botsPinnedTab, target })
+      : appPanel.openFixedTab({ surface: { kind: "navPanel", panelId: page?.page ?? "coordinator", subPath: page?.subPath ?? bot.id }, tab: botPageTabs[page?.page ?? "coordinator"], target });
+    if (!opened) { setActionError("The bot panel could not be opened here."); return; }
     onNavigate();
   }
 
@@ -702,14 +705,13 @@ export default definePluginApp((app) => {
   if (inventoryFooterAvailable) app.slots.experimental_threadTimelineFooter({ id: "bot-active-work", title: "Bot active work", component: BotWorkFooter });
   app.slots.navPanel({
     experimental_showCloseButton: false, id: "conversation", title: "New conversation", path: "conversation", icon: "MessagesSquare", component: ConversationPanel,
-    fixedTabs: [{ panelId: "conversation", id: BOT_PANEL_TAB_ID, title: "Bot", icon: "Bot", component: ConversationBotTab, layout: "flush" }],
+    fixedTabs: [{ ...botPageTabs.conversation, title: "Bot", icon: "Bot", component: ConversationBotTab, layout: "flush" }],
   });
   app.slots.navPanel({
     experimental_showCloseButton: false, id: "coordinator", title: "Bot coordinator", path: "coordinator", icon: "MessagesSquare", component: CoordinatorPanel,
-    fixedTabs: [{ panelId: "coordinator", id: BOT_PANEL_TAB_ID, title: "Bot", icon: "Bot", component: CoordinatorBotTab, layout: "flush" }],
+    fixedTabs: [{ ...botPageTabs.coordinator, title: "Bot", icon: "Bot", component: CoordinatorBotTab, layout: "flush" }],
   });
-  app.slots.threadPanelAction({ id: BOT_PANEL_ACTION_ID, title: "Bot", icon: "Bot", component: BotThreadPanel, layout: "flush" });
-  if (typeof app.slots.experimental_threadHeaderAction === "function") app.slots.experimental_threadHeaderAction({ id: "bot-settings", title: "Bot settings", component: BotHeaderAction });
+  app.slots.experimental_threadPinnedTab({ ...botsPinnedTab, title: "Bots", icon: "Bot", component: BotsPinnedTab, layout: "flush" });
   app.slots.experimental_threadList({
     id: "bot-projects",
     title: "Bots Sidebar",

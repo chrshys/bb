@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { BotMetadata, BotPatchValues, BotStateFile } from "../contract";
 import { useBotData, type BotData } from "../hooks/use-bot-data";
 import { useDraftField, useSaveSummary, type DraftField } from "../hooks/use-draft-field";
-import { botPanelSectionsVersion, subscribeBotPanelSections, takeRequestedSection, type BotPanelSection } from "../lib/bot-panel-bridge";
+import type { BotPanelSection } from "../lib/bot-panel-tab";
 import { dismissSaveError, trackSave } from "../lib/field-drafts";
 import { MEMORY_MAX_CHARS } from "../lib/memory-limit";
 import { AvatarAppearance } from "./avatar-appearance";
@@ -99,7 +99,9 @@ function DocumentEditor({ field, file, limit, mono, placeholder }: { field: Draf
   </>;
 }
 
-function BotPanelEditor({ bot, data }: { bot: BotMetadata; data: BotData }) {
+export type BotPanelSectionRequest = { section: BotPanelSection; shown: () => void };
+
+function BotPanelEditor({ bot, data, sectionRequest }: { bot: BotMetadata; data: BotData; sectionRequest: BotPanelSectionRequest | null }) {
   const { rpc, hosts, sections, projects, projectOwners, bots, refresh, applyBot } = data;
   const botId = bot.id;
   const scope = `${botId}/`;
@@ -111,12 +113,14 @@ function BotPanelEditor({ bot, data }: { bot: BotMetadata; data: BotData }) {
   const [sectionDraft, setSectionDraft] = useState<string | null>(null);
   const [projectsBusy, setProjectsBusy] = useState(false);
   const { summary, error: saveError } = useSaveSummary(scope);
-  const sectionRequests = useSyncExternalStore(subscribeBotPanelSections, botPanelSectionsVersion, botPanelSectionsVersion);
+  const requestedSection = sectionRequest?.section ?? null;
+  const sectionShown = sectionRequest?.shown;
 
   useEffect(() => {
-    const section = takeRequestedSection(botId);
-    if (section) root.current?.querySelector<HTMLElement>(`[data-bot-panel-section="${section}"]`)?.scrollIntoView?.({ block: "start" });
-  }, [botId, sectionRequests]);
+    if (!requestedSection) return;
+    root.current?.querySelector<HTMLElement>(`[data-bot-panel-section="${requestedSection}"]`)?.scrollIntoView?.({ block: "start" });
+    sectionShown?.();
+  }, [botId, requestedSection, sectionShown]);
 
   function apply(next: BotMetadata) {
     latest.current = next;
@@ -335,10 +339,10 @@ function BotPanelEditor({ bot, data }: { bot: BotMetadata; data: BotData }) {
   </TooltipProvider>;
 }
 
-export function BotPanel({ botId }: { botId: string }) {
+export function BotPanel({ botId, sectionRequest = null }: { botId: string; sectionRequest?: BotPanelSectionRequest | null }) {
   const data = useBotData();
   const bot = data.bots.find((entry) => entry.id === botId);
   if (!data.loaded) return <PanelMessage>Loading bot…</PanelMessage>;
   if (!bot) return data.error ? <PanelMessage alert>{data.error}</PanelMessage> : <PanelMessage>This bot no longer exists.</PanelMessage>;
-  return <BotPanelEditor key={bot.id} bot={bot} data={data} />;
+  return <BotPanelEditor key={bot.id} bot={bot} data={data} sectionRequest={sectionRequest} />;
 }

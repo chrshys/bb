@@ -285,6 +285,12 @@ function pluginAppSurfaceItems(
     ),
     ...namedSlotItems(
       pluginId,
+      slots.threadPinnedTabs,
+      "thread-pinned-tab",
+      "Pins a tab in the right panel of every thread.",
+    ),
+    ...namedSlotItems(
+      pluginId,
       slots.threadTimelineFooters,
       "thread-timeline-footer",
       "Provides a live entry inside the conversation.",

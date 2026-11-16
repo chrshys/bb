@@ -14,6 +14,7 @@ export {
   createThreadInfoFixedPanelTab,
   createGitDiffFixedPanelTab,
   createPluginPageFixedPanelTab,
+  createPluginPinnedFixedPanelTab,
   createPluginPanelFixedPanelTab,
   createWorkspaceFilePreviewFixedPanelTab,
   createAttachmentFilePreviewFixedPanelTab,
@@ -32,6 +33,7 @@ export {
 } from "@bb/client-core";
 export type {
   PluginPageFixedPanelTab,
+  PluginPinnedFixedPanelTab,
   FixedPanelViewTab,
   PluginPanelFixedPanelTab,
   WorkspaceFilePreviewFixedPanelTab,

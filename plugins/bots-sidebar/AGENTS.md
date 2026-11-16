@@ -150,20 +150,22 @@ or reintroduce hover toolbars when making unrelated changes.
 - Bot editing lives in the right-hand panel, never in a modal. `components/bot-panel.tsx`
   is the only editor: a large avatar, the name and role editable in place beneath it,
   a quiet saved/saving status, then cards for Appearance, Setup, Instructions, Memory,
-  Settings and Projects. It is registered once as the `bot` thread panel tab (params
-  `{ botId }`; without params it resolves the bot from the thread's assignment and
-  explains an unassigned conversation) and reused as the fixed `bot` tab of the
-  `conversation` and `coordinator` pages. Do not add a second editor or a modal shell.
+  Settings and Projects. In a thread it is the pinned `bots` tab
+  (`experimental_threadPinnedTab`), shown as the Bots icon at the top of the right
+  panel of every thread: it resolves the bot from the thread's assignment and
+  explains an unassigned conversation. It is reused as the fixed `bot` tab of the
+  `conversation` and `coordinator` pages. Do not add a second editor, a modal shell, a
+  closable bot tab or a thread header button: the pinned icon is the one way in.
 - **Edit bot** always shows the panel beside a conversation of that bot: in place when
   the user is already in one of its conversations or on one of its new-conversation
   pages, otherwise by opening the saved coordinator (or the coordinator page when none
   exists yet) with the panel open. Never open bot A's panel beside bot B's or an
-  unassigned conversation. The sidebar is rendered outside every thread view, where
-  `useBbNavigate().openThreadPanel` always declines, so it hands the request to the
-  plugin component mounted in that view through `lib/bot-panel-bridge.ts`: the thread
-  header's bot button (`experimental_threadHeaderAction`) or the page component. A
-  request that no view picks up within 30 seconds is dropped. Replace this bridge when
-  the host can open a panel tab from outside a thread view; do not grow it.
+  unassigned conversation: the pinned tab always shows the thread's own bot, and a
+  request only supplies the section to bring into view. The sidebar asks the host
+  directly through `experimental_useAppPanel()`: `openThreadPinnedTab` for a thread,
+  `openFixedTab` with a `navPanel` surface for a page. The host navigates and holds the
+  request until that view is ready. `lib/bot-panel-tab.ts` holds the tab references,
+  the `{ botId, section }` target and which bot page is on screen; it relays nothing.
 - The panel has no Save or Cancel. Every field saves on its own and nothing else is
   sent with it: name and role on blur or Enter (`bot_patch`), avatar, section, machine
   and default project on selection (`bot_patch`), SOUL.md and MEMORY.md after a short

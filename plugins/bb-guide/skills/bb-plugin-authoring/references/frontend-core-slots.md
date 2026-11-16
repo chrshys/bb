@@ -144,7 +144,10 @@ target? })`. Inside the fixed-tab component,
   returns to its untargeted state. Selection persists through the host's
   ordinary panel state, while targets remain memory-only and disappear on app
   refresh. Invalid, unavailable, untargeted, or other-plugin references return
-  false without changing valid panel state.
+  false without changing valid panel state. From a surface outside the page,
+  such as the sidebar, pass `surface: { kind: "navPanel", panelId, subPath? }`
+  instead: BB navigates to that page of the same plugin and selects the tab
+  once the page is ready.
 
   `experimental_sidebarAccessory` is a no-props, presentational component for
   a live count or short status beside the panel's navigation entry. The SDK
@@ -257,6 +260,24 @@ projectId, experimental_hostId? }` (nullable fields). The optional host ID
   always use the built-in preview, and a removed/disabled opener degrades
   back to it. Pair with `bb.sdk.files` (rpc from your server) to load and
   CAS-save the content.
+
+- `experimental_threadPinnedTab` → `{ threadId, projectId }`. A non-closable
+  tab in every thread's right panel, shown as an icon in the strip at the top
+  of the panel after BB's Info and Changes. Registration:
+  `{ id, title, icon, component, layout?, experimental_target? }`. `title` is
+  the icon's tooltip and accessible name. `layout: "padded"` (the default)
+  gives host padding and scrolling; `"flush"` gives the whole content region.
+  The tab is present for every thread: render an empty state when it does not
+  apply. The component mounts only while its tab is active in a visible pane
+  and the panel is open, once per visible thread in a split. BB owns selection
+  and remembers it per thread on this device. From any component of the same
+  plugin, on any surface including the sidebar, call
+  `experimental_useAppPanel().openThreadPinnedTab({ threadId, tab, target? })`;
+  BB navigates to that thread first when it is not on screen. It returns false
+  for an unknown id or a target that is not JSON or fails
+  `experimental_target.validate`. Read the target in the component with
+  `experimental_useFixedTabTarget(tab)`; it is per thread and memory-only.
+  Experimental: see `docs/api_to_audit.md`.
 
 - `experimental_threadTimelineFooter` → `{ threadId, projectId,
 runtimeDisplayStatus, Original, ThreadBadge }`. The first registered provider

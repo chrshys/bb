@@ -67,7 +67,22 @@ to its untargeted state. The host validates JSON before the owner's type guard,
 persists only selection, and returns false for an unavailable tab or invalid
 target. The frontend harness records accepted requests in
 `experimental_fixedTabOpenCalls`, accepts an `experimental_openFixedTab`
-behavior, and can seed `experimental_fixedTabTarget` state.
+behavior, and can seed `experimental_fixedTabTarget` state. From outside the
+page, pass `surface: { kind: "navPanel", panelId, subPath? }` to navigate to
+one of the plugin's own pages and select the tab there.
+
+`app.slots.experimental_threadPinnedTab` pins a non-closable tab in every
+thread's right panel, shown as an icon after BB's Info and Changes. Its
+component receives `{ threadId, projectId }`; render an empty state for a
+thread the tab does not apply to. Share one reference object (`{ id,
+experimental_target? }`) between the registration,
+`experimental_useAppPanel().openThreadPinnedTab({ threadId, tab, target })`
+and `experimental_useFixedTabTarget(tab)`. `openThreadPinnedTab` works from any
+surface, including the sidebar, and navigates to the thread first when it is
+not on screen. The harness records requests in
+`experimental_threadPinnedTabOpenCalls`, accepts an
+`experimental_openThreadPinnedTab` behavior, and can seed
+`experimental_threadPinnedTabTarget` state.
 
 Every panel-open entry point reports the same way: `openThreadPanel` and the
 `openPanel` handed to `threadPanelAction`, `experimental_newThreadPanelAction`,

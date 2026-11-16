@@ -4,7 +4,7 @@ import { experimental_NewThreadComposer as NewThreadComposer, useBbNavigate, use
 import type { NewThreadRequest, PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import type { BotMetadata, rpcContract } from "../contract";
 import { conversationDraftKey } from "../lib/worktree-launch";
-import { useBotPageOpener } from "../hooks/use-bot-page-opener";
+import { useShownBotPage } from "../hooks/use-shown-bot-page";
 
 export type ConversationTarget = {
   bot: BotMetadata;
@@ -100,7 +100,7 @@ function ConversationChat({ launch, bot }: { launch: ConversationLaunch; bot: Bo
 
 function ConversationLoader({ subPath }: { subPath: string }) {
   const rpc = useRpc<typeof rpcContract>();
-  useBotPageOpener("conversation", conversationLaunchBotId(subPath));
+  useShownBotPage("conversation", conversationLaunchBotId(subPath), subPath);
   const [target, setTarget] = useState<{ launch: ConversationLaunch; bot: BotMetadata } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

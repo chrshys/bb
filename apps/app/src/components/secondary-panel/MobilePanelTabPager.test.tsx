@@ -171,7 +171,7 @@ describe("MobilePanelTabPager", () => {
     ).toBeNull();
     const disconnects = disconnect.mock.calls.length;
     unmount();
-    expect(disconnect).toHaveBeenCalledTimes(disconnects + 1);
+    expect(disconnect).toHaveBeenCalledTimes(disconnects + 2);
   });
 
   it("keeps the last content tab available while Info or Diff is selected", () => {

@@ -19,6 +19,7 @@ describe("NotificationHub.notifyThreadOpen", () => {
           path: "src/index.ts",
           lineNumber: 42,
         },
+        panelTab: null,
       },
     );
 
@@ -35,6 +36,7 @@ describe("NotificationHub.notifyThreadOpen", () => {
           path: "src/index.ts",
           lineNumber: 42,
         },
+        panelTab: null,
       });
     }
   });

@@ -9,6 +9,7 @@ import type {
   PluginMessageDirectiveProps,
   PluginNavPanelProps,
   ExperimentalPluginFixedTabReference,
+  ExperimentalThreadPinnedTabReference,
 } from "../../app-contract.js";
 import {
   installTestPluginRuntime,
@@ -139,6 +140,35 @@ function FixedTabProbe() {
           Clear {targetState.target.taskId}
         </button>
       )}
+    </div>
+  );
+}
+
+const pinnedTaskTab = {
+  id: "details",
+  experimental_target: taskDetailsTab.experimental_target,
+} satisfies ExperimentalThreadPinnedTabReference<TestTaskTarget>;
+
+function PinnedTabProbe() {
+  const panel = experimental_useAppPanel();
+  const targetState = experimental_useFixedTabTarget(pinnedTaskTab);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() =>
+          panel.openThreadPinnedTab({
+            threadId: "thr_other",
+            tab: pinnedTaskTab,
+            target: { kind: "task", taskId: "TASK-42" },
+          })
+        }
+      >
+        Open pinned
+      </button>
+      <span>
+        {targetState === null ? "no target" : targetState.target.taskId}
+      </span>
     </div>
   );
 }
@@ -685,9 +715,9 @@ describe("loadPluginApp", () => {
     expect(mounted.inspection.experimental_clipboardWrites).toEqual([
       { text: "plain", html: "<b>rich</b>" },
     ]);
-    await expect(
-      experimental_copyToClipboard({ text: "later" }),
-    ).resolves.toBe(false);
+    await expect(experimental_copyToClipboard({ text: "later" })).resolves.toBe(
+      false,
+    );
 
     const slot = renderSlot(captured.navPanels[0]!, { subPath: "" });
     await expect(
@@ -1696,6 +1726,49 @@ describe("renderSlot", () => {
         tabId: "details",
       },
     ]);
+  });
+
+  it("records pinned thread tab opens and keeps their target apart from nav-panel tabs", () => {
+    const declined = renderSlot({ component: PinnedTabProbe }, {});
+    fireEvent.click(declined.getByRole("button", { name: "Open pinned" }));
+    expect(declined.getByText("no target")).toBeTruthy();
+    expect(declined.inspection.experimental_threadPinnedTabOpenCalls).toEqual([
+      {
+        threadId: "thr_other",
+        tabId: "details",
+        target: { kind: "task", taskId: "TASK-42" },
+      },
+    ]);
+    declined.lifecycle.unmount();
+
+    const navPanelTarget = renderSlot(
+      { component: PinnedTabProbe },
+      {},
+      {
+        experimental_fixedTabTarget: {
+          panelId: "tasks",
+          tabId: "details",
+          target: { kind: "task", taskId: "TASK-7" },
+        },
+      },
+    );
+    expect(navPanelTarget.getByText("no target")).toBeTruthy();
+    navPanelTarget.lifecycle.unmount();
+
+    const accepted = renderSlot(
+      { component: PinnedTabProbe },
+      {},
+      {
+        experimental_openThreadPinnedTab: () => true,
+        experimental_threadPinnedTabTarget: {
+          tabId: "details",
+          target: { kind: "task", taskId: "TASK-7" },
+        },
+      },
+    );
+    expect(accepted.getByText("TASK-7")).toBeTruthy();
+    fireEvent.click(accepted.getByRole("button", { name: "Open pinned" }));
+    expect(accepted.getByText("TASK-42")).toBeTruthy();
   });
 
   it("drives the shared realtime connection lifecycle", async () => {

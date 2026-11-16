@@ -57,6 +57,7 @@ interface LastFixedPanelTabsTouch {
 }
 
 type FixedPanelSecondaryPanelSetter = (panel: ThreadSecondaryPanel) => void;
+type FixedPanelViewTabSelector = (tab: FixedPanelViewTab) => void;
 type FixedPanelSecondaryPanelOpener = () => void;
 type FixedPanelSecondaryPanelCloser = () => void;
 type FixedPanelTerminalIdSetter = (
@@ -112,7 +113,9 @@ function getFixedPanelTabsStateAtom(threadId: string | null | undefined) {
     : disabledFixedPanelTabsStateAtom;
 }
 
-function buildSecondaryPanelTab(panel: ThreadSecondaryPanel): FixedPanelTab {
+function buildSecondaryPanelTab(
+  panel: ThreadSecondaryPanel,
+): FixedPanelViewTab {
   if (panel === "git-diff") return createGitDiffFixedPanelTab();
   return createThreadInfoFixedPanelTab();
 }
@@ -148,14 +151,40 @@ export function removeFixedRightTerminalTabInState(
   );
 }
 
+function ensureFixedPanelViewTab(
+  tabs: readonly FixedPanelTab[],
+  viewTab: FixedPanelViewTab,
+): readonly FixedPanelTab[] {
+  return tabs.some((tab) => tab.id === viewTab.id) ? tabs : [...tabs, viewTab];
+}
+
 function ensureSecondaryPanelTab(
   tabs: readonly FixedPanelTab[],
   panel: ThreadSecondaryPanel,
 ): readonly FixedPanelTab[] {
-  const tabId = getSecondaryPanelTabId(panel);
-  return tabs.some((tab) => tab.id === tabId)
-    ? tabs
-    : [...tabs, buildSecondaryPanelTab(panel)];
+  return ensureFixedPanelViewTab(tabs, buildSecondaryPanelTab(panel));
+}
+
+export function selectFixedPanelViewTabInState(
+  current: FixedPanelTabsState,
+  viewTab: FixedPanelViewTab,
+): FixedPanelTabsState {
+  const tabs = ensureFixedPanelViewTab(current.secondary.tabs, viewTab);
+  if (
+    tabs === current.secondary.tabs &&
+    current.secondary.activeTabId === viewTab.id &&
+    current.secondary.isOpen
+  ) {
+    return current;
+  }
+  return {
+    ...current,
+    secondary: {
+      tabs,
+      activeTabId: viewTab.id,
+      isOpen: true,
+    },
+  };
 }
 
 function hasSecondaryPanelTab(
@@ -414,34 +443,31 @@ export function useTouchFixedPanelTabsState(
   }, [panelStateId, updateState]);
 }
 
+export function useSelectFixedPanelViewTab(
+  panelStateId: FixedPanelTabsPanelStateId,
+  syncThreadId: FixedPanelTabsSyncThreadId,
+): FixedPanelViewTabSelector {
+  const updateState = useUpdateFixedPanelTabsState(panelStateId, syncThreadId);
+  return useCallback(
+    (viewTab: FixedPanelViewTab) => {
+      updateState((current) =>
+        selectFixedPanelViewTabInState(current, viewTab),
+      );
+    },
+    [updateState],
+  );
+}
+
 export function useSetFixedSecondaryPanelTab(
   panelStateId: FixedPanelTabsPanelStateId,
   syncThreadId: FixedPanelTabsSyncThreadId,
 ): FixedPanelSecondaryPanelSetter {
-  const updateState = useUpdateFixedPanelTabsState(panelStateId, syncThreadId);
+  const selectViewTab = useSelectFixedPanelViewTab(panelStateId, syncThreadId);
   return useCallback(
     (panel: ThreadSecondaryPanel) => {
-      updateState((current) => {
-        const tabs = ensureSecondaryPanelTab(current.secondary.tabs, panel);
-        const activeTabId = getSecondaryPanelTabId(panel);
-        if (
-          tabs === current.secondary.tabs &&
-          current.secondary.activeTabId === activeTabId &&
-          current.secondary.isOpen
-        ) {
-          return current;
-        }
-        return {
-          ...current,
-          secondary: {
-            tabs,
-            activeTabId,
-            isOpen: true,
-          },
-        };
-      });
+      selectViewTab(buildSecondaryPanelTab(panel));
     },
-    [updateState],
+    [selectViewTab],
   );
 }
 

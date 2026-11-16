@@ -28,6 +28,7 @@ import type {
   PluginSidebarFooterActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
+  ExperimentalThreadPinnedTabDeclaration,
   ExperimentalThreadMessageAppearanceRegistration,
   ExperimentalThreadTimelineFooterRegistration,
   PluginThreadActionRegistration,
@@ -357,6 +358,7 @@ export interface CollectedPluginAppRegistrations {
   experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  threadPinnedTabs: ExperimentalThreadPinnedTabDeclaration[];
   threadMessageAppearances: ExperimentalThreadMessageAppearanceRegistration[];
   threadTimelineFooters: ExperimentalThreadTimelineFooterRegistration[];
   threadActions: PluginThreadActionRegistration<unknown>[];
@@ -484,6 +486,7 @@ export function collectPluginAppRegistrations(
     experimentalSidebarFooterItems: [],
     threadLists: [],
     threadHeaderActions: [],
+    threadPinnedTabs: [],
     threadMessageAppearances: [],
     threadTimelineFooters: [],
     threadActions: [],
@@ -515,6 +518,7 @@ export function collectPluginAppRegistrations(
     sidebarFooterItem: new Set<string>(),
     threadList: new Set<string>(),
     threadHeaderAction: new Set<string>(),
+    threadPinnedTab: new Set<string>(),
     threadMessageAppearance: new Set<string>(),
     threadTimelineFooter: new Set<string>(),
     threadAction: new Set<string>(),
@@ -828,6 +832,38 @@ export function collectPluginAppRegistrations(
           id,
           title: requireNonEmptyString(kind, "title", registration.title),
           component: requireComponent(kind, registration.component),
+        });
+      },
+      experimental_threadPinnedTab(registration) {
+        const kind = "slots.experimental_threadPinnedTab";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.threadPinnedTab, id);
+        const layout = registration.layout;
+        if (layout !== undefined && layout !== "padded" && layout !== "flush") {
+          throw new Error(
+            `${kind}: "layout" must be "padded" or "flush" when set`,
+          );
+        }
+        const experimentalTarget: unknown = registration.experimental_target;
+        if (
+          experimentalTarget !== undefined &&
+          (typeof experimentalTarget !== "object" ||
+            experimentalTarget === null ||
+            typeof Reflect.get(experimentalTarget, "validate") !== "function")
+        ) {
+          throw new Error(
+            `${kind}: "experimental_target.validate" must be a function when set`,
+          );
+        }
+        collected.threadPinnedTabs.push({
+          id,
+          title: requireNonEmptyString(kind, "title", registration.title),
+          icon: requireNonEmptyString(kind, "icon", registration.icon),
+          component: requireComponent(kind, registration.component),
+          ...(layout === undefined ? {} : { layout }),
+          ...(registration.experimental_target === undefined
+            ? {}
+            : { experimental_target: registration.experimental_target }),
         });
       },
       experimental_threadAction(registration) {
