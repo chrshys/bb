@@ -17,10 +17,7 @@ import {
   PROMPT_STACK_INLAY_INSET_CLASS,
   PROMPT_STACK_INLAY_SEGMENT_CLASS,
 } from "@/components/promptbox/banner/PromptStackCard";
-import {
-  activityIconClass,
-  activityRowClass,
-} from "@bb/shared-ui/activity-row-styles";
+import { PromptActivityCard } from "@/components/promptbox/banner/PromptActivityCard";
 import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
 import {
   formatChangeSummary,
@@ -168,10 +165,6 @@ const SECTION_IDS = {
     toggle: "thread-prompt-banner-parent-thread-toggle",
     body: "thread-prompt-banner-parent-thread-body",
   },
-  childThreads: {
-    toggle: "thread-prompt-banner-child-threads-toggle",
-    body: "thread-prompt-banner-child-threads-body",
-  },
   git: {
     toggle: "thread-prompt-banner-git-toggle",
     body: "thread-prompt-banner-git-body",
@@ -179,16 +172,6 @@ const SECTION_IDS = {
 } as const;
 
 const SEGMENT_SHRINK_CLASS = "min-w-0 overflow-hidden";
-
-function ChildThreadIcon({ className }: { className?: string }) {
-  return (
-    <Icon
-      name="ChevronDown"
-      className={cn("size-3.5 shrink-0 rotate-45", className)}
-      aria-hidden="true"
-    />
-  );
-}
 
 interface SectionToggleButtonProps {
   id: string;
@@ -326,42 +309,6 @@ function ParentThreadBody({
       </NavLink>
       .
     </div>
-  );
-}
-
-function ChildThreadsBody({
-  items,
-}: {
-  items: readonly ThreadPromptChildThreadItem[];
-}) {
-  return (
-    <ul className="max-h-40 space-y-0.5 overflow-y-auto px-3 pb-2 pt-1.5">
-      {items.map((item) => (
-        <li key={item.id} className="text-xs">
-          <NavLink
-            to={item.href}
-            title={item.title}
-            className="flex min-w-0 items-center gap-2 py-0.5 text-foreground/90 underline-offset-2 hover:underline"
-          >
-            {item.hasPendingInteraction ? (
-              <Icon
-                name="CircleQuestion"
-                className="size-3.5 shrink-0 text-muted-foreground/75 no-underline"
-                aria-hidden="true"
-              />
-            ) : (
-              <ChildThreadIcon className="text-subtle-foreground no-underline" />
-            )}
-            <span className="min-w-0 flex-1 truncate">{item.title}</span>
-            {item.hasPendingInteraction ? (
-              <span className="shrink-0 text-muted-foreground">
-                Needs input
-              </span>
-            ) : null}
-          </NavLink>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -577,9 +524,6 @@ function PullRequestBannerLink({
   );
 }
 
-const CHILD_THREADS_HEADER_BUTTON_CLASS =
-  "flex min-h-8 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-none px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-background/80";
-
 function childThreadsLabel(args: {
   count: number;
   pendingCount: number;
@@ -613,73 +557,28 @@ function ActiveChildThreadsCard({
   const pendingCount = items.filter(
     (item) => item.hasPendingInteraction,
   ).length;
-  const otherCount = items.length - 1;
-  const groupLabel = childThreadsLabel({
-    count: items.length,
-    pendingCount,
-  });
-  const needsApproval = pendingCount > 0;
+  const groupLabel = childThreadsLabel({ count: items.length, pendingCount });
   return (
-    <PromptStackCard
-      ariaLabel="Child threads"
-      className="overflow-hidden"
-      style={{ minHeight: THREAD_PROMPT_CONTEXT_BANNER_ROW_HEIGHT }}
-    >
-      <div className="flex items-center">
-        <button
-          type="button"
-          id={SECTION_IDS.childThreads.toggle}
-          aria-expanded={isExpanded}
-          aria-controls={SECTION_IDS.childThreads.body}
-          aria-label={`${groupLabel}: ${primary.title}`}
-          onClick={onToggle}
-          className={
-            needsApproval
-              ? CHILD_THREADS_HEADER_BUTTON_CLASS
-              : activityRowClass("active", CHILD_THREADS_HEADER_BUTTON_CLASS)
-          }
-        >
-          <Icon
-            name={needsApproval ? "CircleQuestion" : "UserRound"}
-            className={
-              needsApproval
-                ? "size-3.5 shrink-0 text-muted-foreground/75"
-                : activityIconClass("active", "size-3.5 shrink-0")
-            }
-            aria-hidden="true"
-          />
-          <span className="min-w-0 flex-1 truncate text-left">
-            <span className="text-muted-foreground">
-              {needsApproval ? "Needs your input: " : "Active child thread: "}
-            </span>
-            <span className="font-medium text-foreground/80">
-              {primary.title}
-            </span>
-          </span>
-          {otherCount > 0 ? (
-            <span className="shrink-0 text-muted-foreground">
-              +{otherCount} more
-            </span>
-          ) : null}
-          <Icon
-            name="ChevronDown"
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
-              isExpanded && "rotate-180",
-            )}
-            aria-hidden="true"
-          />
-        </button>
-      </div>
-      <AnimatedBody
-        collapsedBorder="reserve"
-        id={SECTION_IDS.childThreads.body}
-        labelledBy={SECTION_IDS.childThreads.toggle}
-        isExpanded={isExpanded}
-      >
-        <ChildThreadsBody items={items} />
-      </AnimatedBody>
-    </PromptStackCard>
+    <PromptActivityCard
+      items={items.map((item) => ({
+        id: item.id,
+        description: item.title,
+        href: item.href,
+        needsInput: item.hasPendingInteraction,
+        icon: item.hasPendingInteraction ? "CircleQuestion" : "UserRoundPlus",
+        label: "Child thread",
+        runningPrefix: item.hasPendingInteraction
+          ? "Needs your input:"
+          : "Active child thread:",
+        model: null,
+        startedAt: null,
+      }))}
+      groupLabel="Child threads"
+      compactLabel={groupLabel}
+      summaryLabel={groupLabel}
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+    />
   );
 }
 

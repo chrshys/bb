@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { useState } from "react";
+import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import type { ThreadPullRequest } from "@bb/domain";
@@ -289,7 +297,7 @@ describe("ThreadPromptContextBanner", () => {
     expect(markup).toContain("PR #128 · Closed");
   });
 
-  it("summarizes child work without flashing the banner", () => {
+  it("uses the background-agent summary for active child work", () => {
     const markup = renderToStaticMarkup(
       <MemoryRouter>
         <ThreadPromptContextBanner
@@ -321,9 +329,9 @@ describe("ThreadPromptContextBanner", () => {
     );
     expect(markup).toContain("Active child thread:");
     expect(markup).toContain("Investigate failing checks");
-    expect(markup).toContain('data-icon="UserRound"');
+    expect(markup).toContain('data-icon="UserRoundPlus"');
     expect(markup).toContain("animate-shine-icon");
-    expect(markup).not.toContain("animate-shine font-medium");
+    expect(markup).toContain("animate-shine font-medium");
   });
 
   it("summarizes additional active child threads", () => {
@@ -361,7 +369,64 @@ describe("ThreadPromptContextBanner", () => {
     expect(markup).toContain(
       "2 active child threads: Investigate failing checks",
     );
-    expect(markup).toContain("+1 more");
+    expect(markup).toContain("+1");
+  });
+
+  it("expands native child links with input requests first and collapses from the footer", () => {
+    function ChildThreads() {
+      const [expanded, setExpanded] = useState(false);
+      return (
+        <MemoryRouter>
+          <CompactViewportOverrideProvider isCompactViewport={false}>
+            <ThreadPromptContextBanner
+              gitSection={null}
+              gitSectionPending={false}
+              archivedSection={null}
+              environmentGoneSection={null}
+              parentThreadSection={null}
+              childThreadsSection={{
+                items: [
+                  {
+                    id: "active",
+                    title: "Review changes",
+                    href: "/threads/active",
+                    hasPendingInteraction: false,
+                  },
+                  {
+                    id: "blocked",
+                    title: "Approve installation",
+                    href: "/threads/blocked",
+                    hasPendingInteraction: true,
+                  },
+                ],
+              }}
+              pullRequestSection={null}
+              expandedSection={expanded ? "childThreads" : null}
+              onToggleSection={() => setExpanded((value) => !value)}
+            />
+          </CompactViewportOverrideProvider>
+        </MemoryRouter>
+      );
+    }
+    render(<ChildThreads />);
+    const card = screen.getByRole("region", { name: "Child threads" });
+    const toggle = within(card).getByRole("button", {
+      name: "1 child thread needs input: Approve installation",
+    });
+    expect(within(card).queryAllByRole("link")).toHaveLength(0);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const links = within(card).getAllByRole("link");
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/threads/blocked",
+      "/threads/active",
+    ]);
+    expect(within(card).getByText("Needs input")).toBeTruthy();
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Collapse child threads" }),
+    );
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(within(card).queryAllByRole("link")).toHaveLength(0);
   });
 
   it("lets combined child and context cards shrink inside the composer stack", () => {
