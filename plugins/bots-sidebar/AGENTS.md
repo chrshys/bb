@@ -121,8 +121,8 @@ or reintroduce hover toolbars when making unrelated changes.
   Membership alone never chooses the default. Refresh ownership before opening;
   use the bot's configured host and preserve composer overrides after opening.
   Empty bots use the same ordinary new-conversation composer and ownership defaults.
-- Bot settings (avatar, role, SOUL, section) belong in **Edit bot**. Menus are
-  opened only by right-click/keyboard context-menu actions.
+- Bot settings (avatar, role, SOUL, section) belong in the bot panel, which
+  **Edit bot** opens. Menus are opened only by right-click/keyboard context-menu actions.
 - Reorder bots and move them between sections by dragging; never add arrow
   controls back to the row. The null/default section is Main and has no sidebar
   heading. Preserve explicit custom sections. The Section dropdown includes
@@ -147,25 +147,48 @@ or reintroduce hover toolbars when making unrelated changes.
   `project_create` creates no bot and retries with the same `requestId`. Ignore
   select values the dialog did not offer: Radix re-emits the value through its
   hidden form select when the choice changes programmatically.
-- Keep Edit compact: small avatar beside name/role, Setup / Instructions /
-  State / Projects / Appearance tabs, one logical file editor at a time, and a fixed visible
-  Save/Cancel footer. Do not bring back the tall stretching avatar panel or stack
-  all settings in one long form. Preserve drafts across tabs. Storage is private
-  and automatic: no home path picker or custom-working-directory control.
-  Projects shows only linked projects, Member / Owner roles, and an unlink action.
+- Bot editing lives in the right-hand panel, never in a modal. `components/bot-panel.tsx`
+  is the only editor: a large avatar, the name and role editable in place beneath it,
+  a quiet saved/saving status, then cards for Appearance, Setup, Instructions, Memory,
+  Settings and Projects. It is registered once as the `bot` thread panel tab (params
+  `{ botId }`; without params it resolves the bot from the thread's assignment and
+  explains an unassigned conversation) and reused as the fixed `bot` tab of the
+  `conversation` and `coordinator` pages. Do not add a second editor or a modal shell.
+- **Edit bot** always shows the panel beside a conversation of that bot: in place when
+  the user is already in one of its conversations or on one of its new-conversation
+  pages, otherwise by opening the saved coordinator (or the coordinator page when none
+  exists yet) with the panel open. Never open bot A's panel beside bot B's or an
+  unassigned conversation. The sidebar is rendered outside every thread view, where
+  `useBbNavigate().openThreadPanel` always declines, so it hands the request to the
+  plugin component mounted in that view through `lib/bot-panel-bridge.ts`: the thread
+  header's bot button (`experimental_threadHeaderAction`) or the page component. A
+  request that no view picks up within 30 seconds is dropped. Replace this bridge when
+  the host can open a panel tab from outside a thread view; do not grow it.
+- The panel has no Save or Cancel. Every field saves on its own and nothing else is
+  sent with it: name and role on blur or Enter (`bot_patch`), avatar, section, machine
+  and default project on selection (`bot_patch`), SOUL.md and MEMORY.md after a short
+  pause, on blur and on unmount, settings.json on blur and on unmount (`state_update`),
+  project roles and project creation immediately (`state_apply`). Each write names the
+  value or hash it was edited from; never send whole-bot payloads or `expectedUpdatedAt`
+  from the panel, because unrelated changes bump that revision.
+- Never overwrite a change the user has not seen. A field without a local draft follows
+  realtime updates. A draft whose base changed elsewhere is kept, is not saved, and shows
+  the latest value with **Use latest** / **Keep mine**; only Keep mine saves, against the
+  version just shown. Invalid JSON, oversized memory and failed saves keep the draft and
+  say why. Drafts live in `lib/field-drafts.ts`, outside React, so they survive tab
+  switches, thread switches and closing the panel until the app reloads.
+- Storage is private and automatic: no home path picker or custom-working-directory
+  control. Projects shows only linked projects, Member / Owner roles, and an unlink action.
   Add existing… opens a searchable picker; New project… opens an inline work-project
-  form with an explicit machine and folder browser. Keep it mounted across tabs.
-  A conflicting owner is shown and disabled. Save desired linked/owned IDs together;
-  retain drafts on conflict. Explicitly creating a project happens immediately,
-  then drafts Owner membership for the bot's Save. Cancelling a bot must not delete
-  an explicitly created project or discard its files; explain this in the UI.
+  form with an explicit machine and folder browser. A conflicting owner is shown and
+  disabled. Creating a project is immediate and makes the bot its owner; unlinking never
+  deletes a project or its files.
 - Bot context contains fixed guidance + SOUL.md + MEMORY.md (full compliant memory).
   Per-bot AGENTS.md is retired; preserve historical text as inactive private data,
   never inject it or offer it as an editable state file. Workspace AGENTS.md still applies.
-- Edit bot is the single editor: Instructions has SOUL.md, State has
-  MEMORY.md / settings.json. Do not restore a separate View bot state action.
-  Save all changed fields atomically with the original revision and per-file hashes;
-  invalid JSON/conflicts keep every draft and never partially save identity/state.
+- The bot panel is the single editor for SOUL.md, MEMORY.md and settings.json. Do not
+  restore a separate View bot state action. Each file saves alone against its own hash;
+  invalid JSON and conflicts keep that draft and leave the other files untouched.
 - New bot drafts randomize color, shape, expression, and idle motion ONCE. Existing
   bots and rerenders never reroll. Offer Randomize appearance explicitly. Presets
   and random defaults are chromatic; no black/white/cream/gray (including migration
@@ -175,7 +198,7 @@ or reintroduce hover toolbars when making unrelated changes.
   edits. Brief idle looks last 3–5 seconds, spaced 5–12 minutes apart per bot;
   after 30 minutes idle use unimpressed, after two hours sleepy. Work anywhere in
   the bot, pending input, or unread errors restores the saved face immediately.
-  Editor/picker previews always show the saved/draft expression. Pause timers when
+  Panel/picker previews always show the saved/draft expression. Pause timers when
   the page is hidden; dispose on unmount. Still/reduced-motion suppress random
   bursts but retain static long-idle poses. Do not poll or call any write RPC.
 - All New conversation actions and forks open the SAME native composer in an empty main-panel chat. Never open a thread-start modal.
@@ -191,10 +214,11 @@ or reintroduce hover toolbars when making unrelated changes.
   host environment seed without it. Keep draft keys distinct by worktree host and
   verify actual picker state. Preserve user overrides; unavailable hosts/sources
   may be reconciled by the host composer, never silently claim same-host success.
-- Editors require an explicit Save click. Enter in text inputs must not submit;
-  SOUL.md must accept normal newlines. The bot editor can create a section.
-  The one exception is Create new bot: Enter in its name field creates the bot
-  when the name is valid.
+- Dialogs (rename, assign, create project) still require an explicit confirm click and
+  Enter in their text inputs must not submit. Create new bot is the exception: Enter in
+  its name field creates the bot when the name is valid. In the bot panel, Enter in the
+  name or role commits that field, Escape abandons it, and an empty name is restored
+  rather than saved. SOUL.md must accept normal newlines. The panel can create a section.
 - Do not restore Move main or Make main. Keep existing histories and legacy pointers.
 - Keep the later additions: worktree composer, conversation/Chats menus and
   rename/archive, older unassigned Chats grouped under N Other, and status icons.
@@ -227,7 +251,7 @@ or reintroduce hover toolbars when making unrelated changes.
   not in the Bots heading. Do not reintroduce the per-row activity dates.
 - Before reloading, run `npm run typecheck`, `npm test`, and `bb plugin build`.
   `tests/sidebar-ux.test.tsx` protects the approved interactions, not just markup.
-  For visual changes also check the live UI on hover, menu open, and edit open.
+  For visual changes also check the live UI on hover, menu open, and with the bot panel open.
 
 ## Screenshot privacy
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { experimental_NewThreadComposer as NewThreadComposer, useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import type { NewThreadRequest, PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import type { BotMetadata, rpcContract } from "../contract";
+import { useBotPageOpener } from "../hooks/use-bot-page-opener";
 import { defaultConversationProjectId, projectLaunchEnvironment, conversationDraftKey } from "../lib/worktree-launch";
 
 type CoordinatorTarget = {
@@ -37,6 +38,7 @@ function CoordinatorChat({ target }: { target: CoordinatorTarget }) {
 
 function CoordinatorLoader({ botId }: { botId: string }) {
   const rpc = useRpc<typeof rpcContract>();
+  useBotPageOpener("coordinator", botId || null);
   const [target, setTarget] = useState<CoordinatorTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

@@ -28,6 +28,9 @@ Demo data only: [Sidebar](docs/screenshots/sidebar.png) ·
 [State in Edit bot](docs/screenshots/bot-state.png) ·
 [Appearance choices](docs/screenshots/bot-appearance.png)
 
+The Edit bot, project and state screenshots predate the bot panel and still show the
+retired dialog; the controls are the same, now arranged as cards in the right-hand panel.
+
 ## Private state
 
 The plugin's SQLite database is the durable authority. Generated Markdown/JSON
@@ -41,10 +44,15 @@ and are not execution workspaces. Agents do not need their physical locations.
 | `MEMORY.md` | Durable facts and preferences; at most 3,000 characters |
 | `settings.json` | Structured bot preferences; a JSON object up to 16,384 characters |
 
-**Edit bot** is the single editor: **Instructions** contains SOUL.md;
-**State** contains MEMORY.md / settings.json. Its explicit Save commits changes
-together with revision/hash checks; invalid JSON or conflicts never partially save
-other fields. Use this editor or the state tools—not direct edits to exports.
+**Edit bot** opens the bot panel in BB's right-hand panel, beside the bot's
+conversation. It is the single editor: the **Instructions** card holds SOUL.md, and
+**Memory** and **Settings** hold MEMORY.md and settings.json. There is no Save button.
+Each file saves on its own, checked against the version it was edited from: SOUL.md and
+MEMORY.md shortly after you stop typing, settings.json when you leave the field. If a
+bot changes its memory or settings while you are editing them, your draft is kept and
+not saved; the panel shows the latest version and lets you choose **Use latest** or
+**Keep mine**. Invalid JSON and over-long memory stay as drafts until fixed, and never
+affect other fields. Use this panel or the state tools—not direct edits to exports.
 Export failures do not lose committed state or prevent conversations.
 The working machine can be offline while state is still readable/editable in BB.
 
@@ -59,11 +67,12 @@ copied into that project's directory.
 
 ## Project roles
 
-**Edit bot → Projects** shows only the bot's linked projects. Use **Add existing…**
+The bot panel's **Projects** card shows only the bot's linked projects. Use **Add existing…**
 to search for a project, **New project…** to create one, or **×** to unlink.
 Each linked project has a **Member / Owner** selector.
 Projects may have many members but only one owner. Claiming an already-owned
 project is rejected; release its current ownership before assigning another bot.
+Linking, unlinking and role changes take effect immediately.
 
 - **Owner:** new ordinary project conversations default to this bot.
 - **Member:** an explicitly selected bot, or inherited parent/fork bot context,
@@ -104,12 +113,12 @@ and says so: pressing **Create** again reuses it, and it stays if you cancel.
 Choosing a folder needs a connected machine.
 
 You can also create a work project directly inside an existing bot's
-**Projects** tab. Choose a machine and folder (or use **Browse…**). Missing folders
-are created; existing files are not changed. The new project is selected as
-**Owner** in the bot draft; click **Save bot** to save that link.
+**Projects** card. Choose a machine and folder (or use **Browse…**). Missing folders
+are created; existing files are not changed. The bot becomes the new project's
+**Owner** straight away.
 
-**Create project** is an explicit, immediate action. Cancelling the bot afterwards
-does not delete that project or its files. Unsaved project forms create nothing.
+**Create project** is an explicit, immediate action. Unlinking the project from the
+bot later does not delete it or its files. Unsaved project forms create nothing.
 Retries retain the same request ID to avoid duplicate projects. Existing folder
 registrations are rejected rather than silently reused. Bot state stays private
 in BB; a bot still needs no project or special working directory.
@@ -192,9 +201,13 @@ in bot state.
   then smaller gray dots. Reduced motion disables all activity animations.
 - **Main** is the invisible default section. Explicit custom sections retain their
   headings. Drag bots to reorder/move; the Section picker includes **Create New…**.
-- Creating a bot asks only for a name, a shape and a colour. Edit stays compact:
-  small avatar, name/role, Setup / Instructions / State / Projects / Appearance
-  tabs, one file editor, and an always-visible footer.
+- Creating a bot asks only for a name, a shape and a colour. Editing happens in the
+  right-hand bot panel: a large avatar with the name and role editable in place, then
+  Appearance, Setup, Instructions, Memory, Settings and Projects cards. **Edit bot**
+  opens it beside the conversation you are in when that conversation belongs to the
+  bot; otherwise it takes you to the bot's coordinator and opens it there. The panel is
+  also the **Bot** tab of the panel's new-tab menu, a button in the header of the bot's
+  conversations, and a fixed tab on the bot's new-conversation screens.
   New bots get a random appearance once per draft; existing bots stay unchanged.
   Appearance offers **8 shapes, 16 expressions, 3 idle motions, and 14 coloured
   presets**, with no black/white/neutral presets. **Randomize appearance** rerolls
@@ -202,7 +215,7 @@ in bot state.
 - Sidebar faces occasionally show a brief idle expression (3–5 seconds, spaced
   5–12 minutes apart). After 30 minutes without activity they look bored; after
   two hours, sleepy. Work, pending input, and unread errors restore the chosen face.
-  These are display-only changes: saved appearance and editor previews stay intact.
+  These are display-only changes: saved appearance and panel previews stay intact.
   Random bursts pause in hidden windows and are disabled by Still/reduced motion.
   Machine is an execution default, never the state storage location.
 - All **New conversation** actions open the same native composer in an empty main-panel chat,
@@ -218,7 +231,9 @@ in bot state.
   originating conversation's machine (or the bot's first-conversation/default machine), never
   reuses the existing worktree. The picker remains editable; if that machine lacks
   a project source, BB may fall back to an available source.
-- Save is explicit; Enter never submits text fields. Drafts survive tab changes.
+- The bot panel saves each field as you finish it and shows a quiet Saving… / Saved
+  status; Enter commits the name or role. Unsaved drafts survive switching tabs or
+  conversations. Dialogs still need an explicit confirm.
   No sidebar overlay toolbars or activity dates; the hidden toggle stays at bottom.
 - Chats contains unassigned conversations in a collapsible list beneath Bots, sharing its scroll area. Several
   bots may share a project without sharing identity or conversation ownership.
@@ -310,7 +325,7 @@ attribution and asynchronous handling instructions. No custom timeline renderer 
 
 ## Default projects and coordinators
 
-Edit bot → Projects → Default project chooses the starting project for new conversations and the coordinator. Membership is sufficient; choosing a default does not claim project ownership. New bots start with no linked project and use a personal workspace unless a project folder was chosen in Create new bot. Existing histories, project ownership and legacy main pointers are preserved. Users can change execution choices in BB's composer before sending.
+The bot panel's Projects → Default project chooses the starting project for new conversations and the coordinator. Membership is sufficient; choosing a default does not claim project ownership. New bots start with no linked project and use a personal workspace unless a project folder was chosen in Create new bot, or until one is linked. Existing histories, project ownership and legacy main pointers are preserved. Users can change execution choices in BB's composer before sending.
 
 Bot composers start with Codex / GPT-6.1 Sol / Medium reasoning. Clicking a bot name opens its saved coordinator. On the first click, write a first message in the coordinator composer; creation happens when you send. The coordinator persists across sidebar reordering and uses BB's native threads and asynchronous messaging to coordinate that bot's conversations. The saved coordinator is never silently replaced. An explicit new message restores an archived coordinator through native unarchive; a deleted or unavailable coordinator reports an error. Closing a view does not delete its conversation. With a BB core exposing `experimental_threadCloseProtection`, archive/delete controls and CLI/SDK requests are protected, including ancestor and bulk operations. Older cores log the missing capability and cannot enforce the close veto. Stop and native provider compaction remain available; an idle coordinator does not consume model turns.
 

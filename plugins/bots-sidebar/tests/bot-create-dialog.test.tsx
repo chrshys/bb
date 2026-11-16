@@ -169,16 +169,13 @@ it("creates nothing when cancelled", async () => {
   expect(created(slot)).toHaveLength(0);
 });
 
-it("still opens the full five-tab editor for an existing bot", async () => {
+it("sends Edit bot for an existing bot to its panel, never to a dialog", async () => {
   const slot = await mount({ existing: [{ ...bot, mainThreadId: null, linkedProjectIds: [] }] });
   fireEvent.contextMenu(slot.getByText(bot.name));
   fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  const dialog = await slot.findByRole("dialog", { name: "Edit bot" });
-  expect(within(dialog).getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Setup", "Instructions", "State", "Projects", "Appearance"]);
-  expect((within(dialog).getByRole("textbox", { name: "Bot name" }) as HTMLInputElement).value).toBe(bot.name);
-  expect((within(dialog).getByRole("textbox", { name: "Role" }) as HTMLInputElement).value).toBe(bot.role);
-  expect(within(dialog).getByRole("button", { name: "Save bot" })).toBeTruthy();
-  expect(slot.queryByRole("dialog", { name: "Create new bot" })).toBeNull();
+  expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "coordinator", options: { subPath: bot.id } }]);
+  expect(slot.queryByRole("dialog")).toBeNull();
+  expect(created(slot)).toHaveLength(0);
 });
 
 it("links an existing project as a member and makes it the default project", async () => {

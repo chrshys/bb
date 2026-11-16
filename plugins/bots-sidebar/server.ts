@@ -104,6 +104,35 @@ export default async function plugin(bb: BbPluginApi) {
       await state.mirror(next); publish(); return next;
     }));
   }
+  const PATCH_LABELS = { name: "Name", role: "Role", avatar: "Avatar", sectionId: "Section", hostId: "Machine", defaultProjectId: "Default project" } as const;
+  type PatchKey = keyof typeof PATCH_LABELS;
+  function patchValue(bot: BotMetadata, key: PatchKey) {
+    return key === "defaultProjectId" ? bot.defaultProjectId === undefined ? bot.linkedProjectIds[0] ?? null : bot.defaultProjectId : bot[key];
+  }
+  function assertUnchanged(bot: BotMetadata, expected: z.infer<typeof rpcContract.bot_patch.input>["expected"]) {
+    for (const key of Object.keys(expected) as PatchKey[]) {
+      const current = patchValue(bot, key);
+      const base = expected[key];
+      const same = key === "avatar" ? (["color", "shape", "expression", "motion"] as const).every((part) => bot.avatar[part] === expected.avatar?.[part]) : current === base;
+      if (!same) throw new BotStateConflictError(`${PATCH_LABELS[key]} changed elsewhere. Review the latest value before saving.`);
+    }
+  }
+  function patchBot({ botId, expected, changes }: z.infer<typeof rpcContract.bot_patch.input>) {
+    return serial("registry", () => serial(botId, async () => {
+      const bot = await state.prepare(botId);
+      assertUnchanged(bot, expected);
+      if (changes.hostId !== undefined && changes.hostId !== bot.hostId && !(await bb.sdk.hosts.list()).some((host) => host.id === changes.hostId)) throw new Error("Choose an enrolled execution machine");
+      if (changes.sectionId !== undefined) validateSection(changes.sectionId);
+      if (changes.defaultProjectId && !bot.linkedProjectIds.includes(changes.defaultProjectId)) throw new Error("The default project must be linked to this bot");
+      const next = store.mutate(botId, (current) => {
+        assertUnchanged(current, expected);
+        if ((Object.keys(changes) as PatchKey[]).every((key) => JSON.stringify(patchValue(current, key)) === JSON.stringify(changes[key]))) return current;
+        return { ...current, ...changes, updatedAt: nextTimestamp(current.updatedAt) };
+      });
+      if (next.updatedAt !== bot.updatedAt) { await state.mirror(next); publish(); }
+      return next;
+    }));
+  }
   async function updateProjectRole(botId: string, action: "join" | "leave" | "own" | "release", projectId: string) {
     return serial("registry", () => serial(botId, async () => {
       store.require(botId);
@@ -288,6 +317,11 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.rpc.register(rpcContract, {
     thread_appearance: ({ threadId }) => readThreadAppearance(store, resolveOwner, threadId, typeof bb.sdk.threads.experimental_sendSystem === "function"),
+    thread_bot: async ({ threadId }) => {
+      const botId = await resolveOwner(threadId, false);
+      const bot = botId ? store.get(botId) : null;
+      return { bot: bot ? { id: bot.id, name: bot.name, avatar: bot.avatar } : null };
+    },
     project_browse: ({ hostId, path }) => browseProjectDirectory(bb, { hostId, path }),
     project_create: (input) => serial("project-create", () => serial(`project-create:${input.requestId}`, () => createWorkProject(bb, store, input))),
     bots_list: async () => {
@@ -314,6 +348,7 @@ export default async function plugin(bb: BbPluginApi) {
     }),
     bot_prepare: ({ botId }) => serial(botId, () => state.prepare(botId)),
     bot_update: saveBotIdentity,
+    bot_patch: patchBot,
     bots_reorder: ({ bots: placements }) => serial("registry", async () => {
       const bots = store.list();
       if (placements.length !== bots.length || new Set(placements.map((entry) => entry.botId)).size !== bots.length) throw new Error("Reordering must include every bot exactly once");

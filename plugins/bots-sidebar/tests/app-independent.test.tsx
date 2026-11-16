@@ -49,12 +49,6 @@ async function mount({
         bots[index] = { ...bots[index]!, stateReady: true, ...(preparedMainThreadId ? { mainThreadId: preparedMainThreadId } : {}) };
         return rpcContract.bot_prepare.output.parse(bots[index]);
       },
-      bot_update: (raw) => {
-        const input = rpcContract.bot_update.input.parse(raw);
-        const index = bots.findIndex((bot) => bot.id === input.botId);
-        bots[index] = { ...bots[index]!, name: input.name!, linkedProjectIds: input.linkedProjectIds!, soul: input.soul!! };
-        return bots[index];
-      },
       bot_create: (raw) => {
         const input = rpcContract.bot_create.input.parse(raw);
         const created = rpcContract.bot_create.output.parse({ ...bot, name: input.name, role: input.role, avatar: input.avatar, sectionId: input.sectionId, linkedProjectIds: input.linkedProjectIds, soul: input.soul, hostId: input.hostId, id: "created", mainThreadId: null, stateReady: true, legacyHomeProjectId: null });
@@ -87,10 +81,6 @@ async function menu(slot: Awaited<ReturnType<typeof mount>>["slot"], botName: st
 async function createFromMenu(slot: Awaited<ReturnType<typeof mount>>["slot"], kind: "Bot" | "Section" | "Project") {
   fireEvent.keyDown(screen.getByRole("button", { name: "Create…" }), { key: "ArrowDown" });
   fireEvent.click(await screen.findByRole("menuitem", { name: kind }));
-}
-function linkProject(dialog: HTMLElement, name: string) {
-  fireEvent.click(within(dialog).getByRole("button", { name: "Add existing…" }));
-  fireEvent.click(within(dialog).getByRole("button", { name: `Link ${name}` }));
 }
 
 describe("independent bot identities", () => {
@@ -197,34 +187,6 @@ describe("independent bot identities", () => {
     expect(slot.inspection.rpcCalls).toContainEqual({ method: "conversation_create", input: { botId: bot.id, request: { ...request, projectId: "second" }, makeMain: false } });
   });
 
-  it("edits independent name, SOUL, and multiple project links without renaming any project", async () => {
-    const { slot } = await mount();
-    await menu(slot, bot.name, "Add / manage projects…");
-    const dialog = await screen.findByRole("dialog", { name: "Edit bot" });
-    expect(within(dialog).getByRole("tab", { name: /^Projects/ }).getAttribute("aria-selected")).toBe("true");
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Setup" }));
-    expect(within(dialog).queryByRole("textbox", { name: "Home folder" })).toBeNull();
-    expect(within(dialog).getByText(/State is stored privately in BB/)).toBeTruthy();
-    expect(dialog.querySelector(".bot-home-path")).toBeNull();
-    expect(within(dialog).queryByRole("button", { name: "Use custom" })).toBeNull();
-    selectOption(within(dialog).getByRole("combobox", { name: "Machine" }), "Remote");
-    fireEvent.click(within(dialog).getByRole("tab", { name: /^Projects/ }));
-    expect((within(dialog).getByRole("combobox", { name: "Shared project role" }) as HTMLSelectElement).value).toBe("member");
-    expect(within(dialog).queryByRole("combobox", { name: "Legacy backing project role" })).toBeNull();
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Renamed bot" } });
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Instructions" }));
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "SOUL.md" }), { target: { value: "Work carefully\nKeep history" } });
-    fireEvent.click(within(dialog).getByRole("tab", { name: /^Projects/ }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Unlink Shared project" }));
-    linkProject(dialog, "Second project");
-    linkProject(dialog, "Brand new unrelated project");
-    expect(slot.inspection.rpcCalls.some((call) => call.method === "bot_update")).toBe(false);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_update", input: expect.objectContaining({ botId: bot.id, hostId: "remote", name: "Renamed bot", soul: "Work carefully\nKeep history", linkedProjectIds: ["second", "unrelated"], ownedProjectIds: [], expectedUpdatedAt: bot.updatedAt, expectedStateHashes: bot.stateHashes }) });
-    expect(screen.getByText("Renamed bot")).toBeTruthy();
-    expect(slot.inspection.rpcCalls.some((call) => call.method === "project_update")).toBe(false);
-  });
 
   it("creates with private state and no section, home or custom path control", async () => {
     const { slot } = await mount({ bots: [], bindings: [] });
@@ -395,72 +357,8 @@ describe("independent bot identities", () => {
     expect(slot.inspection.rpcCalls).toContainEqual({ method: "conversation_create", input: { botId: bot.id, request: chosen, makeMain: false } });
   });
 
-  it("exposes Owner above Member, refuses silent transfer, and submits the full membership payload", async () => {
-    const other = { ...bot, id: "other", name: "Other bot", linkedProjectIds: ["second"], mainThreadId: null };
-    const { slot } = await mount({
-      bots: [{ ...bot, linkedProjectIds: ["project", "missing"] }, other],
-      projectOwners: [{ projectId: "project", botId: bot.id }, { projectId: "second", botId: other.id }],
-    });
-    await menu(slot, bot.name, "Add / manage projects…");
-    const dialog = await screen.findByRole("dialog", { name: "Edit bot" });
-    expect(within(dialog).queryByRole("combobox", { name: "Second project role" })).toBeNull();
-    linkProject(dialog, "Second project"); linkProject(dialog, "Brand new unrelated project");
-    const shared = within(dialog).getByRole("combobox", { name: "Shared project role" }) as HTMLSelectElement;
-    const second = within(dialog).getByRole("combobox", { name: "Second project role" }) as HTMLSelectElement;
-    const unrelated = within(dialog).getByRole("combobox", { name: "Brand new unrelated project role" }) as HTMLSelectElement;
-    const missing = within(dialog).getByRole("combobox", { name: "Unavailable project (missing) role" }) as HTMLSelectElement;
-    expect(shared.value).toBe("owner");
-    expect(second.value).toBe("member");
-    expect(within(second).getByRole("option", { name: "Owner (Other bot)" })).toBeTruthy();
-    expect((within(second).getByRole("option", { name: "Owner (Other bot)" }) as HTMLOptionElement).disabled).toBe(true);
-    fireEvent.change(second, { target: { value: "owner" } });
-    expect(second.value).toBe("member");
-    expect(missing.value).toBe("member");
-    fireEvent.change(shared, { target: { value: "member" } });
-    fireEvent.change(unrelated, { target: { value: "owner" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Unlink Unavailable project (missing)" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Unlink Second project" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_update", input: expect.objectContaining({
-      botId: bot.id, linkedProjectIds: ["project", "unrelated"], ownedProjectIds: ["unrelated"],
-    }) });
-  });
 
-  it("waits for fresh project roles before mounting an editor draft", async () => {
-    const bots = [{ ...bot }]; const projectOwners: Array<{ projectId: string; botId: string }> = [];
-    let waiting = false; let arrived!: () => void; let unblock!: () => void;
-    const started = new Promise<void>((resolve) => { arrived = resolve; });
-    const gate = new Promise<void>((resolve) => { unblock = resolve; });
-    const { slot } = await mount({ bots, projectOwners, beforeList: async () => { if (waiting) { arrived(); await gate; } } });
-    bots[0] = { ...bots[0]!, updatedAt: bot.updatedAt + 1 };
-    projectOwners.push({ projectId: "project", botId: bot.id }); waiting = true;
-    await menu(slot, bot.name, "Add / manage projects…");
-    await act(async () => { await started; });
-    try { expect(screen.queryByRole("dialog", { name: "Edit bot" })).toBeNull(); } finally { await act(async () => { unblock(); }); }
-    const dialog = await screen.findByRole("dialog", { name: "Edit bot" });
-    expect((within(dialog).getByRole("combobox", { name: "Shared project role" }) as HTMLSelectElement).value).toBe("owner");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_update", input: expect.objectContaining({ ownedProjectIds: ["project"], expectedUpdatedAt: bot.updatedAt + 1 }) });
-  });
 
-  it("keeps role drafts and their original revision when ownership changes elsewhere", async () => {
-    const bots = [{ ...bot }]; const projectOwners = [{ projectId: "project", botId: bot.id }];
-    const { slot } = await mount({ bots, projectOwners });
-    await menu(slot, bot.name, "Add / manage projects…");
-    const dialog = await screen.findByRole("dialog", { name: "Edit bot" });
-    const shared = within(dialog).getByRole("combobox", { name: "Shared project role" }) as HTMLSelectElement;
-    fireEvent.change(shared, { target: { value: "member" } });
-    bots[0] = { ...bots[0]!, updatedAt: bot.updatedAt + 1 };
-    projectOwners.push({ projectId: "second", botId: bot.id });
-    await slot.behavior.emitRealtime("project-bots-changed", {});
-    expect(shared.value).toBe("member");
-    expect(within(dialog).queryByRole("combobox", { name: "Second project role" })).toBeNull();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_update", input: expect.objectContaining({ ownedProjectIds: [], expectedUpdatedAt: bot.updatedAt }) });
-  });
 
   it("does not reuse a personal or legacy-home worktree", async () => {
     const { slot } = await mount({

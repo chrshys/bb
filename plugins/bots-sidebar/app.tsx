@@ -1,6 +1,6 @@
 import { useBotMessageAppearance } from "./components/bot-message-appearance";
 import { BotWorkFooter } from "./components/bot-work-footer";
-import { createContext, useContext, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { DragEvent, PointerEvent as ReactPointerEvent, ReactElement } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -16,9 +16,6 @@ import {
   experimental_useSidebarThreadActions,
   experimental_useSidebarThreadSplit,
   experimental_useSidebarThreads,
-  useRealtime,
-  useRealtimeConnectionState,
-  useRpc,
   useBbNavigate,
 } from "@get-bb/plugin-sdk/app";
 import type {
@@ -28,17 +25,12 @@ import type {
   PluginThreadActionTarget,
   PluginThreadActionsInlineItem,
 } from "@get-bb/plugin-sdk/app";
-import type { BotAvatar, BotMetadata, BotSection, ProjectOwner, rpcContract } from "./contract";
+import type { BotMetadata, BotSection } from "./contract";
+import { useBotData, type ProjectOption } from "./hooks/use-bot-data";
+import { BOT_PANEL_ACTION_ID, BOT_PANEL_TAB_ID, hasBotPanelOpener, openBotPanelOn, pageSurface, threadSurface, type BotPanelSection } from "./lib/bot-panel-bridge";
+import { BotHeaderAction, BotThreadPanel, ConversationBotTab, CoordinatorBotTab } from "./components/bot-panel-surfaces";
 import { orderedBotConversationTree, conversationOwners, conversationTree } from "./lib/conversations";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { RenameConversationDialog } from "@/components/rename-conversation-dialog";
 import { ConversationArchiveButton } from "./components/conversation-archive-button";
@@ -53,31 +45,15 @@ import type { ConversationTarget } from "./components/conversation-panel";
 import { AssignConversationDialog } from "@/components/assign-conversation-dialog";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { MachineSelect } from "./components/machine-select";
-import { BotProjectsPanel } from "./components/bot-projects-panel";
 import { ProjectCreateDialog } from "./components/project-create-dialog";
 import type { ProjectCreationActions } from "./components/project-create-form";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { conversationLaunchProjectId, defaultConversationProjectId, projectLaunchEnvironment, worktreeLaunchEnvironment, worktreeLaunchHostId } from "./lib/worktree-launch";
 import { BotCreateDialog } from "./components/bot-create-dialog";
-import { AvatarAppearance } from "./components/avatar-appearance";
-import { BotIcon } from "./components/bot-icon";
 import { SidebarBotIcon } from "./components/sidebar-bot-icon";
-import { MEMORY_MAX_CHARS } from "./lib/memory-limit";
 import "./style.css";
 
 const MENU_ITEM_CLASS = "bot-menu-item cursor-default select-none rounded-sm px-2 py-1.5 text-xs outline-none data-[disabled]:opacity-40";
-
-type HostOption = { id: string; name: string; connected: boolean };
-type ProjectOption = { id: string; name: string };
-type BotEditFields = Pick<BotMetadata, "hostId" | "name" | "role" | "avatar" | "sectionId" | "linkedProjectIds" | "defaultProjectId" | "soul" | "settings"> & { ownedProjectIds: string[]; memory?: string };
-type ProjectRole = "none" | "member" | "owner";
-type EditorTab = "setup" | "instructions" | "state" | "projects" | "appearance";
-type EditorTarget = { metadata: BotMetadata; projectOwners: ProjectOwner[]; tab: EditorTab };
-
-function ownedProjectIdsFor(botId: string, owners: ProjectOwner[]): string[] {
-  return owners.filter((owner) => owner.botId === botId).map((owner) => owner.projectId);
-}
 
 function isPersonalOrLegacyHome(projectId: string, bot: BotMetadata, personalProjectId: string | null): boolean {
   return projectId === personalProjectId || projectId === bot.legacyHomeProjectId;
@@ -103,191 +79,6 @@ function TinyIcon({ name }: { name: "chevron" | "plus" | "edit" | "folder" | "hi
       {name === "main" ? <path d="M10 3.5 12 7l4 .7-2.8 2.9.5 4.1L10 13l-3.7 1.7.5-4.1L4 7.7 8 7l2-3.5Z" /> : null}
     </svg>
   );
-}
-
-function useBotData() {
-  const rpc = useRpc<typeof rpcContract>();
-  const [bots, setBots] = useState<BotMetadata[]>([]);
-  const [hosts, setHosts] = useState<HostOption[]>([]);
-  const [sections, setSections] = useState<BotSection[]>([]);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const [threadBindings, setThreadBindings] = useState<Array<{ threadId: string; botId: string }>>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
-  const [personalProjectId, setPersonalProjectId] = useState<string | null>(null);
-  const [projectOwners, setProjectOwners] = useState<ProjectOwner[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const refreshSequence = useRef(0);
-  const connectionState = useRealtimeConnectionState();
-  const previousConnection = useRef(connectionState);
-  const refresh = useCallback(() => {
-    const sequence = ++refreshSequence.current;
-    return rpc.call("bots_list").then(
-      (result) => {
-        if (sequence !== refreshSequence.current) return result;
-        setBots(result.bots);
-        setHosts(result.hosts);
-        setSections(result.sections);
-        setProjects(result.projects);
-        setThreadBindings(result.threadBindings);
-        setWarnings(result.warnings);
-        setPersonalProjectId(result.personalProjectId);
-        setProjectOwners(result.projectOwners ?? []);
-        setLoaded(true);
-        setError(null);
-        return result;
-      },
-      (cause) => {
-        if (sequence !== refreshSequence.current) return;
-        setLoaded(true);
-        setError(cause instanceof Error ? cause.message : String(cause));
-      },
-    );
-  }, [rpc]);
-  useEffect(() => { void refresh(); return () => { refreshSequence.current++; }; }, [refresh]);
-  useEffect(() => {
-    if (connectionState === "connected" && previousConnection.current !== "connected") void refresh();
-    previousConnection.current = connectionState;
-  }, [connectionState, refresh]);
-  useRealtime("project-bots-changed", refresh);
-  return { rpc, bots, hosts, sections, projects, threadBindings, warnings, personalProjectId, projectOwners, loaded, error, refresh };
-}
-
-function BotEditor({ target, hosts, sections, projects, bots, onClose, onUpdate, onCreateSection, onCreateProject, onBrowseProjects }: ProjectCreationActions & {
-  target: EditorTarget; hosts: HostOption[]; sections: BotSection[]; projects: ProjectOption[]; bots: BotMetadata[]; onClose: () => void;
-  onCreateSection: (name: string) => Promise<BotSection>;
-  onUpdate: (value: BotEditFields) => Promise<void>;
-}) {
-  const { metadata } = target;
-  const botId = metadata.id;
-  const [name, setName] = useState(metadata.name);
-  const [role, setRole] = useState(metadata.role);
-  const [hostId, setHostId] = useState(metadata.hostId);
-  const [memory, setMemory] = useState(metadata.memory);
-  const [settingsText, setSettingsText] = useState(() => `${JSON.stringify(metadata.settings, null, 2)}\n`);
-  const [stateFile, setStateFile] = useState<"MEMORY.md" | "settings.json">("MEMORY.md");
-  const [owners] = useState(target.projectOwners);
-  const [botNames] = useState(() => new Map(bots.map((bot) => [bot.id, bot.name])));
-  const [ownedProjectIds, setOwnedProjectIds] = useState<string[]>(() => ownedProjectIdsFor(botId, target.projectOwners));
-  const [linkedProjectIds, setLinkedProjectIds] = useState<string[]>(() => [...new Set([...metadata.linkedProjectIds, ...ownedProjectIdsFor(botId, target.projectOwners)])]);
-  const [defaultProjectId, setDefaultProjectId] = useState<string | null>(metadata.defaultProjectId === undefined ? metadata.linkedProjectIds[0] ?? null : metadata.defaultProjectId);
-  const [projectPending, setProjectPending] = useState(false);
-  const [projectDraft, setProjectDraft] = useState(false);
-  const [sectionId, setSectionId] = useState<string | null>(metadata.sectionId);
-  const [soul, setSoul] = useState(metadata.soul);
-  const [sectionDraft, setSectionDraft] = useState<string | null>(null);
-  const [createdSections, setCreatedSections] = useState<BotSection[]>([]);
-  const sectionOptions = [...sections, ...createdSections.filter((created) => !sections.some((section) => section.id === created.id))];
-  const [avatar, setAvatar] = useState<BotAvatar>(metadata.avatar);
-  const [pending, setPending] = useState(false);
-  const saving = useRef(false);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<EditorTab>(target.tab);
-  const tabsId = useId();
-  const tabs = [{ id: "setup", label: "Setup" }, { id: "instructions", label: "Instructions" }, { id: "state", label: "State" }, { id: "projects", label: `Projects${linkedProjectIds.length ? ` · ${linkedProjectIds.length}` : ""}` }, { id: "appearance", label: "Appearance" }] as const;
-  function setProjectRole(projectId: string, next: ProjectRole) {
-    const otherOwner = owners.find((owner) => owner.projectId === projectId && owner.botId !== botId);
-    if (next === "owner" && otherOwner) return;
-    setLinkedProjectIds((current) => next === "none" ? current.filter((id) => id !== projectId) : current.includes(projectId) ? current : [...current, projectId]);
-    if (next === "none" && defaultProjectId === projectId) setDefaultProjectId(null);
-    if (next !== "none" && linkedProjectIds.length === 0 && defaultProjectId === null) setDefaultProjectId(projectId);
-    setOwnedProjectIds((current) => next === "owner" ? (current.includes(projectId) ? current : [...current, projectId]) : current.filter((id) => id !== projectId));
-  }
-  async function createSection() {
-    if (pending || !sectionDraft?.trim()) return;
-    setPending(true); setError(null);
-    try {
-      const section = await onCreateSection(sectionDraft.trim());
-      setCreatedSections((current) => [...current, section]);
-      setSectionId(section.id); setSectionDraft(null);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { setPending(false); }
-  }
-  function closeEditor() {
-    if (saving.current || pending || projectPending) return;
-    const stateDirty = memory !== metadata.memory || settingsText !== `${JSON.stringify(metadata.settings, null, 2)}\n`;
-    if (!stateDirty || window.confirm("Discard unsaved bot state changes?")) onClose();
-  }
-  async function submit() {
-    if (saving.current || pending || projectPending || projectDraft || sectionDraft !== null) return;
-    saving.current = true; setPending(true); setError(null);
-    try {
-      let parsed: unknown;
-      try { parsed = JSON.parse(settingsText, (_key, value: unknown) => { if (typeof value === "number" && !Number.isFinite(value)) throw new Error("Settings numbers must be finite"); return value; }); }
-      catch { setTab("state"); setStateFile("settings.json"); throw new Error("settings.json must contain valid JSON. Your draft is kept."); }
-      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") { setTab("state"); setStateFile("settings.json"); throw new Error("settings.json must contain a JSON object. Your draft is kept."); }
-      if (`${JSON.stringify(parsed, null, 2)}\n`.length > 16384) { setTab("state"); setStateFile("settings.json"); throw new Error("settings.json is too large (maximum 16384 characters). Your draft is kept."); }
-      const memoryChanged = memory !== metadata.memory;
-      if (memoryChanged && memory.length > MEMORY_MAX_CHARS) { setTab("state"); setStateFile("MEMORY.md"); throw new Error("MEMORY.md must be at most 3000 characters. Shorten your draft before saving; it has been kept."); }
-      const fields = { hostId, name: name.trim(), role: role.trim(), avatar, sectionId, soul, ...(memoryChanged ? { memory } : {}), settings: parsed as BotMetadata["settings"], linkedProjectIds, ownedProjectIds, defaultProjectId };
-      await onUpdate(fields);
-      onClose();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { saving.current = false; setPending(false); }
-  }
-  return <Dialog open onOpenChange={(open) => { if (!open) closeEditor(); }}>
-    <DialogContent className="bot-editor-dialog flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
-      <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => event.preventDefault()} onKeyDown={(event) => { if (event.key === "Enter" && event.target instanceof HTMLInputElement) { event.preventDefault(); event.stopPropagation(); } }}>
-        <DialogHeader className="shrink-0 px-4 pt-4 pr-10 pb-3">
-          <DialogTitle>Edit bot</DialogTitle>
-          <DialogDescription>An identity, private state, and optional linked projects.</DialogDescription>
-        </DialogHeader>
-        <div className="flex shrink-0 items-end gap-3 px-4 pb-3">
-          <button type="button" className="flex size-14 shrink-0 items-center justify-center rounded-lg hover:bg-state-hover" aria-label="Customize avatar" onClick={() => setTab("appearance")}>
-            <BotIcon avatar={avatar} size={48} label="Bot preview" />
-          </button>
-          <div className="grid min-w-0 flex-1 grid-cols-2 gap-3">
-            <label className="min-w-0 space-y-1 text-xs font-medium text-muted-foreground">Bot name<Input autoFocus className="h-8" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} placeholder="Research bot" /></label>
-            <label className="min-w-0 space-y-1 text-xs font-medium text-muted-foreground">Role<Input className="h-8" value={role} maxLength={80} onChange={(event) => setRole(event.target.value)} placeholder="Assistant" /></label>
-          </div>
-        </div>
-        <div role="tablist" aria-label="Bot settings" className="flex shrink-0 gap-1 border-b border-border px-4" onKeyDown={(event) => {
-          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-          event.preventDefault(); event.stopPropagation();
-          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-          const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-          const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-          setTab(tabs[next]!.id); buttons[next]?.focus();
-        }}>
-          {tabs.map((entry) => <button key={entry.id} id={`${tabsId}-${entry.id}`} type="button" role="tab" aria-selected={tab === entry.id} aria-controls={`${tabsId}-panel`} tabIndex={tab === entry.id ? 0 : -1} className="min-w-0 flex-1 truncate rounded-t px-1.5 py-2 text-[11px] font-medium text-muted-foreground hover:bg-state-hover aria-selected:bg-state-active aria-selected:text-foreground" onClick={() => setTab(entry.id)}>{entry.label}</button>)}
-        </div>
-        <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${tab}`} className="bot-editor-panel h-60 min-h-0 overflow-y-auto px-4 py-3">
-          {tab === "setup" ? <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="block space-y-1 text-xs font-medium text-muted-foreground">Section<select className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground" value={sectionDraft !== null ? "__create_section__" : sectionId ?? ""} onChange={(event) => {
-                  if (event.target.value === "__create_section__") setSectionDraft("");
-                  else { setSectionId(event.target.value || null); setSectionDraft(null); }
-                }}><option value="">Main</option>{sectionOptions.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}<option value="__create_section__">Create New…</option></select></label>
-                {sectionDraft !== null ? <div className="space-y-1">
-                  <Input autoFocus className="h-8" aria-label="New section name" value={sectionDraft} maxLength={80} onChange={(event) => setSectionDraft(event.target.value)} />
-                  <div className="flex items-center gap-2"><Button type="button" size="sm" disabled={pending || !sectionDraft.trim()} onClick={() => void createSection()}>Add section</Button><button type="button" aria-label="Cancel section creation" className="text-[11px] text-muted-foreground hover:text-foreground" disabled={pending} onClick={() => setSectionDraft(null)}>Cancel</button></div>
-                </div> : null}
-              </div>
-              <MachineSelect hosts={hosts} value={hostId} onValueChange={setHostId} disabled={pending} />
-            </div>
-            <p className="text-xs text-muted-foreground">State is stored privately in BB and included in this bot’s instructions. Machine is the default for new conversations, not a storage location.</p>
-          </div> : null}
-          {tab === "instructions" ? <div className="flex h-full min-h-0 flex-col gap-2">
-            <div className="flex shrink-0 items-center justify-between gap-2">
-              <span className="text-xs font-medium">SOUL.md</span>
-              <span className="text-[10px] text-muted-foreground">{soul.length}/4096</span>
-            </div>
-            <textarea aria-label="SOUL.md" className="min-h-24 w-full flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" value={soul} maxLength={4096} disabled={pending} onChange={(event) => setSoul(event.target.value)} onKeyDown={(event) => event.stopPropagation()} onKeyUp={(event) => event.stopPropagation()} placeholder="Personality, perspective, and communication style." />
-          </div> : null}
-          {tab === "state" ? <div className="flex h-full min-h-0 flex-col gap-2">
-            <div className="flex shrink-0 items-center justify-between gap-2"><div role="group" aria-label="State file" className="flex gap-1">{(["MEMORY.md", "settings.json"] as const).map((file) => <Button key={file} type="button" variant="ghost" size="sm" className="h-7 px-2" aria-pressed={stateFile === file} onClick={() => setStateFile(file)}>{file}</Button>)}</div><span className="text-[10px] text-muted-foreground">{(stateFile === "MEMORY.md" ? memory : settingsText).length}/{stateFile === "MEMORY.md" ? MEMORY_MAX_CHARS : 16384}</span></div>
-            <textarea aria-label={stateFile} className="min-h-24 w-full flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground" value={stateFile === "MEMORY.md" ? memory : settingsText} maxLength={stateFile === "MEMORY.md" ? undefined : 16384} disabled={pending} spellCheck={false} onKeyDown={(event) => event.stopPropagation()} onKeyUp={(event) => event.stopPropagation()} onChange={(event) => stateFile === "MEMORY.md" ? setMemory(event.target.value) : setSettingsText(event.target.value)} />
-            {stateFile === "MEMORY.md" && memory.length > MEMORY_MAX_CHARS ? <p role="status" className="text-xs text-destructive">Memory exceeds 3000 characters. Shorten it before saving a memory change. Existing text is kept.</p> : null}
-            <p className="shrink-0 text-[10px] text-muted-foreground">Private to this bot. Saved together with the bot; don’t store credentials here.</p>
-          </div> : null}
-          <div hidden={tab !== "projects"}><label className="mb-3 flex flex-col gap-1 text-xs">Default project<select aria-label="Default project" className="rounded-md border border-border bg-background p-2 text-sm" value={defaultProjectId ?? ""} onChange={(event) => setDefaultProjectId(event.target.value || null)}><option value="">Personal workspace</option>{linkedProjectIds.map(id => <option key={id} value={id}>{projects.find(project => project.id === id)?.name ?? id}</option>)}</select><span className="text-muted-foreground">New conversations and the coordinator start here. You can change the project before sending.</span></label><BotProjectsPanel projects={projects} owners={owners} botNames={botNames} botId={botId} botName={name} hostId={hostId} hosts={hosts} linkedProjectIds={linkedProjectIds} ownedProjectIds={ownedProjectIds} onRoleChange={setProjectRole} onBusyChange={setProjectPending} onDraftChange={setProjectDraft} onCreateProject={onCreateProject} onBrowseProjects={onBrowseProjects} /></div>
-          {tab === "appearance" ? <AvatarAppearance avatar={avatar} onChange={setAvatar} /> : null}
-        </div>
-        {error ? <p role="alert" className="max-h-20 shrink-0 overflow-y-auto px-4 pb-2 text-xs text-destructive">{error}</p> : null}
-        <DialogFooter className="shrink-0 border-t border-border px-4 py-3"><Button type="button" variant="ghost" disabled={pending || projectPending} onClick={closeEditor}>Cancel</Button><Button type="button" onClick={() => void submit()} disabled={pending || projectPending || projectDraft || sectionDraft !== null || !name.trim()}>{pending ? "Saving..." : "Save bot"}</Button></DialogFooter>
-      </form>
-    </DialogContent>
-  </Dialog>;
 }
 
 type MenuItem = { label: string; action: () => void; disabled?: boolean };
@@ -451,7 +242,7 @@ function BotGroup({
   actions: PluginSidebarThreadActions;
   topicsVisible: boolean;
   onToggleTopics: () => void;
-  onEdit: (tab?: EditorTab) => void;
+  onEdit: (section?: BotPanelSection) => void;
   onVisibilityChange: (hidden: boolean) => void;
   hidden: boolean;
   onOpenBot: () => void;
@@ -599,7 +390,6 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
   const [assigning, setAssigning] = useState<PluginSidebarThread | null>(null);
   const [showOtherChats, setShowOtherChats] = useState(false);
   const chatsOtherId = useId();
-  const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [creatingBot, setCreatingBot] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
@@ -761,18 +551,15 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
     } finally { preparing.current = false; }
   }
 
-  async function editBot(bot: BotMetadata, tab: EditorTab = "setup") {
-    // Read fresh private state and hashes before opening the explicit-save editor.
-    const prepared = await rpc.call("bot_prepare", { botId: bot.id });
-    if (!prepared.stateReady) throw new Error("Prepare the bot’s private state before editing.");
-    const snapshot = await refresh();
-    if (!snapshot) throw new Error("Could not read current project roles. Try again.");
-    const current = snapshot.bots.find((entry) => entry.id === bot.id);
-    if (!current) throw new Error("Bot no longer exists.");
-    // Roles live outside BotMetadata. Capture them from a fresh list before
-    // mounting the draft, otherwise fresh metadata + stale roles could release
-    // an ownership claim the user never saw.
-    setEditor({ metadata: current.updatedAt >= prepared.updatedAt ? current : prepared, projectOwners: snapshot.projectOwners ?? [], tab });
+  function editBot(bot: BotMetadata, section: BotPanelSection | null = null) {
+    const request = { botId: bot.id, title: bot.name, section };
+    const coordinator = (threadsByBot.get(bot.id) ?? []).find(thread => thread.id === bot.coordinatorThreadId && !thread.isArchived);
+    const threadId = activeThreadId && owners.get(activeThreadId) === bot.id ? activeThreadId : hasBotPanelOpener(pageSurface(bot.id)) ? null : coordinator?.id ?? null;
+    const outcome = openBotPanelOn(threadId ? threadSurface(threadId) : pageSurface(bot.id), request);
+    if (outcome === "declined") { setActionError("The bot panel could not be opened here."); return; }
+    if (threadId && (outcome === "queued" || threadId !== activeThreadId)) actions.open(threadId);
+    if (!threadId && outcome === "queued") navigate.toPluginPanel("coordinator", { subPath: bot.id });
+    onNavigate();
   }
 
   function openLinked(bot: BotMetadata, kind: "project" | "worktree", thread?: PluginSidebarThread) {
@@ -781,8 +568,8 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
     const preferredMain = main && bot.linkedProjectIds.includes(main.projectId) ? main : undefined;
     const projectId = conversationLaunchProjectId(workProjects, thread, preferredMain);
     if (!projectId) {
-      setActionError("Choose a work project for this conversation. Manage this bot’s projects in Edit bot.");
-      run(() => editBot(bot)); return;
+      setActionError("Choose a work project for this conversation. Link one in this bot’s Projects settings.");
+      editBot(bot, "projects"); return;
     }
     const hostId = worktreeLaunchHostId(bot, thread, main);
     const environment = kind === "project" ? projectLaunchEnvironment(hostId) : worktreeLaunchEnvironment(hostId);
@@ -845,7 +632,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
               }}><BotGroup metadata={metadata} threads={botThreads} selected={botId === selectedBotId} activeThreadId={activeThreadId} actions={actions} topicsVisible={shownTopicBots.has(botId)}
                 ownedProjectNames={projectOwners.filter(owner => owner.botId === botId).map(owner => projects.find(project => project.id === owner.projectId)?.name ?? "Unavailable project")}
                 onToggleTopics={() => setShownTopicBots((current) => { const next = new Set(current); if (next.has(botId)) next.delete(botId); else next.add(botId); return next; })}
-                onEdit={(tab) => run(() => editBot(metadata, tab))} hidden={hiddenIds.has(botId)}
+                onEdit={(section) => { setActionError(null); editBot(metadata, section); }} hidden={hiddenIds.has(botId)}
                 onVisibilityChange={(hiddenUntilActivity) => run(() => rpc.call("visibility_set", { botId, hiddenUntilActivity }).then(refresh))}
                 onOpenBot={() => run(() => openBot(metadata))}
                 onReorder={(threadId, targetThreadId, position) => run(async () => { await rpc.call("conversation_reorder", { botId, threadId, targetThreadId, position }); await refresh(); })}
@@ -903,23 +690,6 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
           }}
         />
       ) : null}
-      {editor ? (
-        <BotEditor
-          {...projectActions}
-          key={editor.metadata.id}
-          target={editor}
-          hosts={hosts}
-          sections={sections}
-          projects={projects}
-          bots={bots}
-          onCreateSection={async (name) => { const section = await rpc.call("section_create", { name }); refresh(); return section; }}
-          onClose={() => setEditor(null)}
-          onUpdate={async (value) => {
-            await rpc.call("bot_update", { ...value, botId: editor.metadata.id, expectedUpdatedAt: editor.metadata.updatedAt, expectedStateHashes: editor.metadata.stateHashes });
-            refresh();
-          }}
-        />
-      ) : null}
     </div>
     {conversationDrop.drag ? createPortal(<div {...portalScope} ref={conversationDrop.ghostRef} className="conversation-drag-ghost rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md" aria-hidden="true"><div className="truncate">{conversationDrop.drag.title}</div><div className="text-[10px] text-muted-foreground">{outsideDropTarget?.placeFirst ? "Drop to make top conversation" : "Drop to add at end · Face or Shift for top"}</div></div>, document.body) : null}
     </TooltipProvider>
@@ -930,8 +700,16 @@ export default definePluginApp((app) => {
   if (typeof app.slots.experimental_threadMessageAppearance === "function") app.slots.experimental_threadMessageAppearance({ id: "bot-human-message-color", useAppearance: useBotMessageAppearance });
   const inventoryFooterAvailable = typeof app.slots.experimental_threadTimelineFooter === "function";
   if (inventoryFooterAvailable) app.slots.experimental_threadTimelineFooter({ id: "bot-active-work", title: "Bot active work", component: BotWorkFooter });
-  app.slots.navPanel({ experimental_showCloseButton: false, id: "conversation", title: "New conversation", path: "conversation", icon: "MessagesSquare", component: ConversationPanel });
-  app.slots.navPanel({ experimental_showCloseButton: false, id: "coordinator", title: "Bot coordinator", path: "coordinator", icon: "MessagesSquare", component: CoordinatorPanel });
+  app.slots.navPanel({
+    experimental_showCloseButton: false, id: "conversation", title: "New conversation", path: "conversation", icon: "MessagesSquare", component: ConversationPanel,
+    fixedTabs: [{ panelId: "conversation", id: BOT_PANEL_TAB_ID, title: "Bot", icon: "Bot", component: ConversationBotTab, layout: "flush" }],
+  });
+  app.slots.navPanel({
+    experimental_showCloseButton: false, id: "coordinator", title: "Bot coordinator", path: "coordinator", icon: "MessagesSquare", component: CoordinatorPanel,
+    fixedTabs: [{ panelId: "coordinator", id: BOT_PANEL_TAB_ID, title: "Bot", icon: "Bot", component: CoordinatorBotTab, layout: "flush" }],
+  });
+  app.slots.threadPanelAction({ id: BOT_PANEL_ACTION_ID, title: "Bot", icon: "Bot", component: BotThreadPanel, layout: "flush" });
+  if (typeof app.slots.experimental_threadHeaderAction === "function") app.slots.experimental_threadHeaderAction({ id: "bot-settings", title: "Bot settings", component: BotHeaderAction });
   app.slots.experimental_threadList({
     id: "bot-projects",
     title: "Bots Sidebar",

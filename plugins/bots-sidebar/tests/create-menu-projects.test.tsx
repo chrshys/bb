@@ -9,9 +9,8 @@ import { bot, personalProjectId } from "./fixtures";
 
 const app = await loadPluginApp(() => import("../app"));
 afterEach(cleanup);
-const builder: BotMetadata = { ...bot, id: "builder", name: "Builder", mainThreadId: null, linkedProjectIds: [] };
-async function mount({ projectFailures = 0, botFailures = 0, offline = false, existing = [] as BotMetadata[] } = {}) {
-  const bots: BotMetadata[] = [...existing];
+async function mount({ offline = false } = {}) {
+  const bots: BotMetadata[] = [];
   const projects = [{ id: "existing", name: "Existing work" }];
   const sections: { id: string; name: string; order: number }[] = [];
   const onNavigate = vi.fn();
@@ -19,10 +18,9 @@ async function mount({ projectFailures = 0, botFailures = 0, offline = false, ex
     sidebarThreads: { projects: [], threads: [] }, rpc: {
       bots_list: () => ({ bots, projects, sections, hosts: [{ id: "host", name: "Local", connected: !offline }, { id: "remote", name: "Remote", connected: !offline }], personalProjectId, warnings: [], threadBindings: [], projectOwners: [] }),
       section_create: (raw) => { const { name } = rpcContract.section_create.input.parse(raw); const section = { id: "section", name, order: 0 }; sections.push(section); return section; },
-      project_create: (raw) => { const input = rpcContract.project_create.input.parse(raw); if (projectFailures-- > 0) throw new Error("Temporary project failure"); const project = { id: "new-project", name: input.name }; if (!projects.some(entry => entry.id === project.id)) projects.push(project); return project; },
+      project_create: (raw) => { const input = rpcContract.project_create.input.parse(raw); const project = { id: "new-project", name: input.name }; if (!projects.some(entry => entry.id === project.id)) projects.push(project); return project; },
       project_browse: (raw) => { const input = rpcContract.project_browse.input.parse(raw); return { directory: input.path ?? `/home/${input.hostId}`, parent: "/", entries: [{ name: "work", path: "/work" }], truncated: false }; },
       bot_create: (raw) => { const input = rpcContract.bot_create.input.parse(raw); const value = { ...bot, id: "created", name: input.name, role: input.role, soul: input.soul, hostId: input.hostId, mainThreadId: null, linkedProjectIds: input.linkedProjectIds }; bots.push(value); return value; },
-      bot_update: (raw) => { const input = rpcContract.bot_update.input.parse(raw); if (botFailures-- > 0) throw new Error("Ownership changed; review your draft"); bots[0] = { ...bots[0]!, name: input.name, soul: input.soul, linkedProjectIds: input.linkedProjectIds }; return bots[0]; },
       bot_prepare: () => bots[0],
     },
   });
@@ -33,18 +31,6 @@ type Slot = Awaited<ReturnType<typeof mount>>["slot"];
 async function choose(slot: Slot, kind: "Bot" | "Section" | "Project") {
   fireEvent.keyDown(slot.getByRole("button", { name: "Create…" }), { key: "ArrowDown" });
   fireEvent.click(await slot.findByRole("menuitem", { name: kind }));
-}
-async function editBuilder(slot: Slot) {
-  fireEvent.contextMenu(slot.getByText("Builder"));
-  fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  const dialog = await slot.findByRole("dialog", { name: "Edit bot" });
-  fireEvent.click(within(dialog).getByRole("tab", { name: /^Projects/ }));
-  return dialog;
-}
-async function botProject(slot: Slot) {
-  const dialog = await editBuilder(slot);
-  fireEvent.click(within(dialog).getByRole("button", { name: "New project…" }));
-  return dialog;
 }
 function fillProject(dialog: HTMLElement) {
   fireEvent.change(within(dialog).getByRole("textbox", { name: "Project name" }), { target: { value: "Client app" } });
@@ -89,69 +75,10 @@ it("creates a standalone work project on the selected host without making a bot"
   expect(slot.inspection.navigateCalls).toContainEqual({ method: "toProject", projectId: "new-project" });
 });
 
-it("only lists linked projects and offers a searchable explicit existing-project picker", async () => {
-  const { slot } = await mount({ existing: [builder] }); const dialog = await editBuilder(slot);
-  expect(within(dialog).getByText("No projects linked")).toBeTruthy(); expect(within(dialog).queryByText("Existing work")).toBeNull();
-  fireEvent.click(within(dialog).getByRole("button", { name: "Add existing…" }));
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "Search projects" }), { target: { value: "missing" } });
-  expect(within(dialog).getByText("No matching projects")).toBeTruthy();
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "Search projects" }), { target: { value: "work" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Link Existing work" }));
-  expect((within(dialog).getByRole("combobox", { name: "Existing work role" }) as HTMLSelectElement).value).toBe("member");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Unlink Existing work" }));
-  expect(within(dialog).getByText("No projects linked")).toBeTruthy();
-  expect(slot.inspection.rpcCalls.some(call => call.method === "bot_update" || call.method === "project_create")).toBe(false);
-});
 
-it("retains the inline new-project draft across tabs and links it as Owner only on bot Save", async () => {
-  const { slot } = await mount({ existing: [builder] }); const dialog = await botProject(slot); fillProject(dialog);
-  expect((within(dialog).getByRole("button", { name: "Save bot" }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Instructions" }));
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "SOUL.md" }), { target: { value: "Keep my bot draft" } });
-  fireEvent.click(within(dialog).getByRole("tab", { name: /^Projects/ }));
-  expect((within(dialog).getByRole("textbox", { name: "Project name" }) as HTMLInputElement).value).toBe("Client app");
-  expect((within(dialog).getByRole("textbox", { name: "Project folder" }) as HTMLInputElement).value).toBe("/work/client-app");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
-  await within(dialog).findByRole("combobox", { name: "Client app role" });
-  expect((within(dialog).getByRole("combobox", { name: "Client app role" }) as HTMLSelectElement).value).toBe("owner");
-  expect(slot.inspection.rpcCalls.some(call => call.method === "bot_update")).toBe(false);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-  await waitFor(() => expect(slot.inspection.rpcCalls.some(call => call.method === "bot_update")).toBe(true));
-  expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_update", input: expect.objectContaining({ botId: "builder", name: "Builder", soul: "Keep my bot draft", linkedProjectIds: ["new-project"], ownedProjectIds: ["new-project"] }) });
-  expect(slot.inspection.rpcCalls.filter(call => call.method === "project_create")).toHaveLength(1);
-});
 
-it("does not create a project from an unsubmitted project draft", async () => {
-  const { slot } = await mount({ existing: [builder] }); const dialog = await botProject(slot); fillProject(dialog);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel project" }));
-  expect((within(dialog).getByRole("button", { name: "Save bot" }) as HTMLButtonElement).disabled).toBe(false);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-  expect(slot.queryByRole("dialog")).toBeNull();
-  expect(slot.inspection.rpcCalls.some(call => call.method === "project_create" || call.method === "bot_update")).toBe(false);
-});
 
-it("keeps an explicitly created project if the bot edit is cancelled, without linking it", async () => {
-  const { slot, projects, bots } = await mount({ existing: [builder] }); const dialog = await botProject(slot); fillProject(dialog);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
-  await within(dialog).findByText(/cancelling the bot won’t delete/);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-  expect(projects.some(project => project.id === "new-project")).toBe(true); expect(bots[0]!.linkedProjectIds).toEqual([]);
-  expect(slot.inspection.rpcCalls.some(call => call.method === "bot_update" || call.method === "project_delete" || call.method === "state_apply")).toBe(false);
-});
 
-it("reuses a request ID on retry and retains a created project through a failed bot save", async () => {
-  const { slot } = await mount({ projectFailures: 1, botFailures: 1, existing: [builder] }); const dialog = await botProject(slot); fillProject(dialog);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
-  await within(dialog).findByRole("alert");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Create project" }));
-  await within(dialog).findByRole("combobox", { name: "Client app role" });
-  const calls = slot.inspection.rpcCalls.filter(call => call.method === "project_create"); expect(calls).toHaveLength(2); expect(calls[0]!.input).toEqual(calls[1]!.input);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" })); await within(dialog).findByText("Ownership changed; review your draft");
-  expect((within(dialog).getByRole("combobox", { name: "Client app role" }) as HTMLSelectElement).value).toBe("owner");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-  await waitFor(() => expect(slot.inspection.rpcCalls.filter(call => call.method === "bot_update")).toHaveLength(2));
-  expect(slot.inspection.rpcCalls.filter(call => call.method === "project_create")).toHaveLength(2);
-});
 
 it("browses folders on the chosen machine without creating anything", async () => {
   const { slot } = await mount(); await choose(slot, "Project"); const dialog = await slot.findByRole("dialog", { name: "Create project" });

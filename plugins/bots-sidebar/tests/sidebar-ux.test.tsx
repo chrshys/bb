@@ -26,7 +26,6 @@ async function mount() {
     rpc: {
       bots_list: () => ({ bots, sections, personalProjectId, hosts: [{ id: "host", name: "Local", connected: true }], projects: [{ id: "project", name: "Shared project" }], warnings: [], threadBindings: bots.map((bot) => ({ botId: bot.id, threadId: bot.mainThreadId })) }),
       bots_reorder: () => ({ ok: true }),
-      bot_update: () => bots[0],
       bot_prepare: () => bots[0],
       section_update: () => sections[0],
       section_create: () => { const section = { id: "new", name: "New section", order: 2 }; sections.push(section); return section; },
@@ -52,47 +51,7 @@ it("keeps one open-main button and one inline new-chat button; settings remain i
   expect(slot.queryByRole("menuitem", { name: "Move up" })).toBeNull();
 });
 
-it("keeps Enter from saving the bot editor and lets SOUL use newlines", async () => {
-  const slot = await mount();
-  fireEvent.contextMenu(slot.getByText("Bot one"));
-  fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  const dialog = await slot.findByRole("dialog", { name: "Edit bot" });
-  const name = within(dialog).getByRole("textbox", { name: "Bot name" });
-  fireEvent.change(name, { target: { value: "Updated bot" } });
-  expect(fireEvent.keyDown(name, { key: "Enter" })).toBe(false);
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Instructions" }));
-  const soul = within(dialog).getByRole("textbox", { name: "SOUL.md" });
-  expect(fireEvent.keyDown(soul, { key: "Enter" })).toBe(true);
-  fireEvent.change(soul, { target: { value: "First line\nSecond line" } });
-  fireEvent.submit(dialog.querySelector("form")!);
-  expect(slot.inspection.rpcCalls.some((call) => call.method === "bot_update")).toBe(false);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-  await waitFor(() => expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_update", input: expect.objectContaining({ botId: "one", name: "Updated bot", soul: "First line\nSecond line", expectedUpdatedAt: bot.updatedAt, expectedStateHashes: bot.stateHashes }) }));
-});
 
-it("keeps the editor compact with one panel, retained drafts, and an outside-panel footer", async () => {
-  const slot = await mount();
-  fireEvent.contextMenu(slot.getByText("Bot one"));
-  fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  const dialog = await slot.findByRole("dialog", { name: "Edit bot" });
-  expect(within(dialog).getAllByRole("tab")).toHaveLength(5);
-  expect(within(dialog).getAllByRole("tabpanel")).toHaveLength(1);
-  expect(dialog.querySelector("textarea")).toBeNull();
-  expect(within(dialog).getByRole("img", { name: "Bot preview" }).getAttribute("width")).toBe("48");
-  expect(within(dialog).getByRole("button", { name: "Save bot" }).closest('[role="tabpanel"]')).toBeNull();
-  const setup = within(dialog).getByRole("tab", { name: "Setup" });
-  setup.focus(); fireEvent.keyDown(setup, { key: "ArrowRight" });
-  expect(within(dialog).getByRole("tab", { name: "Instructions" }).getAttribute("aria-selected")).toBe("true");
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "SOUL.md" }), { target: { value: "Soul draft" } });
-  expect(dialog.querySelectorAll("textarea")).toHaveLength(1);
-  fireEvent.click(within(dialog).getByRole("button", { name: "Customize avatar" }));
-  expect(within(dialog).getByRole("tab", { name: "Appearance" }).getAttribute("aria-selected")).toBe("true");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Happy" }));
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Instructions" }));
-  expect((within(dialog).getByRole("textbox", { name: "SOUL.md" }) as HTMLTextAreaElement).value).toBe("Soul draft");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Save bot" }));
-  await waitFor(() => expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_update", input: expect.objectContaining({ soul: "Soul draft", avatar: expect.objectContaining({ expression: "happy" }) }) }));
-});
 
 it.each(["reorder", "section"])("restores drag-to-%s without arrow controls", async (kind) => {
   const slot = await mount();
@@ -121,34 +80,7 @@ it("renames sections through the section context menu", async () => {
   await waitFor(() => expect(slot.inspection.rpcCalls).toContainEqual({ method: "section_update", input: { sectionId: "first", name: "Projects" } }));
 });
 
-it("can create a section inside Edit without saving or closing the bot", async () => {
-  const slot = await mount();
-  fireEvent.contextMenu(slot.getByText("Bot one"));
-  fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  const dialog = await slot.findByRole("dialog", { name: "Edit bot" });
-  expect(within(dialog).queryByRole("button", { name: "New section…" })).toBeNull();
-  fireEvent.change(within(dialog).getByRole("combobox", { name: "Section" }), { target: { value: "__create_section__" } });
-  expect((within(dialog).getByRole("button", { name: "Save bot" }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "New section name" }), { target: { value: "New section" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Add section" }));
-  await waitFor(() => expect((within(dialog).getByRole("combobox", { name: "Section" }) as HTMLSelectElement).value).toBe("new"));
-  expect(slot.inspection.rpcCalls).toContainEqual({ method: "section_create", input: { name: "New section" } });
-  expect(slot.inspection.rpcCalls.some((call) => call.method === "bot_update")).toBe(false);
-});
 
-it("cancels Create New without changing the selected section", async () => {
-  const slot = await mount();
-  fireEvent.contextMenu(slot.getByText("Bot one"));
-  fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  const dialog = await slot.findByRole("dialog", { name: "Edit bot" });
-  const select = within(dialog).getByRole("combobox", { name: "Section" }) as HTMLSelectElement;
-  expect(select.value).toBe("first");
-  fireEvent.change(select, { target: { value: "__create_section__" } });
-  fireEvent.change(within(dialog).getByRole("textbox", { name: "New section name" }), { target: { value: "Not saved" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel section creation" }));
-  expect(select.value).toBe("first");
-  expect(slot.inspection.rpcCalls.some((call) => call.method === "section_create")).toBe(false);
-});
 
 it("offers an empty Main drop target only during a drag", async () => {
   const slot = await mount();

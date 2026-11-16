@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AvatarAppearance } from "../components/avatar-appearance";
@@ -13,10 +13,11 @@ import {
   shapePath,
   type BotAvatar,
 } from "../lib/appearance";
+import { mountBotPanel, panelBackend, resetPanelState, writes } from "./bot-panel-fixture";
 import { bot, personalProjectId, thread, project } from "./fixtures";
 
 const app = await loadPluginApp(() => import("../app"));
-afterEach(cleanup);
+afterEach(() => { cleanup(); resetPanelState(); });
 
 const base: BotAvatar = { color: "#168b75", shape: "round", expression: "curious", motion: "still" };
 
@@ -43,7 +44,6 @@ async function mountSidebar() {
         const value = input as { name: string; avatar: BotAvatar };
         return { ...bot, id: "created", name: value.name, avatar: value.avatar, mainThreadId: null };
       },
-      bot_update: () => bot,
       bot_prepare: () => bot,
     },
   });
@@ -111,24 +111,27 @@ it("randomizes a full appearance without touching category chrome", () => {
   expect(AVATAR_MOTIONS.map((motion) => motion.id)).toContain(next.motion);
 });
 
-it("does not reroll an existing bot when opening edit or switching tabs", async () => {
-  const slot = await mountSidebar();
-  fireEvent.contextMenu(slot.getByText("Test bot"));
-  fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  const dialog = await slot.findByRole("dialog", { name: "Edit bot" });
-  const preview = () => within(dialog).getByRole("img", { name: "Bot preview" });
-  expect(preview().getAttribute("data-color")).toBe(bot.avatar.color);
-  expect(preview().getAttribute("data-shape")).toBe(bot.avatar.shape);
-  expect(preview().getAttribute("data-expression")).toBe(bot.avatar.expression);
-  expect(preview().getAttribute("data-motion")).toBe(bot.avatar.motion);
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Appearance" }));
-  expect(preview().getAttribute("data-expression")).toBe("curious");
-  fireEvent.click(within(dialog).getByRole("button", { name: "Happy" }));
-  expect(preview().getAttribute("data-expression")).toBe("happy");
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Setup" }));
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Appearance" }));
-  expect(preview().getAttribute("data-expression")).toBe("happy");
-  expect(preview().getAttribute("data-shape")).toBe(bot.avatar.shape);
+it("does not reroll an existing bot when its panel opens, switches category, or remounts", async () => {
+  const saved = { ...base, color: AVATAR_COLORS[0] };
+  const backend = panelBackend([{ avatar: saved }]);
+  const slot = await mountBotPanel(backend);
+  const preview = (view: typeof slot) => view.getByRole("img", { name: "Bot avatar" });
+  expect(preview(slot).getAttribute("data-color")).toBe(saved.color);
+  expect(preview(slot).getAttribute("data-shape")).toBe(saved.shape);
+  expect(preview(slot).getAttribute("data-expression")).toBe(saved.expression);
+  expect(preview(slot).getAttribute("data-motion")).toBe(saved.motion);
+  fireEvent.click(slot.getByRole("button", { name: "Happy" }));
+  expect(preview(slot).getAttribute("data-expression")).toBe("happy");
+  fireEvent.click(slot.getByRole("button", { name: "Shape" }));
+  fireEvent.click(slot.getByRole("button", { name: "Expression" }));
+  expect(preview(slot).getAttribute("data-expression")).toBe("happy");
+  expect(preview(slot).getAttribute("data-shape")).toBe(saved.shape);
+  await waitFor(() => expect(backend.bot().avatar).toEqual({ ...saved, expression: "happy" }));
+  slot.unmount();
+  const again = await mountBotPanel(backend);
+  expect(preview(again).getAttribute("data-expression")).toBe("happy");
+  expect(preview(again).getAttribute("data-color")).toBe(saved.color);
+  expect(writes(again)).toEqual([]);
 });
 
 it("rolls a draft once and keeps the unpicked parts while choosing a shape and color", async () => {
