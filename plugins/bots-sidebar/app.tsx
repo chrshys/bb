@@ -59,7 +59,7 @@ import { ProjectCreateDialog } from "./components/project-create-dialog";
 import type { ProjectCreationActions } from "./components/project-create-form";
 import { usePortalScopeProps } from "./lib/portal-scope";
 import { conversationLaunchProjectId, defaultConversationProjectId, projectLaunchEnvironment, worktreeLaunchEnvironment, worktreeLaunchHostId } from "./lib/worktree-launch";
-import { randomAvatar } from "./lib/appearance";
+import { BotCreateDialog } from "./components/bot-create-dialog";
 import { AvatarAppearance } from "./components/avatar-appearance";
 import { BotIcon } from "./components/bot-icon";
 import { SidebarBotIcon } from "./components/sidebar-bot-icon";
@@ -73,9 +73,7 @@ type ProjectOption = { id: string; name: string };
 type BotEditFields = Pick<BotMetadata, "hostId" | "name" | "role" | "avatar" | "sectionId" | "linkedProjectIds" | "defaultProjectId" | "soul" | "settings"> & { ownedProjectIds: string[]; memory?: string };
 type ProjectRole = "none" | "member" | "owner";
 type EditorTab = "setup" | "instructions" | "state" | "projects" | "appearance";
-type EditorTarget =
-  | { kind: "create" }
-  | { kind: "edit"; metadata: BotMetadata; projectOwners: ProjectOwner[]; tab?: EditorTab };
+type EditorTarget = { metadata: BotMetadata; projectOwners: ProjectOwner[]; tab: EditorTab };
 
 function ownedProjectIdsFor(botId: string, owners: ProjectOwner[]): string[] {
   return owners.filter((owner) => owner.botId === botId).map((owner) => owner.projectId);
@@ -155,41 +153,36 @@ function useBotData() {
   return { rpc, bots, hosts, sections, projects, threadBindings, warnings, personalProjectId, projectOwners, loaded, error, refresh };
 }
 
-function BotEditor({ target, hosts, sections, projects, bots, projectOwners, onClose, onCreate, onUpdate, onCreateSection, onCreateProject, onBrowseProjects }: ProjectCreationActions & {
-  target: EditorTarget; hosts: HostOption[]; sections: BotSection[]; projects: ProjectOption[]; bots: BotMetadata[]; projectOwners: ProjectOwner[]; onClose: () => void;
+function BotEditor({ target, hosts, sections, projects, bots, onClose, onUpdate, onCreateSection, onCreateProject, onBrowseProjects }: ProjectCreationActions & {
+  target: EditorTarget; hosts: HostOption[]; sections: BotSection[]; projects: ProjectOption[]; bots: BotMetadata[]; onClose: () => void;
   onCreateSection: (name: string) => Promise<BotSection>;
-  onCreate: (value: BotEditFields & { hostId: string }) => Promise<void>;
   onUpdate: (value: BotEditFields) => Promise<void>;
 }) {
-  const editing = target.kind === "edit";
-  const botId = editing ? target.metadata.id : null;
-  const [name, setName] = useState(editing ? target.metadata.name : "");
-  const [role, setRole] = useState(editing ? target.metadata.role : "Assistant");
-  const [hostId, setHostId] = useState(editing ? target.metadata.hostId : hosts.find((host) => host.connected)?.id ?? hosts[0]?.id ?? "");
-  const [memory, setMemory] = useState(editing ? target.metadata.memory : "");
-  const [settingsText, setSettingsText] = useState(() => `${JSON.stringify(editing ? target.metadata.settings : {}, null, 2)}\n`);
+  const { metadata } = target;
+  const botId = metadata.id;
+  const [name, setName] = useState(metadata.name);
+  const [role, setRole] = useState(metadata.role);
+  const [hostId, setHostId] = useState(metadata.hostId);
+  const [memory, setMemory] = useState(metadata.memory);
+  const [settingsText, setSettingsText] = useState(() => `${JSON.stringify(metadata.settings, null, 2)}\n`);
   const [stateFile, setStateFile] = useState<"MEMORY.md" | "settings.json">("MEMORY.md");
-  const initialOwners = editing ? target.projectOwners : projectOwners;
-  const [owners] = useState(initialOwners);
+  const [owners] = useState(target.projectOwners);
   const [botNames] = useState(() => new Map(bots.map((bot) => [bot.id, bot.name])));
-  const [ownedProjectIds, setOwnedProjectIds] = useState<string[]>(() => botId ? ownedProjectIdsFor(botId, initialOwners) : []);
-  const [linkedProjectIds, setLinkedProjectIds] = useState<string[]>(() => {
-    const linked = editing ? target.metadata.linkedProjectIds : [];
-    return [...new Set([...linked, ...ownedProjectIdsFor(botId ?? "", initialOwners)])];
-  });
-  const [defaultProjectId, setDefaultProjectId] = useState<string | null>(editing ? target.metadata.defaultProjectId === undefined ? target.metadata.linkedProjectIds[0] ?? null : target.metadata.defaultProjectId : null);
+  const [ownedProjectIds, setOwnedProjectIds] = useState<string[]>(() => ownedProjectIdsFor(botId, target.projectOwners));
+  const [linkedProjectIds, setLinkedProjectIds] = useState<string[]>(() => [...new Set([...metadata.linkedProjectIds, ...ownedProjectIdsFor(botId, target.projectOwners)])]);
+  const [defaultProjectId, setDefaultProjectId] = useState<string | null>(metadata.defaultProjectId === undefined ? metadata.linkedProjectIds[0] ?? null : metadata.defaultProjectId);
   const [projectPending, setProjectPending] = useState(false);
   const [projectDraft, setProjectDraft] = useState(false);
-  const [sectionId, setSectionId] = useState<string | null>(editing ? target.metadata.sectionId : null);
-  const [soul, setSoul] = useState(editing ? target.metadata.soul : "");
+  const [sectionId, setSectionId] = useState<string | null>(metadata.sectionId);
+  const [soul, setSoul] = useState(metadata.soul);
   const [sectionDraft, setSectionDraft] = useState<string | null>(null);
   const [createdSections, setCreatedSections] = useState<BotSection[]>([]);
   const sectionOptions = [...sections, ...createdSections.filter((created) => !sections.some((section) => section.id === created.id))];
-  const [avatar, setAvatar] = useState<BotAvatar>(() => editing ? target.metadata.avatar : randomAvatar());
+  const [avatar, setAvatar] = useState<BotAvatar>(metadata.avatar);
   const [pending, setPending] = useState(false);
   const saving = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<EditorTab>(editing ? target.tab ?? "setup" : "setup");
+  const [tab, setTab] = useState<EditorTab>(target.tab);
   const tabsId = useId();
   const tabs = [{ id: "setup", label: "Setup" }, { id: "instructions", label: "Instructions" }, { id: "state", label: "State" }, { id: "projects", label: `Projects${linkedProjectIds.length ? ` · ${linkedProjectIds.length}` : ""}` }, { id: "appearance", label: "Appearance" }] as const;
   function setProjectRole(projectId: string, next: ProjectRole) {
@@ -212,7 +205,7 @@ function BotEditor({ target, hosts, sections, projects, bots, projectOwners, onC
   }
   function closeEditor() {
     if (saving.current || pending || projectPending) return;
-    const stateDirty = editing && (memory !== target.metadata.memory || settingsText !== `${JSON.stringify(target.metadata.settings, null, 2)}\n`);
+    const stateDirty = memory !== metadata.memory || settingsText !== `${JSON.stringify(metadata.settings, null, 2)}\n`;
     if (!stateDirty || window.confirm("Discard unsaved bot state changes?")) onClose();
   }
   async function submit() {
@@ -224,11 +217,10 @@ function BotEditor({ target, hosts, sections, projects, bots, projectOwners, onC
       catch { setTab("state"); setStateFile("settings.json"); throw new Error("settings.json must contain valid JSON. Your draft is kept."); }
       if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") { setTab("state"); setStateFile("settings.json"); throw new Error("settings.json must contain a JSON object. Your draft is kept."); }
       if (`${JSON.stringify(parsed, null, 2)}\n`.length > 16384) { setTab("state"); setStateFile("settings.json"); throw new Error("settings.json is too large (maximum 16384 characters). Your draft is kept."); }
-      const memoryChanged = !editing || memory !== target.metadata.memory;
+      const memoryChanged = memory !== metadata.memory;
       if (memoryChanged && memory.length > MEMORY_MAX_CHARS) { setTab("state"); setStateFile("MEMORY.md"); throw new Error("MEMORY.md must be at most 3000 characters. Shorten your draft before saving; it has been kept."); }
       const fields = { hostId, name: name.trim(), role: role.trim(), avatar, sectionId, soul, ...(memoryChanged ? { memory } : {}), settings: parsed as BotMetadata["settings"], linkedProjectIds, ownedProjectIds, defaultProjectId };
-      if (target.kind === "edit") await onUpdate(fields);
-      else await onCreate({ ...fields, hostId });
+      await onUpdate(fields);
       onClose();
     } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { saving.current = false; setPending(false); }
   }
@@ -236,7 +228,7 @@ function BotEditor({ target, hosts, sections, projects, bots, projectOwners, onC
     <DialogContent className="bot-editor-dialog flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => event.preventDefault()} onKeyDown={(event) => { if (event.key === "Enter" && event.target instanceof HTMLInputElement) { event.preventDefault(); event.stopPropagation(); } }}>
         <DialogHeader className="shrink-0 px-4 pt-4 pr-10 pb-3">
-          <DialogTitle>{editing ? "Edit bot" : "Create bot"}</DialogTitle>
+          <DialogTitle>Edit bot</DialogTitle>
           <DialogDescription>An identity, private state, and optional linked projects.</DialogDescription>
         </DialogHeader>
         <div className="flex shrink-0 items-end gap-3 px-4 pb-3">
@@ -292,7 +284,7 @@ function BotEditor({ target, hosts, sections, projects, bots, projectOwners, onC
           {tab === "appearance" ? <AvatarAppearance avatar={avatar} onChange={setAvatar} /> : null}
         </div>
         {error ? <p role="alert" className="max-h-20 shrink-0 overflow-y-auto px-4 pb-2 text-xs text-destructive">{error}</p> : null}
-        <DialogFooter className="shrink-0 border-t border-border px-4 py-3"><Button type="button" variant="ghost" disabled={pending || projectPending} onClick={closeEditor}>Cancel</Button><Button type="button" onClick={() => void submit()} disabled={pending || projectPending || projectDraft || sectionDraft !== null || !name.trim() || (!editing && !hostId)}>{pending ? "Saving..." : editing ? "Save bot" : "Create bot"}</Button></DialogFooter>
+        <DialogFooter className="shrink-0 border-t border-border px-4 py-3"><Button type="button" variant="ghost" disabled={pending || projectPending} onClick={closeEditor}>Cancel</Button><Button type="button" onClick={() => void submit()} disabled={pending || projectPending || projectDraft || sectionDraft !== null || !name.trim()}>{pending ? "Saving..." : "Save bot"}</Button></DialogFooter>
       </form>
     </DialogContent>
   </Dialog>;
@@ -608,6 +600,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
   const [showOtherChats, setShowOtherChats] = useState(false);
   const chatsOtherId = useId();
   const [editor, setEditor] = useState<EditorTarget | null>(null);
+  const [creatingBot, setCreatingBot] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
@@ -779,7 +772,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
     // Roles live outside BotMetadata. Capture them from a fresh list before
     // mounting the draft, otherwise fresh metadata + stale roles could release
     // an ownership claim the user never saw.
-    setEditor({ kind: "edit", metadata: current.updatedAt >= prepared.updatedAt ? current : prepared, projectOwners: snapshot.projectOwners ?? [], tab });
+    setEditor({ metadata: current.updatedAt >= prepared.updatedAt ? current : prepared, projectOwners: snapshot.projectOwners ?? [], tab });
   }
 
   function openLinked(bot: BotMetadata, kind: "project" | "worktree", thread?: PluginSidebarThread) {
@@ -824,7 +817,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
         <div className="sidebar-section-heading flex items-center justify-between">
           <span className="sidebar-section-title font-medium text-muted-foreground">Bots</span>
           <DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-state-hover" aria-label="Create…" title="Create…"><TinyIcon name="plus" /></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content {...portalScope} align="end" sideOffset={4} aria-label="Create" className="z-50 min-w-36 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md">
-            <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={() => { setAddingSection(false); setEditor({ kind: "create" }); }}>Bot</DropdownMenu.Item>
+            <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={() => { setAddingSection(false); setCreatingBot(true); }}>Bot</DropdownMenu.Item>
             <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={() => setAddingSection(true)}>Section</DropdownMenu.Item>
             <DropdownMenu.Item className={MENU_ITEM_CLASS} onSelect={() => { setAddingSection(false); setCreatingProject(true); }}>Project</DropdownMenu.Item>
           </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
@@ -867,7 +860,7 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
           </section>)}
         </div>
         {loaded && bots.length === 0 ? (
-          <button type="button" className="mt-2 flex w-full flex-col items-center rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground hover:bg-state-hover hover:text-foreground" onClick={() => setEditor({ kind: "create" })}>
+          <button type="button" className="mt-2 flex w-full flex-col items-center rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground hover:bg-state-hover hover:text-foreground" onClick={() => setCreatingBot(true)}>
             <span className="mb-2 flex size-9 items-center justify-center rounded-lg bg-muted"><TinyIcon name="folder" /></span>
             Create your first bot
           </button>
@@ -894,28 +887,30 @@ function BotsSidebar({ activeThreadId, onNavigate, inventoryFooterAvailable }: P
         await assignConversation(assigning, botId);
       }} /> : null}
       {creatingProject ? <ProjectCreateDialog hosts={hosts} {...projectActions} onClose={() => setCreatingProject(false)} onCreated={(project) => { setCreatingProject(false); navigate.toProject(project.id); onNavigate(); }} /> : null}
+      {creatingBot ? (
+        <BotCreateDialog
+          hosts={hosts}
+          onClose={() => setCreatingBot(false)}
+          onCreate={async (value) => {
+            const created = await rpc.call("bot_create", value);
+            refresh();
+            setCreatingBot(false);
+            run(() => openBotConversation(created));
+          }}
+        />
+      ) : null}
       {editor ? (
         <BotEditor
           {...projectActions}
-          key={editor.kind === "edit" ? editor.metadata.id : "create"}
+          key={editor.metadata.id}
           target={editor}
           hosts={hosts}
           sections={sections}
           projects={projects}
           bots={bots}
-          projectOwners={projectOwners}
           onCreateSection={async (name) => { const section = await rpc.call("section_create", { name }); refresh(); return section; }}
           onClose={() => setEditor(null)}
-          onCreate={async (value) => {
-            const created = await rpc.call("bot_create", value);
-            refresh();
-            // Creation is already saved. Close the editor before preparing the
-            // first chat so a preparation error cannot create a duplicate bot.
-            setEditor(null);
-            run(() => openBotConversation(created));
-          }}
           onUpdate={async (value) => {
-            if (editor.kind !== "edit") return;
             await rpc.call("bot_update", { ...value, botId: editor.metadata.id, expectedUpdatedAt: editor.metadata.updatedAt, expectedStateHashes: editor.metadata.stateHashes });
             refresh();
           }}

@@ -131,11 +131,11 @@ it("does not reroll an existing bot when opening edit or switching tabs", async 
   expect(preview().getAttribute("data-shape")).toBe(bot.avatar.shape);
 });
 
-it("rolls a draft once and keeps it while switching editor tabs", async () => {
+it("rolls a draft once and keeps the unpicked parts while choosing a shape and color", async () => {
   const slot = await mountSidebar();
   fireEvent.keyDown(slot.getByRole("button", { name: "Create…" }), { key: "ArrowDown" });
   fireEvent.click(await slot.findByRole("menuitem", { name: "Bot" }));
-  const dialog = await slot.findByRole("dialog", { name: "Create bot" });
+  const dialog = await slot.findByRole("dialog", { name: "Create new bot" });
   const preview = () => within(dialog).getByRole("img", { name: "Bot preview" });
   const first = {
     shape: preview().getAttribute("data-shape"),
@@ -148,11 +148,13 @@ it("rolls a draft once and keeps it while switching editor tabs", async () => {
   expect(AVATAR_MOTIONS.map((motion) => motion.id)).toContain(first.motion);
   expect(AVATAR_COLORS).toContain(first.fill);
   expect(preview().querySelector("path[mask]")?.getAttribute("fill")).toBe(first.fill);
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Appearance" }));
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Setup" }));
-  fireEvent.click(within(dialog).getByRole("tab", { name: "Instructions" }));
+  fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Draft" } });
   expect(preview().getAttribute("data-shape")).toBe(first.shape);
+  expect(preview().getAttribute("data-color")).toBe(first.fill);
+  fireEvent.click(within(dialog).getByRole("button", { name: "Droplet" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "#b63186" }));
+  expect(preview().getAttribute("data-shape")).toBe("droplet");
+  expect(preview().getAttribute("data-color")).toBe("#b63186");
   expect(preview().getAttribute("data-expression")).toBe(first.expression);
   expect(preview().getAttribute("data-motion")).toBe(first.motion);
-  expect(preview().getAttribute("data-color")).toBe(first.fill);
 });

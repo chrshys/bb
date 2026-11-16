@@ -5,7 +5,7 @@ import { Input } from "./ui/input";
 import { ProjectCreateForm, type ProjectChoice, type ProjectCreationActions, type ProjectHost } from "./project-create-form";
 
 export function BotProjectsPanel({ projects, owners, botNames, botId, botName, hostId, hosts, linkedProjectIds, ownedProjectIds, onRoleChange, onBusyChange, onDraftChange, onCreateProject, onBrowseProjects }: ProjectCreationActions & {
-  projects: ProjectChoice[]; owners: ProjectOwner[]; botNames: Map<string, string>; botId: string | null; botName: string; hostId: string; hosts: ProjectHost[];
+  projects: ProjectChoice[]; owners: ProjectOwner[]; botNames: Map<string, string>; botId: string; botName: string; hostId: string; hosts: ProjectHost[];
   linkedProjectIds: string[]; ownedProjectIds: string[]; onRoleChange: (projectId: string, role: "none" | "member" | "owner") => void;
   onBusyChange: (busy: boolean) => void; onDraftChange: (draft: boolean) => void;
 }) {

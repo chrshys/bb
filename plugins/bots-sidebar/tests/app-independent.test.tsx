@@ -226,42 +226,35 @@ describe("independent bot identities", () => {
     expect(slot.inspection.rpcCalls.some((call) => call.method === "project_update")).toBe(false);
   });
 
-  it("creates with private state and Main/Create New section choices, never a home or custom path control", async () => {
+  it("creates with private state and no section, home or custom path control", async () => {
     const { slot } = await mount({ bots: [], bindings: [] });
     await createFromMenu(slot, "Bot");
-    const dialog = await screen.findByRole("dialog", { name: "Create bot" });
-    const section = within(dialog).getByRole("combobox", { name: "Section" }) as HTMLSelectElement;
-    expect(section.value).toBe("");
-    expect(section.selectedOptions[0]?.textContent).toBe("Main");
-    expect(within(dialog).getByRole("option", { name: "Create New…" })).toBeTruthy();
-    expect(within(dialog).queryByRole("textbox", { name: "Home folder" })).toBeNull();
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Research Buddy" } });
-    expect(within(dialog).getByText(/State is stored privately in BB/)).toBeTruthy();
+    const dialog = await screen.findByRole("dialog", { name: "Create new bot" });
+    expect(within(dialog).queryByRole("combobox")).toBeNull();
+    expect(within(dialog).queryByRole("textbox", { name: /folder|path|directory/i })).toBeNull();
     expect(within(dialog).queryByRole("button", { name: /Use custom|Use automatic/ })).toBeNull();
     expect(dialog.textContent).not.toMatch(/~\/bots|Home folder|Working directory/);
-    for (const label of ["Instructions", /^Projects/, "Appearance", "Setup"]) {
-      fireEvent.click(within(dialog).getByRole("tab", { name: label }));
-      expect(within(dialog).queryByRole("textbox", { name: /folder|path|directory/i })).toBeNull();
-    }
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create bot" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Research Buddy" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
     await waitFor(() => expect(slot.inspection.rpcCalls.some((call) => call.method === "bot_create")).toBe(true));
-    expect(slot.inspection.rpcCalls.find((call) => call.method === "bot_create")?.input).not.toHaveProperty("homePath");
+    const input = slot.inspection.rpcCalls.find((call) => call.method === "bot_create")?.input;
+    expect(input).toMatchObject({ sectionId: null });
+    expect(input).not.toHaveProperty("homePath");
   });
 
-  it("creates a standalone bot with private state and uses the selected machine only for execution", async () => {
+  it("creates a standalone bot with private state and uses the default machine only for execution", async () => {
     const { slot } = await mount({ bots: [], bindings: [] });
     await createFromMenu(slot, "Bot");
-    const dialog = await screen.findByRole("dialog", { name: "Create bot" });
+    const dialog = await screen.findByRole("dialog", { name: "Create new bot" });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "New identity" } });
-    selectOption(within(dialog).getByRole("combobox", { name: "Machine" }), "Remote");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create bot" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
     await openConversationPanel(slot, "New conversation");
-    expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_create", input: expect.objectContaining({ name: "New identity", hostId: "remote", linkedProjectIds: [], ownedProjectIds: [], soul: "" }) });
+    expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_create", input: expect.objectContaining({ name: "New identity", hostId: "host", linkedProjectIds: [], ownedProjectIds: [], soul: "" }) });
     expect(slot.inspection.rpcCalls.find((call) => call.method === "bot_create")?.input).not.toHaveProperty("homePath");
     expect(screen.queryByRole("heading", { name: "New identity" })).toBeNull();
     expect(slot.inspection.rpcCalls).toContainEqual({ method: "bot_prepare", input: { botId: "created" } });
     expect(composer.props?.defaultProjectId).toBe(personalProjectId);
-    expect(composer.props?.defaultEnvironment).toEqual({ type: "host", hostId: "remote", workspace: { type: "personal" } });
+    expect(composer.props?.defaultEnvironment).toEqual({ type: "host", hostId: "host", workspace: { type: "personal" } });
     expect(slot.inspection.rpcCalls.every((call) => ["bots_list", "bot_create", "bot_prepare"].includes(call.method))).toBe(true);
     expect(slot.inspection.sidebarActionCalls).toEqual([]);
   });
@@ -269,9 +262,9 @@ describe("independent bot identities", () => {
   it("retries private state preparation after creation without creating another identity", async () => {
     const { slot } = await mount({ bots: [], bindings: [], prepareFailures: 1 });
     await createFromMenu(slot, "Bot");
-    const dialog = await screen.findByRole("dialog", { name: "Create bot" });
+    const dialog = await screen.findByRole("dialog", { name: "Create new bot" });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Bot name" }), { target: { value: "Retry bot" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create bot" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
     await screen.findByText("Private state temporarily unavailable");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("Retry bot")).toBeTruthy();
