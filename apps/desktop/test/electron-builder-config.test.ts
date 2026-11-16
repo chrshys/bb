@@ -618,6 +618,8 @@ describe("electron-builder signing config", () => {
 
     expect(config.mac.identity).toBe("-");
     expect(config.mac.notarize).toBe(false);
+    expect(config.mac.type).toBe("development");
+    expect(config.mac.hardenedRuntime).toBe(false);
   });
 
   it("rejects partial signing secret sets", async () => {

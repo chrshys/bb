@@ -166,11 +166,13 @@ function resolveElectronBuilderConfig(baseConfig, env, electronBuilderArgs) {
   const mac = {
     ...config.mac,
     icon: releaseConfig.macIconPath,
+    hardenedRuntime: signingPlan.mode === "disabled" ? false : config.mac.hardenedRuntime,
     notarize: signingPlan.notarizationEnabled,
   };
 
   if (signingPlan.mode === "disabled") {
     mac.identity = "-";
+    mac.type = "development";
   } else if (signingPlan.identityName) {
     mac.identity = signingPlan.identityName;
   } else {
