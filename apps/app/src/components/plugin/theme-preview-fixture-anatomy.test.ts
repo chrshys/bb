@@ -147,7 +147,7 @@ const VIEW_FIXTURE_ANCHORS: Record<string, readonly FixtureAnchor[]> = {
         "The held-open fixture keeps the real message-role tabs and popover surface.",
     },
     {
-      file: "apps/app/src/views/thread-detail/ThreadDetailView.tsx",
+      file: "apps/app/src/components/secondary-panel/thread-pinned-tabs.tsx",
       mustContain: [
         'label: "Info"',
         'label: "Diff"',
