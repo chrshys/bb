@@ -220,10 +220,16 @@ function resolveElectronBuilderConfig(baseConfig, env, electronBuilderArgs) {
   };
 }
 
-function createElectronBuilderEnv(signingPlan) {
+export function createElectronBuilderEnv(signingPlan, env = process.env) {
   const childEnv = {
-    ...process.env,
+    ...env,
   };
+
+  for (const key of [...requiredSigningEnvironmentKeys, "CSC_NAME"]) {
+    if (!envValueIsSet(childEnv[key])) {
+      delete childEnv[key];
+    }
+  }
 
   childEnv.CSC_IDENTITY_AUTO_DISCOVERY =
     signingPlan.mode !== "disabled" && !signingPlan.identityName

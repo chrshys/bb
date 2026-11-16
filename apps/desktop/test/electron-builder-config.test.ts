@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
+import { createElectronBuilderEnv } from "../scripts/run-electron-builder.mjs";
 
 const desktopPackageRoot = process.cwd();
 const require = createRequire(resolve(desktopPackageRoot, "package.json"));
@@ -274,6 +275,49 @@ const readResolvedConfig: ReadResolvedConfig = async (overrides) => {
 };
 
 describe("electron-builder signing config", () => {
+  it("drops blank signing variables so electron-builder does not read an empty CSC_LINK as a certificate path", () => {
+    const env = createElectronBuilderEnv(
+      {
+        mode: "disabled",
+        identityName: undefined,
+        notarizationEnabled: false,
+      },
+      {
+        CSC_LINK: "",
+        CSC_KEY_PASSWORD: "",
+        CSC_NAME: "",
+        APPLE_ID: " ",
+        APPLE_APP_SPECIFIC_PASSWORD: "",
+        APPLE_TEAM_ID: "",
+        CSC_IDENTITY_AUTO_DISCOVERY: "false",
+        PATH: "/usr/bin",
+      },
+    );
+
+    expect(env).toEqual({
+      CSC_IDENTITY_AUTO_DISCOVERY: "false",
+      PATH: "/usr/bin",
+    });
+  });
+
+  it("keeps configured signing variables for electron-builder", () => {
+    const env = createElectronBuilderEnv(
+      {
+        mode: "environment",
+        identityName: "Developer ID Application: Example",
+        notarizationEnabled: true,
+      },
+      { CSC_LINK: "base64", CSC_KEY_PASSWORD: "secret", CSC_NAME: "Example" },
+    );
+
+    expect(env).toMatchObject({
+      CSC_LINK: "base64",
+      CSC_KEY_PASSWORD: "secret",
+      CSC_NAME: "Example",
+      CSC_IDENTITY_AUTO_DISCOVERY: "false",
+    });
+  });
+
   it("keeps package metadata compatible with electron universal's CJS entry asar", async () => {
     const packageJsonText = await readFile(
       resolve(desktopPackageRoot, "package.json"),
