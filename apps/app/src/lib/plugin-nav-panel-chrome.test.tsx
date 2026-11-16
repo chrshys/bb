@@ -35,6 +35,7 @@ function registrations(
 }
 
 const TASKS = {
+  showCloseButton: true,
   pluginId: "tasks",
   id: "tasks",
   path: "tasks",
@@ -42,6 +43,7 @@ const TASKS = {
   icon: "ListTodo",
 };
 const DOCS = {
+  showCloseButton: true,
   pluginId: "docs",
   id: "docs",
   path: "docs",
@@ -57,6 +59,61 @@ afterEach(() => {
 });
 
 describe("usePluginNavPanelChrome", () => {
+  it("restores a persisted opt-out before boot and lets live metadata replace it", () => {
+    setPluginSlotRegistrations(
+      "tasks",
+      registrations([
+        {
+          id: "tasks",
+          path: "tasks",
+          title: "Tasks",
+          icon: "ListTodo",
+          component: Body,
+          experimental_showCloseButton: false,
+        },
+      ]),
+    );
+    markPluginFrontendsSettled();
+    const writer = renderHook(() => useRememberPluginNavPanelChrome());
+    expect(readLastKnownPluginNavPanelChrome()[0]?.showCloseButton).toBe(false);
+    writer.unmount();
+    resetPluginSlotStoreForTest();
+    resetPluginFrontendBootStateForTest();
+    const { result } = renderHook(() => usePluginNavPanelChrome());
+    expect(result.current[0]?.panel).toBeNull();
+    expect(result.current[0]?.chrome.showCloseButton).toBe(false);
+    act(() =>
+      setPluginSlotRegistrations(
+        "tasks",
+        registrations([
+          {
+            id: "tasks",
+            path: "tasks",
+            title: "Tasks",
+            icon: "ListTodo",
+            component: Body,
+          },
+        ]),
+      ),
+    );
+    expect(result.current[0]?.chrome.showCloseButton).toBe(true);
+  });
+
+  it("defaults old cached chrome to showing close and rejects malformed policy", () => {
+    const { showCloseButton, ...legacy } = TASKS;
+    expect(showCloseButton).toBe(true);
+    window.localStorage.setItem(
+      "bb.plugin-nav-panels.1.all",
+      JSON.stringify([legacy]),
+    );
+    expect(readLastKnownPluginNavPanelChrome()).toEqual([TASKS]);
+    window.localStorage.setItem(
+      "bb.plugin-nav-panels.1.all",
+      JSON.stringify([{ ...legacy, showCloseButton: "false" }]),
+    );
+    expect(readLastKnownPluginNavPanelChrome()).toEqual([]);
+  });
+
   it("draws remembered chrome before boot and swaps to the live registration in place", () => {
     writeLastKnownPluginNavPanelChrome([TASKS, DOCS]);
     const { result } = renderHook(() => usePluginNavPanelChrome());

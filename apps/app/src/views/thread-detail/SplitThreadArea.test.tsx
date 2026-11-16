@@ -49,6 +49,8 @@ import {
   type PaneContextValue,
 } from "./PaneContext";
 import { RouteNavigationProvider } from "@/components/ui/app-route-anchor";
+import { writeLastKnownPluginNavPanelChrome } from "@/lib/plugin-nav-panel-chrome";
+import { resetPluginFrontendBootStateForTest } from "@/lib/plugin-frontend-boot-state";
 import { SplitThreadArea } from "./SplitThreadArea";
 import { applyThreadOpenToLayout } from "./splitThreadNavigation";
 import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
@@ -762,6 +764,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   threadStore.clear();
   resetPluginSlotStoreForTest();
+  resetPluginFrontendBootStateForTest();
   delete window.bbDesktop;
   window.localStorage.clear();
   window.sessionStorage.clear();
@@ -2835,6 +2838,100 @@ describe("SplitThreadArea", () => {
       newThreadContent,
     );
     expect(screen.queryByRole("button", { name: "Close pane" })).toBeNull();
+  });
+
+  describe.each([
+    { surface: "standalone desktop", compact: false, split: false },
+    { surface: "standalone compact", compact: true, split: false },
+    { surface: "split desktop", compact: false, split: true },
+  ])("nav panel close policy: $surface", ({ compact, split }) => {
+    it.each([undefined, true, false, "remembered" as const])(
+      "honors %s without disabling pane commands",
+      async (policy) => {
+        viewportState.compact = compact;
+        if (policy === "remembered") {
+          writeLastKnownPluginNavPanelChrome([
+            {
+              pluginId: "docs",
+              id: "docs",
+              path: "docs",
+              title: "Docs",
+              icon: "FileText",
+              showCloseButton: false,
+            },
+          ]);
+        } else {
+          setPluginSlotRegistrations(
+            "docs",
+            makePluginRegistrationSet({
+              navPanels: [
+                {
+                  id: "docs",
+                  title: "Docs",
+                  icon: "FileText",
+                  path: "docs",
+                  component: () => <div>Docs panel</div>,
+                  experimental_showCloseButton: policy,
+                },
+              ],
+            }),
+          );
+        }
+        const layout = split ? pluginSplitLayout() : undefined;
+        if (layout) layout.focusedPaneId = "pane-2";
+        renderSplitArea({
+          path: "/plugins/docs/docs",
+          layout,
+          routeAwareContent: true,
+        });
+        const visible = policy === undefined || policy === true;
+        expect(
+          screen.queryByRole("button", { name: "Close pane" }) !== null,
+        ).toBe(visible);
+        if (split) {
+          expect(
+            screen.getAllByRole("button", { name: /Maximize pane/ }).length,
+          ).toBeGreaterThan(0);
+          act(() => {
+            expect(commandHandlers.get("pane.close")?.()).toBe(true);
+          });
+          await waitFor(() =>
+            expect(screen.getByTestId("location").textContent).toBe(
+              threadPath("thr-a"),
+            ),
+          );
+        }
+      },
+    );
+  });
+
+  it("omits native new-thread close while keeping maximize and keyboard close", () => {
+    renderSplitArea({
+      path: "/",
+      layout: {
+        root: {
+          type: "split",
+          dir: "row",
+          sizes: [0.5, 0.5],
+          children: [
+            { type: "pane", paneId: "pane-1", content: threadContent("thr-a") },
+            { type: "pane", paneId: "pane-2", content: newThreadContent },
+          ],
+        },
+        focusedPaneId: "pane-2",
+      },
+      routeAwareContent: true,
+    });
+    expect(screen.queryByRole("button", { name: "Close pane" })).toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: /Maximize pane/ }).length,
+    ).toBeGreaterThan(0);
+    act(() => {
+      expect(commandHandlers.get("pane.close")?.()).toBe(true);
+    });
+    expect(screen.getByTestId("location").textContent).toBe(
+      threadPath("thr-a"),
+    );
   });
 
   it("shows close on a compact plugin page", async () => {

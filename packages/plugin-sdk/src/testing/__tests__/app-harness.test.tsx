@@ -949,6 +949,48 @@ describe("loadPluginApp", () => {
     );
   });
 
+  it.each([undefined, true, false])(
+    "normalizes nav panel close-button policy %s",
+    async (value) => {
+      const captured = await loadPluginApp(
+        definePluginApp((builder) => {
+          builder.slots.navPanel({
+            id: "tasks",
+            title: "Tasks",
+            icon: "ListTodo",
+            path: "tasks",
+            component: Panel,
+            experimental_showCloseButton: value,
+          });
+        }),
+      );
+      expect(captured.navPanels[0]?.experimental_showCloseButton).toBe(
+        value ?? true,
+      );
+    },
+  );
+
+  it.each([null, "false", 0, {}])(
+    "rejects invalid nav panel close-button policy %j",
+    async (value) => {
+      await expect(
+        loadPluginApp(
+          definePluginApp((builder) => {
+            builder.slots.navPanel({
+              id: "tasks",
+              title: "Tasks",
+              icon: "ListTodo",
+              path: "tasks",
+              component: Panel,
+              // @ts-expect-error Exercise the untyped plugin boundary.
+              experimental_showCloseButton: value,
+            });
+          }),
+        ),
+      ).rejects.toThrow('"experimental_showCloseButton" must be a boolean');
+    },
+  );
+
   it("captures a nav panel experimental sidebar accessory", async () => {
     function SidebarAccessory() {
       return <span>12</span>;

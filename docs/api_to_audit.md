@@ -1,5 +1,19 @@
 # APIs To Audit
 
+## Navigation panel close button
+
+`PluginNavPanelRegistration.experimental_showCloseButton?: boolean` defaults to
+true. False omits only the host title-bar close button. The SDK collector rejects
+non-booleans. Core `StandalonePaneContent` and `NonThreadPaneContent` consume the
+same live/remembered `plugin-nav-panel-chrome` metadata, preserving the choice
+before frontend boot on reload. Native new-thread panes omit the button too;
+keyboard pane close, maximize, right-panel toggles and unrelated panel controls
+retain their existing actions. No new close action or CLI command is introduced.
+
+Stabilization requires desktop and compact layout verification, old-cache
+defaults, opt-out persistence before boot, live registration replacement, and
+confirmation that keyboard close remains available.
+
 ## Environment removal notification
 
 `experimental_environment.removed` announces successful provider removal after

@@ -51,11 +51,13 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Add a navigation rail destination that opens a full page your plugin renders. With this, a plugin can:",
         bullets: [
           "Build a whole page, such as a dashboard, a board, or an inbox",
+          "Omit the title-bar close button across reloads while retaining keyboard pane close",
           "Give the page a URL that can be shared and works with back and forward",
           "Add fixed tabs beside Browser and Terminal, and open terminals it started in any folder",
         ],
         apiSymbols: [
           "PluginNavPanelRegistration",
+          "PluginNavPanelRegistration.experimental_showCloseButton",
           "PluginNavPanelProps",
           "PluginFixedTabRegistration",
           "PluginFixedTabDeclaration",

@@ -598,6 +598,14 @@ export type PluginFixedTabDeclaration =
   | PluginFixedTabRegistration<JsonValue>;
 
 export interface PluginNavPanelRegistration {
+  /**
+   * Whether the host title bar shows its pane close button. Defaults to true.
+   * False omits only that button on desktop and compact layouts; keyboard
+   * pane close, maximize, and right-panel controls remain available. Remembered
+   * with panel chrome so the choice survives reload before frontend boot.
+   * Experimental: see docs/api_to_audit.md.
+   */
+  experimental_showCloseButton?: boolean;
   /** Unique within the plugin; letters, digits, `-`, `_`. */
   id: string;
   title: string;
