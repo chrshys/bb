@@ -48,6 +48,15 @@ export type ProjectOwner = z.infer<typeof projectOwnerSchema>;
 const settingsObjectSchema = z.record(z.string(), z.json()).refine((value) => `${JSON.stringify(value, null, 2)}\n`.length <= 16384, "settings.json is too large");
 const memoryInputSchema = z.string().max(MEMORY_MAX_CHARS, MEMORY_LIMIT_ERROR);
 const editFields = { defaultProjectId: id.nullable().optional(), name: z.string().trim().min(1).max(120), role: z.string().trim().max(80), avatar: avatarSchema, sectionId: id.nullable(), linkedProjectIds: z.array(id).max(100), ownedProjectIds: z.array(id).max(100).optional(), soul: z.string().max(4096), memory: memoryInputSchema.optional(), settings: settingsObjectSchema.optional() };
+const patchValues = z.object({ name: z.string().trim().min(1).max(120), role: z.string().trim().max(80), avatar: avatarSchema, sectionId: id.nullable(), hostId: id, defaultProjectId: id.nullable() }).partial().strict();
+export type BotPatchValues = z.infer<typeof patchValues>;
+export const botPatchSchema = z.object({ botId: id, expected: patchValues, changes: patchValues }).strict().superRefine((value, ctx) => {
+  const changed = Object.keys(value.changes).sort();
+  if (!changed.length) ctx.addIssue({ code: "custom", path: ["changes"], message: "Provide at least one field to change" });
+  if (JSON.stringify(changed) !== JSON.stringify(Object.keys(value.expected).sort())) ctx.addIssue({ code: "custom", path: ["expected"], message: "Provide the value each changed field was edited from" });
+});
+export const threadBotSchema = z.object({ bot: z.object({ id, name: z.string(), avatar: avatarSchema }).strict().nullable() }).strict();
+export type ThreadBot = z.infer<typeof threadBotSchema>;
 const stateOutput = z.object({ botId: id, file: stateFileSchema, content: z.string(), sha256: z.string() }).strict();
 export const stateUpdateSchema = z.object({ file: stateFileSchema, content: z.string(), expectedSha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().superRefine((value, ctx) => {
   const limit = value.file === "MEMORY.md" ? MEMORY_MAX_CHARS : value.file === "SOUL.md" ? 4096 : 16384;
@@ -105,6 +114,7 @@ export type ThreadAppearance = z.infer<typeof threadAppearanceSchema>;
 
 export const rpcContract = defineRpcContract({
   thread_appearance: { input: z.object({ threadId: id }).strict(), output: threadAppearanceSchema },
+  thread_bot: { input: z.object({ threadId: id }).strict(), output: threadBotSchema },
   monitoring_inventory: { input: inventoryInputSchema, output: activeInventorySchema },
   monitoring_status: { input: z.object({ botId: id }).strict(), output: monitoringStatusSchema },
   monitoring_pause: { input: z.object({ botId: id, paused: z.boolean() }).strict(), output: monitoringStatusSchema },
@@ -113,6 +123,7 @@ export const rpcContract = defineRpcContract({
   project_create: { input: projectCreateInputSchema, output: projectSchema },
   bot_create: { input: z.object({ ...editFields, hostId: id }).strict(), output: metadataSchema },
   bot_update: { input: z.object({ ...editFields, hostId: id.optional(), botId: id, expectedUpdatedAt: z.number(), expectedStateHashes: stateHashesSchema }).strict(), output: metadataSchema },
+  bot_patch: { input: botPatchSchema, output: metadataSchema },
   bot_prepare: { input: z.object({ botId: id }).strict(), output: metadataSchema },
   bots_reorder: { input: z.object({ bots: z.array(z.object({ botId: id, sectionId: id.nullable() }).strict()).max(500) }).strict(), output: z.object({ ok: z.literal(true) }).strict() },
   section_create: { input: z.object({ name: z.string().trim().min(1).max(80) }).strict(), output: sectionSchema },
