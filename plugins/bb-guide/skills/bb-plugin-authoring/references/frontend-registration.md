@@ -158,6 +158,40 @@ A common pairing with a replaced sidebar: hide child threads from the list and
 surface them here instead, filtering `experimental_useSidebarThreads()` by
 `parentThreadId === threadId`.
 
+### A pinned tab in the thread's right panel
+
+`app.slots.experimental_threadPinnedTab` adds a tab that is always present in
+the right panel of every thread, as an icon beside Info and Changes.
+
+```tsx
+const notesTab = {
+  id: "notes",
+  experimental_target: {
+    validate: (value): value is { noteId: string } =>
+      typeof value === "object" && value !== null && "noteId" in value,
+  },
+};
+
+app.slots.experimental_threadPinnedTab({
+  ...notesTab,
+  title: "Notes",
+  icon: "NotebookPen",
+  layout: "flush",
+  component: ({ threadId, projectId }) => { ... },
+});
+```
+
+Keep the reference object and reuse it. From the sidebar or any other surface:
+
+```tsx
+const panel = experimental_useAppPanel();
+panel.openThreadPinnedTab({ threadId, tab: notesTab, target: { noteId } });
+```
+
+Inside the component, `experimental_useFixedTabTarget(notesTab)` returns
+`{ target, sequence, clear }` or null. The tab shows for every thread, so
+render an empty state for a thread it does not apply to.
+
 ### An action in every thread menu
 
 `app.slots.experimental_threadAction` adds an entry to the thread header's

@@ -187,6 +187,12 @@ Read the installed SDK declarations for the exact current signatures.
 - `ExperimentalThreadMessageAppearanceRegistration`
 - `PluginAppSlots.experimental_threadMessageAppearance`
 - `PluginThreadHeaderActionRegistration`
+- `PluginAppSlots.experimental_threadPinnedTab`
+- `ExperimentalThreadPinnedTabRegistration`
+- `ExperimentalThreadPinnedTabDeclaration`
+- `ExperimentalThreadPinnedTabProps`
+- `ExperimentalThreadPinnedTabReference`
+- `ExperimentalOpenThreadPinnedTabOptions`
 - `PluginThreadActionTarget`
 - `PluginThreadActionChoice`
 - `PluginThreadActionChoices`

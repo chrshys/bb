@@ -795,6 +795,14 @@ with `experimental_useFixedTabTarget(tab)`. Target state survives tab, panel,
 and route remounts for the current app session; call `clear()` when returning to
 the tab's untargeted state. Selection persists across refreshes, but targets do
 not. A plugin can address only its own eligible tab on the current nav panel.
+`app.slots.experimental_threadPinnedTab({ id, title, icon, component, layout?,
+experimental_target? })` pins a non-closable tab in every thread's right panel,
+shown as an icon after Info and Changes; the component receives `{ threadId,
+projectId }` and renders its own empty state where it does not apply.
+`experimental_useAppPanel().openThreadPinnedTab({ threadId, tab, target? })`
+selects it for any thread from any surface, navigating there first when needed.
+`bb thread open <thread-id> --panel-tab <plugin-id>/<tab-id>` does the same
+from the CLI.
 `import { toast } from
 "sonner"` reaches the host toaster; react, the portaling radix families,
 sonner, vaul, @pierre/diffs, and the host-resident clsx, tailwind-merge, and

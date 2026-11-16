@@ -11,6 +11,7 @@ Read `testing.md` for examples and fidelity limits.
 - `PluginSdkTestFakes`
 - `NavigateCall`
 - `ExperimentalFixedTabOpenCall`
+- `ExperimentalThreadPinnedTabOpenCall`
 - `ComposerLog`
 - `SidebarActionCall` — deprecated, runtime-only for older plugins' tests of
   `experimental_useSidebarThreadActions`

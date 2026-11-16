@@ -1798,8 +1798,10 @@ the `experimental_fixedTabOpenCalls` inspection list.
    panel, and route remounts, refresh, and compact drawer animation. Targets
    must survive remounts in the current app session, never survive refresh, and
    never reappear after their owner clears them.
-9. Decide whether a future cross-thread surface should navigate before opening;
-   the initial public surface intentionally supports only `{ kind: "current" }`.
+9. Resolved for threads (2026-11-16): a cross-thread open navigates first and
+   resolves through the same destinations; see "Pinned thread tabs" below.
+   `openFixedTab` for nav-panel tabs still supports only `{ kind: "current" }`.
+   Decide whether nav-panel fixed tabs need the same reach.
 10. Keep core and plugin destinations on the same resolver and verify the
     controller never learns Changes, file, task, or document target shapes.
 
@@ -3094,6 +3096,84 @@ reimplementing it, and `indicatorLabel` carries the matching accessible string.
     forward-compatible shape, or it should narrow to a named handler; and
     exposing the full `panes` array does not leak more layout state than a row
     needs.
+
+## Pinned thread tabs (`app.slots.experimental_threadPinnedTab` and `experimental_useAppPanel().openThreadPinnedTab`)
+
+**Added 2026-11-16.** One consumer: Bots Sidebar pins its `bots` tab and opens
+it from its sidebar.
+
+**What it does.** Declares a non-closable tab that is present in every thread's
+right panel, shown as an icon in the strip at the top of the panel after BB's
+own Info and Changes tabs. Registration: `{ id, title, icon, component,
+layout?, experimental_target? }`. The component receives `{ threadId,
+projectId }` and mounts only while its tab is active in a visible pane and the
+panel is open. The tab is shown for every thread; a plugin whose tab does not
+apply to a thread renders its own empty state. BB owns selection, persistence
+and chrome.
+
+`experimental_useAppPanel().openThreadPinnedTab({ threadId, tab, target? })`
+selects the tab for a given thread from any surface, including the sidebar
+slot. When that thread is not on screen BB navigates to it, holds the request
+for up to 30 seconds, and resolves it once the thread view registers its
+destinations. A target is validated by the registration's
+`experimental_target` and read inside the component with
+`experimental_useFixedTabTarget(tab)`; it is memory-only and scoped to one
+thread.
+
+**One path.** Core declares Info and Changes in the same list
+(`apps/app/src/components/secondary-panel/thread-pinned-tabs.tsx`). The thread
+view derives panel-state tabs, strip entries and fixed-tab destinations from
+it. Core's own callers are the strip, the header's Info action, Changes
+targets from the timeline, and `bb thread open --panel-tab`, which reaches a
+thread through the same held-request path the SDK uses. The plugin page host
+shares the target store and the owner-validated destination. The contract
+table in `thread-pinned-tabs.test.tsx` runs against the page tab, the thread
+tab in its own view, and the thread tab opened from outside.
+
+**Persistence.** Pinned plugin tabs are a client-only tab kind
+(`plugin-pinned`) and never reach the thread-tabs route. Selection and the
+open flag persist per thread in local storage; the tab list is rebuilt from
+registrations. A selected tab whose plugin is momentarily unregistered is
+kept so the selection survives a plugin reload.
+
+**Public surface.** `ExperimentalThreadPinnedTabProps`,
+`ExperimentalThreadPinnedTabReference`,
+`ExperimentalThreadPinnedTabRegistration`,
+`ExperimentalThreadPinnedTabDeclaration`,
+`ExperimentalOpenThreadPinnedTabOptions`,
+`PluginAppSlots.experimental_threadPinnedTab`,
+`ExperimentalAppPanel.openThreadPinnedTab`, and
+`experimental_useFixedTabTarget` accepting a pinned-tab reference. The frontend
+testing runtime mirrors this with `threadPinnedTabs` on the captured app,
+`ExperimentalThreadPinnedTabOpenCall`, the
+`experimental_openThreadPinnedTab`/`experimental_threadPinnedTabTarget` render
+options, and the `experimental_threadPinnedTabOpenCalls` inspection list.
+
+**Audit before stabilizing.**
+
+1. **Applicability.** Every pinned tab shows for every thread, while core hides
+   Changes for a workspace without Git. Decide whether plugins need a
+   condition, and whether it can be synchronous.
+2. **Budget and order.** Order is Info, Changes, then plugins in registration
+   order. The strip scrolls past half the chrome width. Decide a cap, a user
+   ordering, or a per-plugin hide setting before many plugins pin a tab.
+3. **Selection is device-local.** Closable tabs sync through the thread-tabs
+   route; a selected pinned plugin tab does not. Decide whether selection
+   should sync, which needs a server tab kind.
+4. **Held requests.** A request for a thread that is not on screen returns
+   true before the tab is known to exist there, and is dropped after 30
+   seconds. Decide whether callers need a promise or a failure signal.
+5. **Target scope.** Targets are per thread and memory-only. Confirm that a
+   target delivered to one thread should never show in another, and that
+   losing it on refresh is right.
+6. **Split panes.** A pinned tab can be dragged to another pane like Info and
+   Changes. Confirm components handle mounting once per pane and per thread.
+7. **Reference shape.** A pinned-tab reference is `{ id }` scoped to the
+   calling plugin, while a nav-panel reference carries `panelId`.
+   `experimental_useFixedTabTarget` tells them apart by that field. Decide
+   whether one reference shape should cover both.
+8. **Compact layout.** The drawer pager shows the same icons without tooltips.
+   Confirm icon-only is enough on touch.
 
 ## `app.slots.experimental_threadHeaderAction` (`@get-bb/plugin-sdk/app`)
 
