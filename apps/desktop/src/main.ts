@@ -50,6 +50,7 @@ import {
 } from "@bb/server-contract";
 import { z } from "zod";
 import { registerDesktopClipboardIpc } from "./desktop-clipboard.js";
+import { registerDesktopFolderDialogIpc } from "./desktop-folder-dialog.js";
 import { registerDesktopWindowFocusIpc } from "./desktop-window-focus.js";
 import {
   assertPathExists,
@@ -2241,6 +2242,7 @@ function registerDesktopUpdateIpc(): void {
   });
   registerDesktopWindowFocusIpc(applicationWindowWebContentsIds);
   registerDesktopClipboardIpc(applicationWindowWebContentsIds);
+  registerDesktopFolderDialogIpc(applicationWindowWebContentsIds);
   ipcMain.on(BB_DESKTOP_ZOOM_COMMAND_CHANNEL, (event, payload: unknown) => {
     const parsed = bbDesktopZoomCommandSchema.safeParse(payload);
     if (parsed.success) {

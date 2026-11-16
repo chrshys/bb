@@ -1,4 +1,5 @@
 import {
+  bbDesktopPickedFolderSchema,
   bbDesktopServerChoicesSchema,
   type BbDesktopServerChoice,
 } from "@bb/desktop-contract";
@@ -103,6 +104,7 @@ import {
   BB_DESKTOP_GET_WINDOW_STATE_CHANNEL,
   BB_DESKTOP_OPEN_NEW_TAB_CHANNEL,
   BB_DESKTOP_OPEN_DATA_DIRECTORY_CHANNEL,
+  BB_DESKTOP_PICK_FOLDER_CHANNEL,
   BB_DESKTOP_OPEN_SERVER_DAEMON_LOGS_CHANNEL,
   BB_DESKTOP_WINDOW_STATE_CHANGED_CHANNEL,
   BB_DESKTOP_WRITE_CLIPBOARD_CHANNEL,
@@ -475,6 +477,11 @@ const bbDesktopApi: BbDesktopApi = {
   },
   openExternalUrl(url: string): void {
     ipcRenderer.send(BB_DESKTOP_OPEN_EXTERNAL_URL_CHANNEL, url);
+  },
+  async pickFolder(): Promise<string | null> {
+    return bbDesktopPickedFolderSchema.parse(
+      await ipcRenderer.invoke(BB_DESKTOP_PICK_FOLDER_CHANNEL),
+    ).path;
   },
   async openServerDaemonLogs(): Promise<void> {
     await ipcRenderer.invoke(BB_DESKTOP_OPEN_SERVER_DAEMON_LOGS_CHANNEL);

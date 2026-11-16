@@ -49,6 +49,13 @@ export type BbDesktopClipboardContent = z.infer<
   typeof bbDesktopClipboardContentSchema
 >;
 
+export const bbDesktopPickedFolderSchema = z
+  .object({
+    path: z.string().min(1).nullable(),
+  })
+  .strict();
+export type BbDesktopPickedFolder = z.infer<typeof bbDesktopPickedFolderSchema>;
+
 export const bbDesktopZoomCommandSchema = z.enum(["in", "out", "reset"]);
 export type BbDesktopZoomCommand = z.infer<typeof bbDesktopZoomCommandSchema>;
 export const BB_DESKTOP_MIN_ZOOM_PERCENT = 50;
@@ -90,6 +97,7 @@ export interface BbDesktopApi extends BbDesktopInfo {
   openWindowFind?(request: BbDesktopWindowFindRequest): void;
   openDataDirectory?(): Promise<void>;
   openExternalUrl(url: string): void;
+  pickFolder?(): Promise<string | null>;
   openServerDaemonLogs?(): Promise<void>;
   reloadWindow?(): void;
   setSplitNavigationEnabled?(

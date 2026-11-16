@@ -19,6 +19,7 @@ export const BB_DESKTOP_SET_SPLIT_NAVIGATION_ENABLED_CHANNEL =
 export const BB_DESKTOP_WRITE_CLIPBOARD_CHANNEL = "bb-desktop:write-clipboard";
 export const BB_DESKTOP_OPEN_WINDOW_FIND_CHANNEL =
   "bb-desktop:open-window-find";
+export const BB_DESKTOP_PICK_FOLDER_CHANNEL = "bb-desktop:pick-folder";
 export const BB_DESKTOP_RELOAD_WINDOW_CHANNEL = "bb-desktop:reload-window";
 
 export const BB_DESKTOP_GET_SERVER_CHOICES_CHANNEL =
