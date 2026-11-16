@@ -40,7 +40,7 @@ export function BotCreateDialog({ hosts, projects, owners, botNames, onClose, on
   const portalScope = usePortalScopeProps();
   const hostId = hosts.find((host) => host.connected)?.id ?? hosts[0]?.id ?? null;
   const ready = Boolean(name.trim()) && hostId !== null;
-  const chooser = useFolderChooser({ hosts, preferredHostId: hostId, nativeFolderPicker, onBrowseProjects, onChoose: (input) => { setError(null); setChoice({ kind: "folder", input }); } });
+  const chooser = useFolderChooser({ hosts, preferredHostId: hostId, nativeFolderPicker, onBrowseProjects, primary: false, onChoose: (input) => { setError(null); setChoice({ kind: "folder", input }); } });
   const listed = createdFolder && !projects.some((project) => project.id === createdFolder.project.id) ? [createdFolder.project, ...projects] : projects;
   const otherOwner = choice.kind === "existing" ? owners.find((owner) => owner.projectId === choice.project.id) : undefined;
   const severalMachines = hosts.filter((host) => host.connected).length > 1;

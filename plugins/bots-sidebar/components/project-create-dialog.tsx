@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useFolderChooser, type ProjectChoice, type ProjectCreationActions, type ProjectHost } from "./folder-chooser";
 
 export function ProjectCreateDialog({ hosts, onCreateProject, onBrowseProjects, nativeFolderPicker, onCreated, onClose }: ProjectCreationActions & { hosts: ProjectHost[]; onCreated: (project: ProjectChoice) => void; onClose: () => void }) {
-  const chooser = useFolderChooser({ hosts, nativeFolderPicker, onBrowseProjects, confirmLabel: "Create project", busyLabel: "Creating…", onDismiss: onClose, onChoose: async (input) => onCreated(await onCreateProject(input)) });
+  const chooser = useFolderChooser({ hosts, nativeFolderPicker, onBrowseProjects, confirmLabel: "Create project", busyLabel: "Creating…", closable: false, onDismiss: onClose, onChoose: async (input) => onCreated(await onCreateProject(input)) });
   const started = useRef(false);
   const choose = chooser.choose;
   useEffect(() => { if (!started.current) { started.current = true; void choose(); } }, [choose]);

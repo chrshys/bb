@@ -19,13 +19,15 @@ type FolderPick = Pick<ProjectCreateInput, "hostId" | "path" | "name">;
 
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
 
-export function useFolderChooser({ hosts, preferredHostId, nativeFolderPicker, onBrowseProjects, onChoose, onDismiss, confirmLabel = "Use this folder", busyLabel = "Saving…" }: Pick<ProjectCreationActions, "onBrowseProjects" | "nativeFolderPicker"> & {
+export function useFolderChooser({ hosts, preferredHostId, nativeFolderPicker, onBrowseProjects, onChoose, onDismiss, confirmLabel = "Use this folder", busyLabel = "Saving…", primary = true, closable = true }: Pick<ProjectCreationActions, "onBrowseProjects" | "nativeFolderPicker"> & {
   hosts: ProjectHost[];
   preferredHostId?: string | null;
   onChoose: (input: ProjectCreateInput) => void | Promise<void>;
   onDismiss?: () => void;
   confirmLabel?: string;
   busyLabel?: string;
+  primary?: boolean;
+  closable?: boolean;
 }) {
   const connected = hosts.filter((host) => host.connected);
   const host = connected.find((entry) => entry.id === preferredHostId) ?? connected[0] ?? null;
@@ -62,15 +64,15 @@ export function useFolderChooser({ hosts, preferredHostId, nativeFolderPicker, o
     setError(null); setBrowsing({});
   }
   const browser = browsing && host ? <FolderBrowser
-    hosts={connected} defaultHostId={host.id} initialPath={browsing.path} busy={busy} error={error} confirmLabel={confirmLabel} busyLabel={busyLabel}
+    hosts={connected} defaultHostId={host.id} initialPath={browsing.path} busy={busy} error={error} confirmLabel={confirmLabel} busyLabel={busyLabel} primary={primary} closable={closable}
     onBrowseProjects={onBrowseProjects} onPick={accept}
     onClose={() => { setBrowsing(null); setError(null); onDismiss?.(); }}
   /> : null;
   return { available: host !== null, busy, choose, browser };
 }
 
-function FolderBrowser({ hosts, defaultHostId, initialPath, busy, error, confirmLabel, busyLabel, onBrowseProjects, onPick, onClose }: Pick<ProjectCreationActions, "onBrowseProjects"> & {
-  hosts: ProjectHost[]; defaultHostId: string; initialPath?: string; busy: boolean; error: string | null; confirmLabel: string; busyLabel: string;
+function FolderBrowser({ hosts, defaultHostId, initialPath, busy, error, confirmLabel, busyLabel, primary, closable, onBrowseProjects, onPick, onClose }: Pick<ProjectCreationActions, "onBrowseProjects"> & {
+  hosts: ProjectHost[]; defaultHostId: string; initialPath?: string; busy: boolean; error: string | null; confirmLabel: string; busyLabel: string; primary: boolean; closable: boolean;
   onPick: (pick: FolderPick) => void | Promise<void>; onClose: () => void;
 }) {
   const [hostId, setHostId] = useState(defaultHostId);
@@ -115,7 +117,7 @@ function FolderBrowser({ hosts, defaultHostId, initialPath, busy, error, confirm
         <p className="truncate text-sm font-medium">{name || directory?.directory || "Folders"}</p>
         {directory && name ? <p className="truncate text-xs text-muted-foreground" title={directory.directory}>{directory.directory}</p> : null}
       </div>
-      <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Close folder list" disabled={busy} onClick={onClose}><Icon name="X" aria-hidden="true" /></Button>
+      {closable ? <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0" aria-label="Close folder list" disabled={busy} onClick={onClose}><Icon name="X" aria-hidden="true" /></Button> : null}
     </div>
     <div aria-label="Folders" className="h-36 overflow-y-auto p-1">
       {loading ? <p role="status" className="px-2 py-1.5 text-xs text-muted-foreground">Loading folders…</p> : directory?.entries.map((entry) => <button key={entry.path} type="button" className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-state-hover focus-visible:bg-state-hover focus-visible:outline-none" title={entry.path} disabled={busy} onClick={() => void browse(hostId, entry.path)}><Icon name="Folder" className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 truncate">{entry.name}</span></button>)}
@@ -130,7 +132,7 @@ function FolderBrowser({ hosts, defaultHostId, initialPath, busy, error, confirm
           if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setNewFolder(null); }
           if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); pick(); }
         }} />}
-      <Button type="button" size="sm" className="ml-auto h-7 shrink-0" disabled={!canPick} onClick={pick}>{busy ? busyLabel : confirmLabel}</Button>
+      <Button type="button" size="sm" variant={primary ? "default" : "outline"} className="ml-auto h-7 shrink-0" disabled={!canPick} onClick={pick}>{busy ? busyLabel : confirmLabel}</Button>
     </div>
   </div>;
 }

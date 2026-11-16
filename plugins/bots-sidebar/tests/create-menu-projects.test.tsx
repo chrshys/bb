@@ -61,6 +61,7 @@ it("creates a standalone work project in a folder on the selected machine withou
   const { slot, bots, onNavigate } = await mount(); await choose(slot, "Project");
   const dialog = await slot.findByRole("dialog", { name: "Create project" });
   expect(within(dialog).queryAllByRole("textbox")).toHaveLength(0);
+  expect(within(dialog).getAllByRole("button", { name: /close/i })).toHaveLength(1);
   selectOption(within(dialog).getByRole("combobox", { name: "Machine" }), "Remote");
   await within(dialog).findByText("/home/remote");
   fireEvent.click(within(dialog).getByRole("button", { name: "work" })); await within(dialog).findByText("/work");
