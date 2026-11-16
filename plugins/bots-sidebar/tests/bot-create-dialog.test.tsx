@@ -173,7 +173,7 @@ it("sends Edit bot for an existing bot to its panel, never to a dialog", async (
   const slot = await mount({ existing: [{ ...bot, mainThreadId: null, linkedProjectIds: [] }] });
   fireEvent.contextMenu(slot.getByText(bot.name));
   fireEvent.click(await slot.findByRole("menuitem", { name: "Edit bot…" }));
-  expect(slot.inspection.navigateCalls).toEqual([{ method: "toPluginPanel", path: "coordinator", options: { subPath: bot.id } }]);
+  expect(slot.inspection.experimental_fixedTabOpenCalls).toEqual([{ surface: { kind: "navPanel", panelId: "coordinator", subPath: bot.id }, panelId: "coordinator", tabId: "bot", target: { botId: bot.id, section: null } }]);
   expect(slot.queryByRole("dialog")).toBeNull();
   expect(created(slot)).toHaveLength(0);
 });

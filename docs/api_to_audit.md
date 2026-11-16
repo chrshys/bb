@@ -3183,11 +3183,10 @@ options, and the `experimental_threadPinnedTabOpenCalls` inspection list.
 
 **Kept experimental (2026-08-22).** zero consumers; item 1 (merging behind one registration with `bb.ui.registerThreadAction`) is cheapest to decide before the first one.
 
-**First consumer (2026-11-16).** Bots Sidebar renders the bot's avatar button there
-(`plugins/bots-sidebar/components/bot-panel-surfaces.tsx`), opening its `bot`
-thread panel tab. It also uses the mounted control to open that tab on behalf of
-its sidebar, because `useBbNavigate().openThreadPanel` declines outside a thread
-view; that hand-off is a workaround, not a contract this slot should promise.
+**Consumers (2026-11-16).** None again. Bots Sidebar briefly rendered a bot
+avatar button here and used the mounted control to open a panel tab on behalf
+of its sidebar. Both went away when it moved to a pinned thread tab opened
+through `experimental_useAppPanel().openThreadPinnedTab`.
 
 **What it does.** Renders a plugin component in the thread header's action row.
 The frontend sibling of the backend `bb.ui.registerThreadAction`, which renders

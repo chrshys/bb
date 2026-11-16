@@ -309,15 +309,16 @@ it("creates a section from the panel and moves the bot into it", async () => {
   expect(slot.queryByRole("textbox", { name: "New section name" })).toBeNull();
 });
 
-it("says so when the bot no longer exists", async () => {
+it("falls back to the unassigned state when the conversation's bot is deleted", async () => {
   const backend = panelBackend();
   const slot = await mountBotPanel(backend);
   backend.world.bots = [];
   await slot.behavior.emitRealtime("project-bots-changed", {});
-  expect((await slot.findByRole("status")).textContent).toBe("This bot no longer exists.");
+  await slot.findByText("No bot for this conversation");
+  expect(slot.queryByRole("region", { name: /bot settings$/ })).toBeNull();
 });
 
-it("resolves the bot from the conversation when opened from the new-tab launcher", async () => {
+it("resolves the bot from the conversation it is pinned beside", async () => {
   const backend = panelBackend([{ name: "Atlas" }]);
   backend.world.threadBots.set("thread", "bot");
   const slot = await mountBotPanel(backend, { botId: null });

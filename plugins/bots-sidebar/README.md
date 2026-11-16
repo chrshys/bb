@@ -206,8 +206,9 @@ in bot state.
   Appearance, Setup, Instructions, Memory, Settings and Projects cards. **Edit bot**
   opens it beside the conversation you are in when that conversation belongs to the
   bot; otherwise it takes you to the bot's coordinator and opens it there. The panel is
-  also the **Bot** tab of the panel's new-tab menu, a button in the header of the bot's
-  conversations, and a fixed tab on the bot's new-conversation screens.
+  the pinned **Bots** icon at the top of every conversation's right-hand panel, and a
+  fixed tab on the bot's new-conversation screens. In a conversation that belongs to no
+  bot, the Bots tab says so and explains how to assign one.
   New bots get a random appearance once per draft; existing bots stay unchanged.
   Appearance offers **8 shapes, 16 expressions, 3 idle motions, and 14 coloured
   presets**, with no black/white/neutral presets. **Randomize appearance** rerolls
