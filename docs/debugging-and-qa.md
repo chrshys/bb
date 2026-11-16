@@ -868,3 +868,6 @@ or skipped before their contents are read.
 Command lookup sets `includeAgentInstructions: false`, so an invalid
 `.bb/AGENTS.md` cannot break the command catalog. Turn preparation sets it to
 `true` and continues to report instruction-read errors.
+
+For the isolated BBC app preview and development-only macOS chrome simulation,
+see [BBC desktop chrome](bbc-desktop-chrome.md).

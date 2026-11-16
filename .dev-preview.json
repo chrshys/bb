@@ -3,8 +3,33 @@
   "profiles": {
     "mobile-panels-review": {
       "cwd": "apps/app",
-      "command": ["node_modules/.bin/ladle", "serve", "--host", "127.0.0.1", "--port", "{port}"],
+      "command": [
+        "node_modules/.bin/ladle",
+        "serve",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "{port}"
+      ],
       "readyTimeout": 60
+    },
+    "app": {
+      "command": [
+        "node",
+        "--conditions=source",
+        "--import",
+        "tsx",
+        "scripts/preview-app.mjs",
+        "{port}",
+        "{url}"
+      ],
+      "readyTimeout": 600,
+      "prestart": [
+        [
+          "node",
+          "scripts/ensure-native-modules.mjs"
+        ]
+      ]
     }
   }
 }
