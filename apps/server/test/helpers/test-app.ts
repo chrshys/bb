@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
+import { NPM_APP_UPDATES_ENABLED } from "@bb/config/app-update";
 import type { AddressInfo } from "node:net";
 import {
   createConnection,
@@ -283,6 +284,7 @@ export async function createTestAppHarness(
     createAppVersionService({
       sourceCommit: null,
       installKind: null,
+      npmReleaseCheck: NPM_APP_UPDATES_ENABLED,
       config,
       logger,
     });

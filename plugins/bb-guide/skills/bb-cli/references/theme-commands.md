@@ -63,3 +63,7 @@ properties. Set the two anchors `--canvas`/`--ink` (most of the UI derives from
 them by mixing ink into canvas), the `--primary` accent, the secondary text tiers
 (`--muted-foreground` etc.), and the semantic colors (`--destructive`,
 `--success`, …). Ship one file with a `:root, .light` block and a `.dark` block.
+
+BBC fresh installs select the bundled `grok-minimal` theme. Existing saved
+selections and custom theme files are preserved. Use `bb theme set default`
+to select the stock palette, or `bb theme set grok-minimal` to return.

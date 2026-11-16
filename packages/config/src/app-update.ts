@@ -12,6 +12,7 @@ export const APP_UPDATE_SHIM_LOCK_FILE_NAME = "bb-app-update-shim.json";
 export const APP_UPDATE_VERSIONS_DIR_NAME = "app-versions";
 export const APP_UPDATE_PASSIVE_MODE = "passive";
 export const APP_UPDATE_STATE_SCHEMA_VERSION = 1;
+export const NPM_APP_UPDATES_ENABLED = false;
 
 export const appUpdateModeSchema = z.enum(["npm", "source"]);
 export type AppUpdateMode = z.infer<typeof appUpdateModeSchema>;

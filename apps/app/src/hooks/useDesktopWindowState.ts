@@ -3,12 +3,15 @@ import type { BbDesktopWindowState } from "@bb/desktop-contract";
 import {
   DEFAULT_DESKTOP_WINDOW_STATE,
   getBbDesktopInfo,
+  getSimulatedDesktopInfo,
 } from "@/lib/bb-desktop";
 
 export function useDesktopWindowState(): BbDesktopWindowState {
-  const [windowState, setWindowState] = useState<BbDesktopWindowState>(
-    DEFAULT_DESKTOP_WINDOW_STATE,
-  );
+  const [windowState, setWindowState] = useState<BbDesktopWindowState>(() => ({
+    isFullScreen:
+      getSimulatedDesktopInfo()?.isFullScreen ??
+      DEFAULT_DESKTOP_WINDOW_STATE.isFullScreen,
+  }));
 
   useEffect(() => {
     const desktopApi = getBbDesktopInfo();

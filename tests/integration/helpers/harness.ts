@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
+import { NPM_APP_UPDATES_ENABLED } from "@bb/config/app-update";
 import { listRunningThreads, type DbConnection } from "@bb/db";
 import { defaultFeatureFlags } from "@bb/domain";
 import {
@@ -244,6 +245,7 @@ async function startIntegrationServer(
   pendingInteractions.start();
   const appVersion = createAppVersionService({
     installKind: null,
+    npmReleaseCheck: NPM_APP_UPDATES_ENABLED,
     sourceCommit: null,
     config,
     logger: testLogger,

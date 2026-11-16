@@ -1,6 +1,6 @@
 {
   "name": "@bb/desktop",
-  "version": "0.46.0",
+  "version": "0.46.1",
   "private": true,
   "description": "macOS, Linux, and Windows Electron shell for bb",
   "main": "dist/main.js",
@@ -12,7 +12,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "clean": "rimraf dist release",
-    "desktop:build": "pnpm run build && node scripts/run-electron-builder.mjs --mac --arm64 --publish always",
+    "desktop:build": "pnpm run build && node scripts/run-electron-builder.mjs --mac --arm64 --publish never",
     "desktop:build:linux": "pnpm run build && node scripts/run-electron-builder.mjs --linux --x64 --publish never",
     "desktop:build:win": "pnpm run build && node scripts/run-electron-builder.mjs --win --x64 --publish never",
     "desktop:version-feed": "tsx scripts/generate-version-feed.mts",

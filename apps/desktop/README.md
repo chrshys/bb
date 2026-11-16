@@ -158,9 +158,10 @@ pnpm exec turbo run desktop:build:win --filter=@bb/desktop
 pnpm exec turbo run smoke:packaged --filter=@bb/desktop
 ```
 
-`desktop:build:win` writes `release/bb-<version>-x64.exe`, a one-click per-user
-NSIS installer that installs to `%LOCALAPPDATA%\Programs\bb` (`bb-nightly` on
-the nightly channel) without elevation, plus `latest.yml` for electron-updater.
+`desktop:build:win` writes `release/BBC-<version>-x64.exe`, a one-click
+per-user NSIS installer that installs to `%LOCALAPPDATA%\Programs\bbc`
+(`bbc-nightly` on the nightly channel) without elevation, plus `latest.yml`
+for electron-updater.
 Without a signing certificate the installer is unsigned, so Windows SmartScreen
 warns before running it. electron-builder signs it when `WIN_CSC_LINK` (a
 base64 `.pfx`) and `WIN_CSC_KEY_PASSWORD` are set; the release workflows pass
@@ -198,7 +199,7 @@ Linux users whose window manager supplies all window controls can remove the
 native Electron title bar with `--no-window-frame`:
 
 ```bash
-./bb-x86_64.AppImage --no-window-frame
+./BBC-x86_64.AppImage --no-window-frame
 ```
 
 The native frame remains the default. Changing this startup option requires a
@@ -254,22 +255,22 @@ To bump for a release:
 node scripts/bump-version.mjs <new-version>
 ```
 
-Then commit and ship through the normal `sawyer-next` → `main` flow. You can also
-use `--patch`, `--minor`, or `--major` instead of an explicit version.
+Then commit the version bump to the fork's `custom` branch. You can also use
+`--patch`, `--minor`, or `--major` instead of an explicit version.
 
 CI enforces this lockstep. Direct edits that leave
 `packages/bb-app/package.json` and `apps/desktop/package.json` with different
 versions fail the build. Never edit either package version directly for a
 release; use `scripts/bump-version.mjs` so both files move together.
 
-The desktop release tag uses the locked version: `desktop-v<version>` for
-immutable releases and `desktop-latest` for the moving pointer.
+The upstream `Build Desktop` workflow is restricted to `get-bb/bb`. BBC test
+builds use the separate `Build BBC Desktop Test Channel` workflow, which builds
+macOS, Linux, and Windows together and publishes only to `chrshys/bb`.
+`bbc-desktop-test` and `bbc-desktop-nightly` are moving channel tags. Increase
+the locked package version for every roll forward.
 
-`build-desktop.yml` builds macOS, Linux, and Windows in parallel jobs, then
-publishes all three from one job. The moving release resets all of its assets
-on each publish, so a single publisher is what keeps one platform from deleting
-another's binaries. Each platform has its own update feed file inside the same release
-tag:
+Each platform's installer and Electron metadata are published in the same
+release. The renderer version feed is also uploaded for every platform:
 
 | Platform | Artifacts              | electron-updater metadata | Version feed                   |
 | -------- | ---------------------- | ------------------------- | ------------------------------ |
@@ -278,34 +279,20 @@ tag:
 | Windows  | `.exe` installer (x64) | `latest.yml`              | `desktop-version-windows.json` |
 
 macOS keeps the unsuffixed feed name because released macOS builds already
-request it. Linux artifacts are unsigned, and the Windows installer is unsigned
-unless the Windows certificate secrets are configured; only the macOS binaries
-wait on the Apple signing secrets.
+request it. macOS binaries use ad-hoc signing for friendly tests when Developer ID
+and notarization secrets are absent. Linux
+AppImages are unsigned; Windows installers are signed when Windows certificate
+secrets are configured.
 
 ## Nightly channel
 
-The scheduled `publish-bb-app.yml` workflow runs from `main` every day at
-3:00 AM Pacific (`America/Los_Angeles`, including daylight-saving changes). It
-derives a unique version such as `0.34.1-nightly.<run-id>.<attempt>` without
-committing that version, publishes `bb-app` with the npm `nightly` dist-tag,
-and builds the desktop app from that same lockstep version.
+The BBC nightly desktop is a separate installation:
 
-To publish or dry-run the channel manually from `main`, dispatch the same
-workflow with `npm_tag=nightly`. A non-dry run publishes both npm and desktop;
-a dry run validates only the npm package path.
-
-A stable release also refreshes the channel. A non-dry `npm_tag=latest` run
-publishes the release, then derives the next nightly version from the release
-commit and publishes npm and desktop nightly again. Without this step the
-nightly channel stays below `latest` until the next scheduled run.
-
-The nightly desktop is a separate installation:
-
-- product name: `bb Nightly`
+- product name: `BBC Nightly`
 - bundle identifier: `dev.bb.desktop.nightly`
-- Linux binary name: `bb-nightly`, so it never shadows stable `bb` on PATH
-- app/update release: `desktop-nightly`
-- Windows install directory: `%LOCALAPPDATA%\Programs\bb-nightly`
+- Linux binary name: `bbc-nightly`, so it never shadows stable `bbc` on PATH
+- app/update release: `bbc-desktop-nightly`
+- Windows install directory: `%LOCALAPPDATA%\Programs\bbc-nightly`
 - update metadata: `nightly-mac.yml`, `nightly-linux.yml`, and `nightly.yml`
   (Windows)
 - version feeds: `desktop-version.json` (macOS),
@@ -314,16 +301,12 @@ The nightly desktop is a separate installation:
 - icon: `assets/icon-nightly.icns` and `assets/icon-nightly.png`
 
 Download it from
-[`desktop-nightly`](https://github.com/get-bb/bb/releases/tag/desktop-nightly)
-or run the CLI build with:
-
-```bash
-npx bb-app@nightly
-```
+[`bbc-desktop-nightly`](https://github.com/chrshys/bb/releases/tag/bbc-desktop-nightly)
+after dispatching the BBC test workflow with `release_channel=nightly`.
 
 Stable and nightly desktop bundles can coexist. Electron-owned preferences,
 window state, and process supervision use separate application data
-directories; the embedded bb runtime still uses the normal `~/.bb` data and
+directories; the embedded BBC runtime uses `~/.bbc` data and
 default server port unless the corresponding environment variables are
 overridden.
 
@@ -369,30 +352,103 @@ GitHub Actions secrets:
 | `APPLE_APP_PASSWORD`         | App-specific password from `appleid.apple.com` under Sign-In and Security.                                                                                                             |
 | `APPLE_TEAM_ID`              | Developer Team ID from `developer.apple.com/account` membership details.                                                                                                               |
 
-Once those secrets are present, the next `Build Desktop` workflow run with
-`publish=true` and `release_channel=stable` signs the `.app`, notarizes it, and
-publishes the signed `.dmg` / `.zip` assets to `desktop-latest`. If no required
-signing secrets are configured, the workflow still builds unsigned artifacts, but
-the release job publishes only `desktop-version.json` and withholds unsigned
-binaries from `desktop-latest`. If only some required signing secrets are set,
-the workflow fails before packaging so a misconfigured release cannot silently
-produce unsigned or signed-but-not-notarized artifacts.
+The BBC test workflow uses these secrets when all are configured. Without them,
+it packages an ad-hoc signed friendly-test build; the Mac update control then
+opens the release page for manual installation. Partial secret sets fail the
+workflow. Ad-hoc signing does not provide Gatekeeper trust or Squirrel.Mac's
+stable Developer ID identity for in-place replacement.
 
 ## Auto-update
 
-The renderer update toast keeps using `desktop-version.json` as the lightweight
-feature surface. The installer path uses `electron-updater` against the same
-`desktop-latest` release asset directory and reads `latest-mac.yml`. These
-checks run in parallel on launch, hourly, and when the app becomes active: the
-JSON feed can show "update available" even when CI has published metadata only,
-while the Electron updater only flips the toast to "ready to install" after a
-signed update has actually downloaded. Local dev builds skip Electron auto-update
-unless `BB_DESKTOP_AUTO_UPDATE=1` is set.
+### BBC personal test channel
 
-`bb Nightly` follows the equivalent isolated `desktop-nightly` release and
-`nightly-mac.yml`; it never reads or moves the stable feed. The scheduled
-workflow requires the complete signing/notarization secret set before
-publishing nightly desktop assets.
+The BBC fork uses its own public GitHub Releases in `chrshys/bb`. Stable BBC
+test builds use `bbc-desktop-test`; the separate nightly identity uses
+`bbc-desktop-nightly`. Electron's platform metadata and the renderer's
+`desktop-version*.json` feeds use the same release base URL resolved by
+`scripts/desktop-release-channel.mjs`. Neither path can fall back to
+`get-bb/bb`. The `Build BBC Desktop Test Channel` workflow is separate from the
+upstream signed release workflows and refuses to run outside `chrshys/bb` on
+the `custom` branch.
+
+Test binaries and update metadata are public because `chrshys/bb` is a public
+repository. Anyone can download a published test build. The workflow builds
+macOS arm64, Linux x64, and Windows x64 artifacts first; it publishes only
+after every platform succeeds. It uploads all installers before replacing the
+Electron metadata, then moves the renderer version feeds last. Existing older
+installer assets remain available on the release page.
+
+To publish a test build from the Mac mini:
+
+1. Review and merge the prepared changes into `custom` on `chrshys/bb`.
+2. Run `node scripts/bump-version.mjs <new-version>` with a version greater than
+   the installed test build and the currently published channel. The current
+   shell/test build is `0.46.0`, so its first update must be `0.46.1` or higher.
+   This keeps `bb-app` and desktop in lockstep. Published clients only accept
+   newer versions; never reuse a version for different bits. Commit and push
+   the changes to `custom`.
+3. Dispatch **Build BBC Desktop Test Channel** on `custom`, choosing `latest`
+   (normal BBC install) or `nightly` (separate install). Without Apple secrets,
+   the macOS artifact is ad-hoc signed and intended for friendly testing. The
+   authenticated Mac mini command is:
+
+   ```bash
+   gh workflow run build-bbc-desktop-test.yml \
+     --repo chrshys/bb --ref custom \
+     -f release_channel=latest
+   gh run watch --repo chrshys/bb
+   ```
+
+4. Confirm all macOS, Linux, Windows, and publish jobs succeeded. Manually
+   install the first `.dmg` on each Mac and `.exe` on each Windows device; the
+   existing `57c0004` build has updates disabled and cannot discover its first
+   feed. On Mac, **Check** reports a newer version and **Open download** opens
+   the BBC release page. Download the arm64 `.dmg`, quit BBC, open the DMG, and
+   drag BBC into Applications, confirming replacement. On Windows, the signed
+   update metadata drives the normal electron-updater install flow.
+
+For a safe roll forward, publish a strictly higher version and let one workflow
+run finish all platform builds before starting another. The publish job uploads
+new versioned installers first, replaces each channel's `latest*.yml` or
+`nightly*.yml` metadata next, and replaces the JSON feeds last. It checks that
+the three feeds agree and rejects a version that is not higher than the current
+channel. If a build is bad, publish a fixed build with another higher version;
+clients do not downgrade from a release that has already installed.
+
+The no-credential Mac workflow uses an ad-hoc code signature, which is enough
+for macOS arm64 packaging but is not a Developer ID signature and is not
+notarized. A DMG downloaded from GitHub is quarantined and may be blocked by
+Gatekeeper; macOS may offer **Open Anyway** in Privacy & Security after the
+user attempts to open it. Do not disable Gatekeeper or remove quarantine.
+Squirrel.Mac checks the installed bundle's code-signing requirement before
+replacing it, so ad-hoc builds do not use automatic in-place replacement. The
+Check control therefore opens the release page and the user manually replaces
+the app from the DMG. To provide a normally trusted public installer and
+reliable automatic Mac replacement, configure a Developer ID Application
+certificate and Apple notarization credentials. Windows builds work without a certificate,
+but Windows SmartScreen warns for an unsigned installer; configure the existing
+`WINDOWS_CERTIFICATE_PFX` and `WINDOWS_CERTIFICATE_PASSWORD` secrets to sign it.
+The Linux AppImage is unsigned and Linux is included as a convenience, though it
+is not one of the target test devices.
+
+This workflow does not create a GitHub release during code review. After the
+changes are merged and pushed to `custom`, the remaining publication action is
+to dispatch the workflow above. The push and dispatch are deliberately left to
+the coordinator/user after review.
+
+The renderer update check reads the BBC-owned `desktop-version*.json` feed. On
+macOS it never downloads or replaces the app; **Open download** opens the
+matching BBC Releases channel page. This is intentional because the friendly
+ad-hoc signature cannot safely satisfy Squirrel.Mac's installed-app identity
+check. Signed/notarized production builds retain the signing configuration,
+but BBC's Mac UI remains manual until an explicitly tested signed automatic
+update path is enabled. Windows uses electron-updater with `latest.yml` or
+`nightly.yml`; Linux AppImages use automatic replacement only when the current
+file is writable.
+
+`BBC Nightly` follows the isolated `bbc-desktop-nightly` release and
+`nightly-mac.yml`; it never reads or moves the stable feed. The workflow uses the complete signing/notarization secret set when configured;
+otherwise it packages a friendly-test nightly build with manual Mac install.
 
 To verify a downloaded or unpacked build:
 

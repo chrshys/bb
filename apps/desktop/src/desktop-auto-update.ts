@@ -5,10 +5,7 @@ import type {
   UpdateInfo,
 } from "electron-updater";
 import type { BbDesktopInfo } from "@bb/desktop-contract";
-import {
-  DESKTOP_AUTO_UPDATE_FEED_CONFIG,
-  type DesktopAutoUpdateFeedConfig,
-} from "./desktop-update-provider.js";
+import type { DesktopAutoUpdateFeedConfig } from "./desktop-update-provider.js";
 import {
   createDesktopUpdateScheduler,
   type DesktopUpdateService,
@@ -52,7 +49,7 @@ export interface DesktopAutoUpdaterAdapter {
 
 interface CreateDesktopAutoUpdateServiceArgs {
   currentVersion: string;
-  enabled: boolean;
+  feed: DesktopAutoUpdateFeedConfig | null;
   forceDevUpdateConfig: boolean;
   logger: DesktopAutoUpdateLogger;
   now?: () => number;
@@ -166,8 +163,9 @@ export function createDesktopAutoUpdateService(
 ): DesktopAutoUpdateService {
   const now = args.now ?? (() => Date.now());
   let downloadInFlight: Promise<Array<string>> | null = null;
+  const feed = args.feed;
   const scheduler = createDesktopUpdateScheduler({
-    enabled: args.enabled,
+    enabled: feed !== null,
     initialInfo: createBaseInfo(args.currentVersion, args.platform),
     now,
     runCheck,
@@ -285,9 +283,9 @@ export function createDesktopAutoUpdateService(
     });
   }
 
-  if (args.enabled) {
+  if (feed !== null) {
     args.updater.setLogger(args.logger);
-    args.updater.setFeedURL(DESKTOP_AUTO_UPDATE_FEED_CONFIG);
+    args.updater.setFeedURL(feed);
     args.updater.setAutoDownload(false);
     args.updater.setAutoInstallOnAppQuit(true);
     args.updater.setForceDevUpdateConfig(args.forceDevUpdateConfig);

@@ -510,6 +510,7 @@ jobs:
     # skip this job too.
     if: >-
       ${{ !cancelled()
+      && github.repository == 'get-bb/bb'
       && needs.publish.result == 'success'
       && (github.event_name == 'schedule'
       || (inputs.npm_tag == 'nightly' && inputs.dry_run == false)
@@ -648,6 +649,7 @@ jobs:
     # See the macOS job for why this condition uses `!cancelled()`.
     if: >-
       ${{ !cancelled()
+      && github.repository == 'get-bb/bb'
       && needs.publish.result == 'success'
       && (github.event_name == 'schedule'
       || (inputs.npm_tag == 'nightly' && inputs.dry_run == false)
@@ -756,6 +758,7 @@ jobs:
     # See the macOS job for why this condition uses `!cancelled()`.
     if: >-
       ${{ !cancelled()
+      && github.repository == 'get-bb/bb'
       && needs.publish.result == 'success'
       && (github.event_name == 'schedule'
       || (inputs.npm_tag == 'nightly' && inputs.dry_run == false)
@@ -902,6 +905,7 @@ jobs:
     # a nightly, and only a stable release run ever moves the release.
     if: >-
       ${{ !cancelled()
+      && github.repository == 'get-bb/bb'
       && needs.nightly-desktop-macos.result == 'success'
       && needs.nightly-desktop-linux.result == 'success'
       && needs.nightly-desktop-windows.result == 'success' }}

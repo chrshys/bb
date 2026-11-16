@@ -28,6 +28,7 @@ import {
   APP_SURFACE_ENV_NAME,
 } from "@bb/config/app-surface";
 import { findMachineServiceFile } from "@bb/config/machine-service";
+import { resolveProdDataDir } from "@bb/config/runtime";
 import {
   deriveConnectBaseUrl,
   type ConnectCredential,
@@ -181,9 +182,10 @@ import {
 } from "./desktop-platform.js";
 import { createDesktopUpdateService } from "./desktop-update-check.js";
 import {
-  createDesktopUpdateFeedUrl,
+  DESKTOP_AUTO_UPDATE_FEED_CONFIG,
   DESKTOP_RELEASE_CHANNEL,
   DESKTOP_RELEASE_INFO,
+  resolveDesktopVersionFeedUrl,
   resolveDesktopUpdateSupport,
 } from "./desktop-update-provider.js";
 import type { DesktopUpdateService } from "./desktop-update-scheduler.js";
@@ -400,6 +402,8 @@ let currentAppKeybindings: AppKeybindings = [];
 let currentApplicationMenuAccelerators = DEFAULT_APPLICATION_MENU_ACCELERATORS;
 let desktopUpdateService: DesktopUpdateService | null = null;
 let desktopAutoUpdateService: DesktopAutoUpdateService | null = null;
+let desktopUpdateInstallMode: "automatic" | "manual" = "automatic";
+let desktopUpdateDownloadUrl: string | undefined;
 let currentRuntime: DesktopRuntime | null = null;
 let currentWindowUrl: string | null = null;
 let logViewerLineBuffer: LogLineBuffer | null = null;
@@ -488,12 +492,12 @@ function canReplaceAppImage(appImagePath: string): boolean {
 
 function resolveDesktopUpdateFeedUrl(
   args: ResolveDesktopUpdateFeedUrlArgs,
-): string {
-  const rawFeedUrl = args.env.BB_DESKTOP_VERSION_FEED_URL?.trim();
-  if (rawFeedUrl === undefined || rawFeedUrl.length === 0) {
-    return createDesktopUpdateFeedUrl(args.platform);
-  }
-  return rawFeedUrl;
+): string | null {
+  return resolveDesktopVersionFeedUrl(
+    args.platform,
+    DESKTOP_RELEASE_CHANNEL,
+    args.env.BB_DESKTOP_VERSION_FEED_URL?.trim() || undefined,
+  );
 }
 
 function readDesktopAboutFacts(applicationName: string): DesktopAboutFacts {
@@ -544,6 +548,10 @@ function getCurrentDesktopInfo(): BbDesktopInfo | null {
   }
   return {
     ...info,
+    installMode: desktopUpdateInstallMode,
+    ...(desktopUpdateDownloadUrl === undefined
+      ? {}
+      : { updateDownloadUrl: desktopUpdateDownloadUrl }),
     serverDaemonLogsAvailable: shouldEnableServerDaemonLogsMenu(),
   };
 }
@@ -659,7 +667,7 @@ const desktopLogger: DesktopAutoUpdateLogger = {
 function resolveDataDirFromEnv(args: ResolveDataDirFromEnvArgs): string {
   const rawDataDir = args.env.BB_DATA_DIR?.trim();
   if (rawDataDir === undefined || rawDataDir.length === 0) {
-    return join(args.homeDir, ".bb");
+    return resolveProdDataDir({ homeDir: args.homeDir });
   }
   if (rawDataDir === "~") {
     return args.homeDir;
@@ -2912,27 +2920,34 @@ async function runDesktopApp(): Promise<void> {
 
   const desktopUpdateSupport = resolveDesktopUpdateSupport({
     canReplaceAppImage,
+    channel: DESKTOP_RELEASE_CHANNEL,
     env: process.env,
     platform: desktopPlatform,
+    updateReleaseBaseUrl: DESKTOP_RELEASE_INFO.updateReleaseBaseUrl,
   });
+  desktopUpdateInstallMode = desktopUpdateSupport.installMode;
+  desktopUpdateDownloadUrl = desktopUpdateSupport.updateDownloadUrl;
   desktopUpdateService = createDesktopUpdateService({
     channel: DESKTOP_RELEASE_CHANNEL,
     currentVersion: desktopVersion,
-    enabled:
+    feedUrl:
       desktopUpdateSupport.versionCheck &&
-      (app.isPackaged || process.env.BB_DESKTOP_VERSION_CHECK === "1"),
-    feedUrl: desktopUpdateFeedUrl,
+      (app.isPackaged || process.env.BB_DESKTOP_VERSION_CHECK === "1")
+        ? desktopUpdateFeedUrl
+        : null,
     logger: desktopLogger,
     platform: desktopPlatform,
   });
   desktopAutoUpdateService = createDesktopAutoUpdateService({
     currentVersion: desktopVersion,
-    enabled:
+    feed:
       desktopUpdateSupport.autoUpdate &&
       shouldEnableDesktopAutoUpdate({
         env: process.env,
         isPackaged: app.isPackaged,
-      }),
+      })
+        ? DESKTOP_AUTO_UPDATE_FEED_CONFIG
+        : null,
     forceDevUpdateConfig:
       !app.isPackaged && process.env.BB_DESKTOP_AUTO_UPDATE === "1",
     logger: desktopLogger,

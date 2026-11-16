@@ -15,10 +15,6 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
-import {
-  createDesktopReleaseInfo,
-  DESKTOP_AUTO_UPDATE_FEED_CONFIG,
-} from "../src/desktop-update-provider.js";
 
 const desktopPackageRoot = process.cwd();
 const require = createRequire(resolve(desktopPackageRoot, "package.json"));
@@ -43,7 +39,7 @@ const macConfigSchema = z
     entitlements: z.string().min(1),
     entitlementsInherit: z.string().min(1),
     gatekeeperAssess: z.literal(false),
-    hardenedRuntime: z.literal(true),
+    hardenedRuntime: z.boolean(),
     icon: z.string().min(1),
     identity: z.string().nullable().optional(),
     notarize: z.boolean(),
@@ -67,7 +63,7 @@ const macConfigSchema = z
 const linuxConfigSchema = z
   .object({
     category: z.literal("Development"),
-    executableName: z.enum(["bb", "bb-nightly"]),
+    executableName: z.enum(["bbc", "bbc-nightly"]),
     icon: z.string().min(1),
     target: z.tuple([
       z
@@ -109,14 +105,15 @@ const electronBuilderConfigSchema = z
     appId: z.string().min(1),
     artifactName: z.string().min(1),
     productName: z.string().min(1),
-    publish: z.tuple([
-      z
-        .object({
+    publish: z.union([
+      z.null(),
+      z.array(
+        z.object({
           channel: z.enum(["latest", "nightly"]),
           provider: z.literal("generic"),
-          url: z.string().min(1),
-        })
-        .passthrough(),
+          url: z.string().url(),
+        }),
+      ),
     ]),
     toolsets: z.object({
       appimage: z.literal("1.0.3"),
@@ -528,7 +525,7 @@ describe("electron-builder signing config", () => {
 
     expect(config.linux).toMatchObject({
       category: "Development",
-      executableName: "bb",
+      executableName: "bbc",
       target: [{ arch: ["x64"], target: "AppImage" }],
     });
     expect(config.toolsets.appimage).toBe("1.0.3");
@@ -554,26 +551,31 @@ describe("electron-builder signing config", () => {
     }
   });
 
-  it("keeps the updater provider pointed at desktop-latest release assets", async () => {
-    const config = await readStaticConfig();
+  it("gives the fork its own identity and BBC-only update feed", async () => {
+    const { config } = await readResolvedConfig({});
 
-    expect(config.publish[0]).toMatchObject(DESKTOP_AUTO_UPDATE_FEED_CONFIG);
-    expect(DESKTOP_AUTO_UPDATE_FEED_CONFIG.url).toBe(
-      "https://github.com/get-bb/bb/releases/download/desktop-latest/",
-    );
+    expect(config.appId).toBe("dev.bbc.desktop");
+    expect(config.productName).toBe("BBC");
+    expect(config.linux.executableName).toBe("bbc");
+    expect(config.publish).toEqual([
+      {
+        channel: "latest",
+        provider: "generic",
+        url: "https://github.com/chrshys/bb/releases/download/bbc-desktop-test/",
+      },
+    ]);
   });
 
-  it("creates a separate nightly app identity and update feed", async () => {
+  it("creates a separate nightly app identity and BBC-only update feed", async () => {
     const { config } = await readResolvedConfig({
       BB_DESKTOP_RELEASE_CHANNEL: "nightly",
     });
-    const nightlyRelease = createDesktopReleaseInfo("nightly");
 
-    expect(config.appId).toBe("dev.bb.desktop.nightly");
-    expect(config.productName).toBe("bb Nightly");
-    expect(config.artifactName).toBe("bb-nightly-${version}-${arch}.${ext}");
+    expect(config.appId).toBe("dev.bbc.desktop.nightly");
+    expect(config.productName).toBe("BBC Nightly");
+    expect(config.artifactName).toBe("BBC-nightly-${version}-${arch}.${ext}");
     expect(config.linux.icon).toBe("assets/icon-nightly.png");
-    expect(config.linux.executableName).toBe("bb-nightly");
+    expect(config.linux.executableName).toBe("bbc-nightly");
     expect(config.mac.icon).toBe("assets/icon-nightly.icns");
     await expect(
       access(resolve(desktopPackageRoot, config.mac.icon)),
@@ -581,11 +583,13 @@ describe("electron-builder signing config", () => {
     await expect(
       access(resolve(desktopPackageRoot, "assets/icon-nightly.png")),
     ).resolves.toBeUndefined();
-    expect(config.publish[0]).toEqual({
-      channel: "nightly",
-      provider: "generic",
-      url: nightlyRelease.updateReleaseBaseUrl,
-    });
+    expect(config.publish).toEqual([
+      {
+        channel: "nightly",
+        provider: "generic",
+        url: "https://github.com/chrshys/bb/releases/download/bbc-desktop-nightly/",
+      },
+    ]);
   });
 
   it("rejects unknown desktop release channels", async () => {
@@ -612,8 +616,10 @@ describe("electron-builder signing config", () => {
       CSC_IDENTITY_AUTO_DISCOVERY: "false",
     });
 
-    expect(config.mac.identity).toBeNull();
+    expect(config.mac.identity).toBe("-");
     expect(config.mac.notarize).toBe(false);
+    expect(config.mac.type).toBe("development");
+    expect(config.mac.hardenedRuntime).toBe(false);
   });
 
   it("rejects partial signing secret sets", async () => {

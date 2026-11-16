@@ -796,6 +796,7 @@ interface BbAppUpdateRowsProps {
   onRetryAppCheck?: (() => void) | null;
   onRelaunchDesktop: (() => void) | null;
   onRetryDesktop: (() => void) | null;
+  onOpenDesktopDownload?: ((url: string) => void) | null;
   onShowAppUpdateResult?: ((result: SystemAppUpdateResult) => void) | null;
   isChecking?: boolean;
 }
@@ -811,6 +812,7 @@ export function BbAppUpdateRows({
   onRetryAppCheck = null,
   onRelaunchDesktop,
   onRetryDesktop,
+  onOpenDesktopDownload = null,
   onShowAppUpdateResult = null,
   isChecking = false,
 }: BbAppUpdateRowsProps) {
@@ -876,6 +878,23 @@ export function BbAppUpdateRows({
           actionLabel="Relaunch bb to finish updating"
           onClick={() => onRelaunchDesktop?.()}
         />,
+      );
+    }
+    if (
+      desktopInfo.updateAvailable &&
+      desktopInfo.installMode === "manual" &&
+      desktopInfo.updateDownloadUrl !== undefined
+    ) {
+      return row(
+        name,
+        <RowStateControl
+          state="update-available"
+          buttonLabel="Open download"
+          actionLabel="Download and install the BBC desktop update manually"
+          onClick={() => onOpenDesktopDownload?.(desktopInfo.updateDownloadUrl ?? "")}
+        />,
+        undefined,
+        `Version ${pendingVersion ?? desktopInfo.latestVersion ?? "new"} is available. Download the installer, quit BBC, then open the installer and replace BBC in Applications.`,
       );
     }
     if (desktopInfo.downloadState === "downloading") {
@@ -2122,6 +2141,10 @@ export function UpdatesSettingsSection({
             });
           });
         };
+  const openDesktopDownload =
+    desktopApi === null || showFallbackBbStatus
+      ? null
+      : (url: string) => desktopApi.openExternalUrl(url);
   const appRow = (
     <BbAppUpdateRows
       name={isDesktop ? "Desktop" : "Server"}
@@ -2136,6 +2159,7 @@ export function UpdatesSettingsSection({
       onShowAppUpdateResult={openAppUpdateResultDetails}
       onRelaunchDesktop={relaunchDesktop}
       onRetryDesktop={retryDesktop}
+      onOpenDesktopDownload={openDesktopDownload}
     />
   );
   const serverAppRow = (
@@ -2152,6 +2176,7 @@ export function UpdatesSettingsSection({
       onShowAppUpdateResult={openAppUpdateResultDetails}
       onRelaunchDesktop={null}
       onRetryDesktop={null}
+      onOpenDesktopDownload={null}
     />
   );
   const desktopClientRow = (
@@ -2164,6 +2189,7 @@ export function UpdatesSettingsSection({
       onRetryAppCheck={handleCheckForUpdates}
       onRelaunchDesktop={relaunchDesktop}
       onRetryDesktop={retryDesktop}
+      onOpenDesktopDownload={openDesktopDownload}
     />
   );
 

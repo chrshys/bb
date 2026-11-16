@@ -2162,3 +2162,7 @@ Settings. Search scope is remembered in browser local storage separately for
 new-thread and follow-up composers. Starred text and mentions persist in the
 plugin database. See the [Prompt Library skill](../plugins/prompt-library/skills/prompt-library/SKILL.md)
 for CLI and SDK commands.
+
+BBC fresh installs select the bundled `grok-minimal` theme. Existing saved
+selections and custom theme files are preserved. Use `bb theme set default`
+to select the stock palette, or `bb theme set grok-minimal` to return.

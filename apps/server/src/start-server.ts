@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { NPM_APP_UPDATES_ENABLED } from "@bb/config/app-update";
 import type { ServerConfig } from "@bb/config/server";
 import { isLoopbackHostname } from "@bb/config/loopback";
 import { toOptionalString } from "@bb/config/strings";
@@ -244,6 +245,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
 
   const appVersion = createAppVersionService({
     installKind: serverConfig.BB_APP_INSTALL_KIND ?? null,
+    npmReleaseCheck: NPM_APP_UPDATES_ENABLED,
     sourceCommit: serverConfig.BB_APP_SOURCE_COMMIT ?? null,
     config: runtimeConfig,
     logger,

@@ -89,6 +89,7 @@ import {
   APP_UPDATE_SHIM_PROTOCOL_ENV_NAME,
   APP_UPDATE_SHIM_PROTOCOL_VERSION,
   appUpdateModeSchema,
+  NPM_APP_UPDATES_ENABLED,
   type AppRevision,
   type AppUpdateMode,
 } from "@bb/config/app-update";
@@ -3821,6 +3822,7 @@ function shouldRunNpmAppUpdateShim(args: {
   underShim: boolean;
 }): boolean {
   return (
+    NPM_APP_UPDATES_ENABLED &&
     args.enabled &&
     !args.underShim &&
     args.options.worktreePolicy === null &&

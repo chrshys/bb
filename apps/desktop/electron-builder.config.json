@@ -1,6 +1,6 @@
 {
-  "appId": "dev.bb.desktop",
-  "productName": "bb",
+  "appId": "dev.bbc.desktop",
+  "productName": "BBC",
   "artifactName": "${productName}-${version}-${arch}.${ext}",
   "toolsets": {
     "appimage": "1.0.3"
@@ -29,13 +29,7 @@
     "package.json",
     "!**/*.map"
   ],
-  "publish": [
-    {
-      "channel": "latest",
-      "provider": "generic",
-      "url": "https://github.com/get-bb/bb/releases/download/desktop-latest/"
-    }
-  ],
+  "publish": null,
   "mac": {
     "category": "public.app-category.developer-tools",
     "minimumSystemVersion": "13.0.0",
@@ -59,7 +53,7 @@
   },
   "linux": {
     "category": "Development",
-    "executableName": "bb",
+    "executableName": "bbc",
     "icon": "assets/icon.png",
     "target": [{ "target": "AppImage", "arch": ["x64"] }]
   },
