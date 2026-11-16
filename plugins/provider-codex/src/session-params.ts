@@ -614,7 +614,7 @@ export function buildCodexConfig(
     );
   }
   if (args.options?.providerSubagentsEnabled === false) {
-    config["features.multi_agent"] = false;
+    config["agents.enabled"] = false;
     config["features.multi_agent_v2.max_concurrent_threads_per_session"] = 1;
   }
   config["memories.use_memories"] = args.options?.memoryEnabled ?? true;

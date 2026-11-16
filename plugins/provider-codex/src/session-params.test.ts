@@ -554,7 +554,7 @@ describe("buildCodexConfig", () => {
     expect(
       configFor({ ...FULL_OPTIONS, providerSubagentsEnabled: false }),
     ).toMatchObject({
-      "features.multi_agent": false,
+      "agents.enabled": false,
       "features.multi_agent_v2.max_concurrent_threads_per_session": 1,
     });
   });
