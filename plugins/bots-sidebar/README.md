@@ -92,6 +92,17 @@ the role "Assistant", the Main section, empty instructions, memory and settings,
 no projects, and a random expression and idle motion. If BB has no machine at all,
 the dialog says so and cannot create a bot. Change any of these later in **Edit bot**.
 
+The dialog's **Project folder** field is optional and starts at **No project
+folder**, which leaves the bot in your personal workspace. Pick an existing
+project to link the bot to it as a member, or **Choose a folder…** to name a
+project, pick its machine and browse to a folder. Either way the project becomes
+the bot's default project, where its new conversations start. A folder project
+is created only when you press **Create**, and the bot owns it and runs on that
+folder's machine; cancelling the dialog first creates nothing. If the project is
+created but saving the bot then fails, the dialog keeps that project selected
+and says so: pressing **Create** again reuses it, and it stays if you cancel.
+Choosing a folder needs a connected machine.
+
 You can also create a work project directly inside an existing bot's
 **Projects** tab. Choose a machine and folder (or use **Browse…**). Missing folders
 are created; existing files are not changed. The new project is selected as
@@ -299,7 +310,7 @@ attribution and asynchronous handling instructions. No custom timeline renderer 
 
 ## Default projects and coordinators
 
-Edit bot → Projects → Default project chooses the starting project for new conversations and the coordinator. Membership is sufficient; choosing a default does not claim project ownership. New bots start with no linked project and use a personal workspace until one is linked. Existing histories, project ownership and legacy main pointers are preserved. Users can change execution choices in BB's composer before sending.
+Edit bot → Projects → Default project chooses the starting project for new conversations and the coordinator. Membership is sufficient; choosing a default does not claim project ownership. New bots start with no linked project and use a personal workspace unless a project folder was chosen in Create new bot. Existing histories, project ownership and legacy main pointers are preserved. Users can change execution choices in BB's composer before sending.
 
 Bot composers start with Codex / GPT-6.1 Sol / Medium reasoning. Clicking a bot name opens its saved coordinator. On the first click, write a first message in the coordinator composer; creation happens when you send. The coordinator persists across sidebar reordering and uses BB's native threads and asynchronous messaging to coordinate that bot's conversations. The saved coordinator is never silently replaced. An explicit new message restores an archived coordinator through native unarchive; a deleted or unavailable coordinator reports an error. Closing a view does not delete its conversation. With a BB core exposing `experimental_threadCloseProtection`, archive/delete controls and CLI/SDK requests are protected, including ancestor and bulk operations. Older cores log the missing capability and cannot enforce the close veto. Stop and native provider compaction remain available; an idle coordinator does not consume model turns.
 

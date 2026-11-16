@@ -10,7 +10,7 @@ Give recurring work a named specialist without tying its identity to one reposit
 
 ## How it works
 
-Use a bot's `+` to start a conversation in a project it owns, or a personal workspace when it owns none. BB's native composer lets you change the project and machine; a separate action creates a fresh worktree. Creating a bot takes a name, a shape and a colour; edit its role, instructions, memory, settings, and project roles afterwards in one dialog.
+Use a bot's `+` to start a conversation in a project it owns, or a personal workspace when it owns none. BB's native composer lets you change the project and machine; a separate action creates a fresh worktree. Creating a bot takes a name, a shape and a colour, and optionally a project folder; edit its role, instructions, memory, settings, and project roles afterwards in one dialog.
 
 Bot state lives in BB's private plugin storage, not in project files. Agents read and update their own state through `bot_read_state` and `bot_update_state`. Mentioning a bot does not send a message or reassign the current conversation by itself.
 

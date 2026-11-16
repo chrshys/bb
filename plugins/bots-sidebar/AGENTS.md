@@ -128,11 +128,25 @@ or reintroduce hover toolbars when making unrelated changes.
   heading. Preserve explicit custom sections. The Section dropdown includes
   Create New… (not a separate always-visible creation button).
 - Create new bot is its own small dialog: live avatar preview, one centred name
-  input, the shape grid, the colour swatches, Cancel / Create. Nothing else belongs
-  in it. Defaults at creation: first connected host (else the first host), role
-  Assistant, Main section, empty SOUL/memory/settings, no projects. With no host,
-  show the inline message rather than an unexplained disabled button. It reuses the
-  pickers exported by `components/avatar-appearance.tsx`; do not fork them.
+  input, the shape grid, the colour swatches, one optional Project folder select,
+  Cancel / Create. Nothing else belongs in it. Defaults at creation: first
+  connected host (else the first host), role Assistant, Main section, empty
+  SOUL/memory/settings, no projects. With no host, show the inline message rather
+  than an unexplained disabled button. It reuses the pickers exported by
+  `components/avatar-appearance.tsx`; do not fork them.
+- The Project folder select defaults to No project folder and must never block
+  Create when left alone. An existing project is linked as Member (never Owner,
+  whoever owns it) and becomes the default project. Choose a folder… expands the
+  shared `ProjectCreateForm` inline in its `onChoose` mode, the only place the
+  machine is shown; do not add a second folder browser. Choosing a folder only
+  drafts `project_create` input: the project is created when Create is pressed,
+  immediately before `bot_create`, then linked as Owner and default, and the bot
+  uses the folder's machine. Cancelling before Create leaves no project. If
+  `bot_create` fails after the project exists, keep that project selected and say
+  it stays; a retry must reuse it and never call `project_create` again. A failed
+  `project_create` creates no bot and retries with the same `requestId`. Ignore
+  select values the dialog did not offer: Radix re-emits the value through its
+  hidden form select when the choice changes programmatically.
 - Keep Edit compact: small avatar beside name/role, Setup / Instructions /
   State / Projects / Appearance tabs, one logical file editor at a time, and a fixed visible
   Save/Cancel footer. Do not bring back the tall stretching avatar panel or stack
