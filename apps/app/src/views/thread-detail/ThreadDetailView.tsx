@@ -423,6 +423,8 @@ function buildMarkdownPreviewLinkRouting({
   };
 }
 
+const SHOW_WORKSPACE_OPEN_HEADER_BUTTON = false;
+
 function buildOpenTargetMenuItemLabel(target: WorkspaceOpenTarget): string {
   return `Open in ${target.label}`;
 }
@@ -2305,7 +2307,9 @@ function ThreadDetailViewInternal(
     ...responsiveGitActions,
   ];
   const workspaceOpenButton =
-    workspaceOpenPath && preferredDirectoryTarget ? (
+    SHOW_WORKSPACE_OPEN_HEADER_BUTTON &&
+    workspaceOpenPath &&
+    preferredDirectoryTarget ? (
       <ThreadWorkspaceOpenButton
         preferredTarget={preferredDirectoryTarget}
         targets={directoryOpenTargets}
