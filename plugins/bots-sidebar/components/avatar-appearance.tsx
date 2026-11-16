@@ -21,6 +21,50 @@ const CATEGORIES = [
 
 type Category = (typeof CATEGORIES)[number]["id"];
 
+type AvatarPickerProps = { avatar: BotAvatar; onChange: (avatar: BotAvatar) => void; size: "compact" | "large" };
+
+export function AvatarColorSwatches({ avatar, onChange, size, customColor }: AvatarPickerProps & { customColor: boolean }) {
+  const swatchSize = size === "large" ? "size-7" : "size-6";
+  return (
+    <div role="group" aria-label="Color" className={size === "large" ? "grid grid-cols-7 justify-items-center gap-2.5" : "flex flex-wrap items-center gap-1.5"}>
+      {AVATAR_COLORS.map((color) => (
+        <Tooltip key={color}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className={`${swatchSize} rounded-full border-2 border-background ring-offset-2 aria-pressed:ring-2 aria-pressed:ring-foreground`}
+              style={{ background: color }}
+              aria-label={color}
+              aria-pressed={avatar.color === color}
+              onClick={() => onChange({ ...avatar, color })}
+            />
+          </TooltipTrigger>
+          <TooltipContent>{AVATAR_COLOR_LABELS[color]}</TooltipContent>
+        </Tooltip>
+      ))}
+      {customColor ? <input type="color" className="size-6 cursor-pointer rounded border-0 bg-transparent p-0" aria-label="Custom color" value={avatar.color} onChange={(event) => onChange({ ...avatar, color: event.target.value })} /> : null}
+    </div>
+  );
+}
+
+export function AvatarShapePicker({ avatar, onChange, size }: AvatarPickerProps) {
+  const large = size === "large";
+  return (
+    <div role="group" aria-label="Shape" className={large ? "grid w-full grid-cols-4 gap-2" : "grid grid-cols-4 gap-1"}>
+      {AVATAR_SHAPES.map((option) => (
+        <Tooltip key={option.id}>
+          <TooltipTrigger asChild>
+            <Button type="button" variant="ghost" size="icon" className={large ? "h-16 w-full rounded-xl border-2 border-transparent aria-pressed:border-foreground [&_svg]:size-11" : "h-10 w-full [&_svg]:size-8"} aria-label={option.label} aria-pressed={avatar.shape === option.id} onClick={() => onChange({ ...avatar, shape: option.id })}>
+              <BotIcon avatar={{ ...avatar, shape: option.id, motion: "still" }} size={large ? 44 : 32} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{option.label}</TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
 export function AvatarAppearance({ avatar, onChange }: { avatar: BotAvatar; onChange: (avatar: BotAvatar) => void }) {
   const [category, setCategory] = useState<Category>("expression");
   return (
@@ -40,40 +84,10 @@ export function AvatarAppearance({ avatar, onChange }: { avatar: BotAvatar; onCh
       {category === "color" ? (
         <fieldset>
           <legend className="mb-1.5 text-xs font-medium text-muted-foreground">Color</legend>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {AVATAR_COLORS.map((color) => (
-              <Tooltip key={color}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    className="size-6 rounded-full border-2 border-background ring-offset-2 aria-pressed:ring-2 aria-pressed:ring-foreground"
-                    style={{ background: color }}
-                    aria-label={color}
-                    aria-pressed={avatar.color === color}
-                    onClick={() => onChange({ ...avatar, color })}
-                  />
-                </TooltipTrigger>
-                <TooltipContent>{AVATAR_COLOR_LABELS[color]}</TooltipContent>
-              </Tooltip>
-            ))}
-            <input type="color" className="size-6 cursor-pointer rounded border-0 bg-transparent p-0" aria-label="Custom color" value={avatar.color} onChange={(event) => onChange({ ...avatar, color: event.target.value })} />
-          </div>
+          <AvatarColorSwatches avatar={avatar} onChange={onChange} size="compact" customColor />
         </fieldset>
       ) : null}
-      {category === "shape" ? (
-        <div role="group" aria-label="Shape" className="grid grid-cols-4 gap-1">
-          {AVATAR_SHAPES.map((option) => (
-            <Tooltip key={option.id}>
-              <TooltipTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="h-10 w-full [&_svg]:size-8" aria-label={option.label} aria-pressed={avatar.shape === option.id} onClick={() => onChange({ ...avatar, shape: option.id })}>
-                  <BotIcon avatar={{ ...avatar, shape: option.id, motion: "still" }} size={32} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{option.label}</TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
-      ) : null}
+      {category === "shape" ? <AvatarShapePicker avatar={avatar} onChange={onChange} size="compact" /> : null}
       {category === "expression" ? (
         <div role="group" aria-label="Expression" className="grid grid-cols-4 gap-1">
           {AVATAR_EXPRESSIONS.map((option) => (
