@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   definePluginApp,
   experimental_Icon,
+  experimental_useNativeFolderPicker,
   experimental_usePluginId,
   experimental_useQuestionFormHost,
   useBbContext,
@@ -89,6 +91,41 @@ describe("@get-bb/plugin-sdk/app without a runtime at import time", () => {
         { pluginId: "my-sidebar" },
       ).getByText("my-sidebar"),
     ).toBeTruthy();
+  });
+
+  it("has no folder dialog by default and uses the one renderSlot is given", async () => {
+    function FolderProbe() {
+      const picker = experimental_useNativeFolderPicker();
+      const [picked, setPicked] = useState("not picked");
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            void picker.pickFolder().then((path) => setPicked(String(path)));
+          }}
+        >
+          {String(picker.hostId)}: {picked}
+        </button>
+      );
+    }
+
+    const absent = renderSlot({ component: FolderProbe }, {});
+    fireEvent.click(absent.getByRole("button"));
+    expect(await absent.findByText("null: null")).toBeTruthy();
+    absent.unmount();
+
+    const present = renderSlot(
+      { component: FolderProbe },
+      {},
+      {
+        nativeFolderPicker: {
+          hostId: "host_local",
+          pickFolder: async () => "/home/me/repo",
+        },
+      },
+    );
+    fireEvent.click(present.getByRole("button"));
+    expect(await present.findByText("host_local: /home/me/repo")).toBeTruthy();
   });
 
   it("gives a form rendered outside a pending interaction no answer shortcuts", () => {

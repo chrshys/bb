@@ -158,6 +158,9 @@ export const experimental_usePluginId = runtimeFunction(
 export const experimental_useQuestionFormHost = runtimeFunction(
   "experimental_useQuestionFormHost",
 );
+export const experimental_useNativeFolderPicker = runtimeFunction(
+  "experimental_useNativeFolderPicker",
+);
 export const useBbNavigate = runtimeFunction("useBbNavigate");
 export const experimental_useAppPanel = runtimeFunction(
   "experimental_useAppPanel",

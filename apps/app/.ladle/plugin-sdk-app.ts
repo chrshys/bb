@@ -52,4 +52,5 @@ export const {
   experimental_useCodeTheme,
   experimental_copyToClipboard,
   experimental_usePluginId,
+  experimental_useNativeFolderPicker,
 } = pluginSdkAppImplementation;

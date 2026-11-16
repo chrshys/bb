@@ -26,6 +26,7 @@ import type { MarkdownPreviewLinkHandler } from "@/components/ui/markdown-link";
 import { useThreadTimelineNavigation } from "@/components/thread/timeline/ThreadTimelineNavigationContext";
 import { usePluginId } from "@/components/plugin/plugin-context";
 import { useQuestionFormHost } from "@bb/shared-ui/question-form-host";
+import { useNativeFolderPicker } from "@/hooks/useNativeFolderPicker";
 import { definePluginApp } from "./plugin-app-definition";
 import {
   useBbContext,
@@ -84,6 +85,7 @@ export const pluginSdkAppImplementation = {
   useBbContext,
   experimental_usePluginId: usePluginId,
   experimental_useQuestionFormHost: useQuestionFormHost,
+  experimental_useNativeFolderPicker: useNativeFolderPicker,
   useBbNavigate,
   experimental_useAppPanel,
   experimental_useFixedTabTarget,

@@ -27,6 +27,7 @@ import {
   type ComposerSubmitOptions,
   type ComposerView,
   type ExperimentalAppOverlayRegistration,
+  type ExperimentalNativeFolderPicker,
   type ExperimentalQuestionFormHost,
   type PluginAppDefinition,
   type PluginAppSetup,
@@ -284,6 +285,7 @@ interface SlotEnv {
   bbContext: BbContext;
   pluginId: string;
   questionFormHost: ExperimentalQuestionFormHost;
+  nativeFolderPicker: ExperimentalNativeFolderPicker;
   navigate: BbNavigate;
   navigateCalls: NavigateCall[];
   appPanel: ExperimentalAppPanel;
@@ -1248,6 +1250,9 @@ const testPluginSdkApp = {
   experimental_useQuestionFormHost(): ExperimentalQuestionFormHost {
     return useSlotEnv("experimental_useQuestionFormHost").questionFormHost;
   },
+  experimental_useNativeFolderPicker(): ExperimentalNativeFolderPicker {
+    return useSlotEnv("experimental_useNativeFolderPicker").nativeFolderPicker;
+  },
   useBbNavigate(): BbNavigate {
     return useSlotEnv("useBbNavigate").navigate;
   },
@@ -1740,6 +1745,11 @@ export interface RenderSlotOptions<
   context?: { projectId?: string | null; threadId?: string | null };
   /** `experimental_usePluginId()` value; defaults to `test-plugin`. */
   pluginId?: string;
+  /**
+   * `experimental_useNativeFolderPicker()` value. Omitted → no dialog:
+   * `hostId` is null and `pickFolder()` resolves null.
+   */
+  nativeFolderPicker?: ExperimentalNativeFolderPicker;
   /** Initial `useRealtimeConnectionState()` value; defaults to `connected`. */
   realtimeConnectionState?: PluginRealtimeConnectionState;
   /** Initial state for this render's isolated composer scope and view. */
@@ -2546,6 +2556,10 @@ export function renderSlot<
     questionFormHost: {
       shortcuts: new Map(),
       registerChoiceHandler: () => () => {},
+    },
+    nativeFolderPicker: options.nativeFolderPicker ?? {
+      hostId: null,
+      pickFolder: async () => null,
     },
     navigate,
     navigateCalls,

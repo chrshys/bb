@@ -134,6 +134,25 @@ export interface ExperimentalQuestionShortcut {
 }
 
 /**
+ * The operating system's folder dialog, when this window can open one. bb's
+ * own "Add project" goes through the same picker.
+ */
+export interface ExperimentalNativeFolderPicker {
+  /**
+   * The machine whose folders the dialog browses: the one this desktop app
+   * runs on. Null when no dialog is available, as in a plain browser tab or
+   * on a platform without one; choose a folder another way there.
+   */
+  hostId: string | null;
+  /**
+   * Open the dialog and resolve with the chosen folder's absolute path on
+   * `hostId`, or null when the person cancels or `hostId` is null. Rejects
+   * when the dialog could not be shown.
+   */
+  pickFolder(): Promise<string | null>;
+}
+
+/**
  * The keyboard shortcuts bb binds while a pending interaction is open. The
  * host owns the bindings (users can remap them); a form shows them and decides
  * what choosing an option means.
@@ -3700,6 +3719,12 @@ export interface PluginSdkApp {
    * and handlers never run. Experimental: see docs/api_to_audit.md.
    */
   experimental_useQuestionFormHost(): ExperimentalQuestionFormHost;
+  /**
+   * The operating system's folder dialog for the machine this window runs on
+   * (see {@link ExperimentalNativeFolderPicker}). Experimental: see
+   * docs/api_to_audit.md.
+   */
+  experimental_useNativeFolderPicker(): ExperimentalNativeFolderPicker;
   useBbNavigate(): BbNavigate;
   /** Select one of this plugin's eligible fixed tabs on the current surface. */
   experimental_useAppPanel(): ExperimentalAppPanel;
