@@ -12,13 +12,13 @@ export type ProjectCreationActions = {
   onBrowseProjects: (input: { hostId: string; path?: string }) => Promise<ProjectDirectory>;
 };
 
-export function ProjectCreateForm({ hosts, defaultHostId, defaultName = "", onCreateProject, onBrowseProjects, onCreated, onCancel, onBusyChange, forBot = false }: ProjectCreationActions & {
-  hosts: ProjectHost[]; defaultHostId?: string; defaultName?: string; onCreated: (project: ProjectChoice) => void; onCancel: () => void; onBusyChange: (busy: boolean) => void; forBot?: boolean;
+export function ProjectCreateForm({ hosts, defaultHostId, defaultName = "", defaultPath = "", onCreateProject, onBrowseProjects, onCreated, onChoose, onCancel, onBusyChange, forBot = false }: ProjectCreationActions & {
+  hosts: ProjectHost[]; defaultHostId?: string; defaultName?: string; defaultPath?: string; onCreated: (project: ProjectChoice) => void; onChoose?: (input: ProjectCreateInput) => void; onCancel: () => void; onBusyChange: (busy: boolean) => void; forBot?: boolean;
 }) {
   const preferredHost = hosts.find((host) => host.id === defaultHostId && host.connected) ?? hosts.find((host) => host.connected);
   const [hostId, setHostId] = useState(preferredHost?.id ?? "");
   const [name, setName] = useState(defaultName);
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState(defaultPath);
   const [creating, setCreating] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,6 +44,7 @@ export function ProjectCreateForm({ hosts, defaultHostId, defaultName = "", onCr
   function closeBrowser() { browseSequence.current++; setBrowsing(false); setLoading(false); setError(null); }
   async function create() {
     if (busy.current || !name.trim() || !path.trim() || !online) return;
+    if (onChoose) { onChoose({ requestId: requestId.current, name: name.trim(), hostId, path: path.trim() }); return; }
     busy.current = true; setCreating(true); setError(null); onBusyChange(true);
     try { onCreated(await onCreateProject({ requestId: requestId.current, name: name.trim(), hostId, path: path.trim() })); }
     catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)); }
@@ -65,9 +66,9 @@ export function ProjectCreateForm({ hosts, defaultHostId, defaultName = "", onCr
         <MachineSelect label="Project machine" hosts={hosts} value={hostId} connectedOnly disabled={creating} onValueChange={(value) => { changed(); browseSequence.current++; setDirectory(null); setPath(""); setHostId(value); }} />
       </div>
       <label className="block space-y-1 text-xs text-muted-foreground">Project folder<span className="flex gap-2"><Input aria-label="Project folder" className="h-8 min-w-0 flex-1 font-mono text-xs" maxLength={4096} value={path} disabled={creating} onChange={(event) => { changed(); setPath(event.target.value); }} placeholder="~/projects/my-project" /><Button type="button" size="sm" variant="outline" className="h-8" disabled={creating || !online} onClick={() => void browse(path.trim() || undefined)}>Browse…</Button></span></label>
-      <p className="text-[11px] leading-4 text-muted-foreground">Missing folders are created; existing files stay untouched.{forBot ? " Creates the project now; save the bot to make it owner. The project remains if you cancel the bot." : ""}</p>
+      <p className="text-[11px] leading-4 text-muted-foreground">Missing folders are created; existing files stay untouched.{onChoose ? " The project is created when you create the bot." : forBot ? " Creates the project now; save the bot to make it owner. The project remains if you cancel the bot." : ""}</p>
       {!online ? <p role="status" className="text-xs text-muted-foreground">Connect a machine to create a project.</p> : null}
-      <div className="flex justify-end gap-2"><Button type="button" size="sm" variant="ghost" disabled={creating} onClick={onCancel}>{forBot ? "Cancel project" : "Cancel"}</Button><Button type="button" size="sm" disabled={creating || !online || !name.trim() || !path.trim()} onClick={() => void create()}>{creating ? "Creating…" : "Create project"}</Button></div>
+      <div className="flex justify-end gap-2"><Button type="button" size="sm" variant="ghost" disabled={creating} onClick={onCancel}>{forBot && !onChoose ? "Cancel project" : "Cancel"}</Button><Button type="button" size="sm" disabled={creating || !online || !name.trim() || !path.trim()} onClick={() => void create()}>{onChoose ? "Set project folder" : creating ? "Creating…" : "Create project"}</Button></div>
     </>}
     {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
   </div>;
