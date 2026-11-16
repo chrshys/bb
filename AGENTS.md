@@ -71,11 +71,12 @@ The product goal is a polished knowledge-work harness built on top of BB.
 
 ## Maintaining the fork
 
-- `custom` is the fork's branch. `main` mirrors `upstream/main` (`get-bb/bb`) and takes no fork commits. `origin` is `chrshys/bb`, which is public.
-- Commit fork work in small, single-purpose commits on `custom`. Never leave fork work only in the working tree or only in BB's plugin cache.
-- Bots Sidebar lives in its own repository at `~/Projects/bb-bots-sidebar` (branch `custom`). It is an independent fork of `tobi/bb-bots-sidebar` 1.0.0 and takes no upstream updates. BB loads it from that path; edit it there.
-- Core must not reference a plugin's class names, ids, or data. When a plugin needs something from core, add an `experimental_` extension point and have the plugin feature-detect it so it still loads on stock BB.
-- Take upstream changes by merging `upstream/main` into `custom`. Keep fork edits to upstream files minimal and unformatted beyond the lines changed, so merges stay small.
-- `HOST_DAEMON_PROTOCOL_VERSION` tracks upstream. Bump it in the fork only for a wire change the fork makes, and after a merge set it above upstream's value.
-- Fork database migrations must sort after every upstream migration, in both journal index and `when` timestamp. The migrator skips a migration whose timestamp is older than the latest applied one and then refuses to start. After merging upstream migrations, regenerate the fork's migrations on top of them, and repair the applied-migration ledger of any existing database before starting it.
+- This is its own application, BBC, built on a fork of BB. Optimize for our product surface. Staying mergeable with upstream is not a goal; change core directly when that is the simplest correct design.
+- `custom` is the product branch and the default branch on `origin` (`chrshys/bb`, public). Commit work in small, single-purpose commits on `custom`, or on a BB worktree branch that is merged into `custom` and deleted. Never leave work only in the working tree or only in BB's plugin cache.
+- `main` is an old mirror of `upstream/main` (`get-bb/bb`). Do not work on it or push to it; a push to `main` on `origin` triggers upstream's deploy workflows.
+- Product plugins live in `plugins/` in this repository. To ship one enabled by default, register it in `apps/server/src/services/plugins/builtin-registry.ts` with `defaultEnabled: true`, and add it to `packages/bundled-plugins/package.json` and `plugins/bb-official.json`. Bots Sidebar is `plugins/bots-sidebar`.
+- Core must not reference a plugin's class names, ids, or data. When a plugin needs something from core, add an `experimental_` extension point.
+- Merge `upstream/main` into `custom` only when we want something specific from it. After such a merge, set `HOST_DAEMON_PROTOCOL_VERSION` above upstream's value; otherwise bump it for any wire change we make.
+- Our database migrations must sort after every upstream migration already merged, in both journal index and `when` timestamp. The migrator skips a migration whose timestamp is older than the latest applied one and then refuses to start. After merging upstream migrations, regenerate ours on top of them, and repair the applied-migration ledger of any existing database before starting it.
+- The installed app is BBC. Publish a build by bumping the version with `node scripts/bump-version.mjs <version>`, pushing `custom`, and dispatching the `Build BBC Desktop Test Channel` workflow. Each published version must be higher than the last. See [apps/desktop/README.md](apps/desktop/README.md).
 - In a sandboxed agent session, pass `--env-mode=loose` to Turbo test runs so `TMPDIR` reaches Vitest.

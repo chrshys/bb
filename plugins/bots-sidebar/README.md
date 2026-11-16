@@ -241,15 +241,10 @@ switching storage versions; the prior code checkpoint is
 
 ## Develop
 
-Use the custom BB fork and Node.js 24. This is an independent fork of Bots Sidebar 1.0.0 and no longer tracks the original repository. Message colors, the active-work footer, coordinator close protection and system sends need the fork's extension points; on stock BB they switch off.
+This plugin ships inside BBC as a built-in plugin, enabled by default. It began as a fork of Bots Sidebar 1.0.0 and no longer tracks the original repository. It depends on core extension points for message colors, the active-work footer, coordinator close protection and system sends.
 
 ```sh
-cd ~/Projects/bb-bots-sidebar
-npm ci
-npm run typecheck
-npm test
-bb plugin build
-bb plugin install . --yes
+pnpm exec turbo run typecheck test --filter=bb-plugin-bots-sidebar
 ```
 
 The source began with BB's standard scaffold, not another sidebar plugin. Avatar
