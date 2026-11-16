@@ -172,6 +172,7 @@ function isReopenableSecondaryPanelTab(
     case "thread-info":
     case "git-diff":
     case "plugin-page-fixed":
+    case "plugin-pinned":
     case "terminal":
       return false;
   }

@@ -18,6 +18,7 @@ import type {
   PluginSidebarFooterActionRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
+  ExperimentalThreadPinnedTabDeclaration,
   ExperimentalThreadMessageAppearanceRegistration,
   ExperimentalThreadTimelineFooterRegistration,
   PluginThreadActionRegistration,
@@ -50,6 +51,7 @@ export interface PluginRegistrationSet {
   threadLists?: readonly PluginThreadListRegistration[];
   threadMessageAppearances?: readonly ExperimentalThreadMessageAppearanceRegistration[];
   threadHeaderActions?: readonly PluginThreadHeaderActionRegistration[];
+  threadPinnedTabs?: readonly ExperimentalThreadPinnedTabDeclaration[];
   threadTimelineFooters?: readonly ExperimentalThreadTimelineFooterRegistration[];
   threadActions?: readonly PluginThreadActionRegistration<unknown>[];
   browserToolbarActions?: readonly ExperimentalPluginBrowserToolbarActionRegistration[];
@@ -97,6 +99,8 @@ export interface PluginThreadMessageAppearanceSlot
   extends ExperimentalThreadMessageAppearanceRegistration, PluginSlotBase {}
 interface PluginThreadHeaderActionSlot
   extends PluginThreadHeaderActionRegistration, PluginSlotBase {}
+export type PluginThreadPinnedTabSlot = ExperimentalThreadPinnedTabDeclaration &
+  PluginSlotBase;
 export interface PluginThreadActionSlot
   extends PluginThreadActionRegistration<unknown>, PluginSlotBase {}
 export interface PluginBrowserToolbarActionSlot
@@ -136,6 +140,7 @@ export interface PluginSlotSnapshot {
   threadLists: readonly PluginThreadListSlot[];
   threadMessageAppearances: readonly PluginThreadMessageAppearanceSlot[];
   threadHeaderActions: readonly PluginThreadHeaderActionSlot[];
+  threadPinnedTabs: readonly PluginThreadPinnedTabSlot[];
   threadTimelineFooters: readonly PluginThreadTimelineFooterSlot[];
   threadActions: readonly PluginThreadActionSlot[];
   browserToolbarActions: readonly PluginBrowserToolbarActionSlot[];
@@ -165,6 +170,7 @@ export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
   threadLists: [],
   threadMessageAppearances: [],
   threadHeaderActions: [],
+  threadPinnedTabs: [],
   threadTimelineFooters: [],
   threadActions: [],
   browserToolbarActions: [],
@@ -201,6 +207,7 @@ const SLOT_KINDS: readonly SlotKind[] = [
   "threadLists",
   "threadMessageAppearances",
   "threadHeaderActions",
+  "threadPinnedTabs",
   "threadTimelineFooters",
   "threadActions",
   "browserToolbarActions",
@@ -261,6 +268,7 @@ function flattenRegistrations(
     threadLists: stamp(set.threadLists),
     threadMessageAppearances: stamp(set.threadMessageAppearances),
     threadHeaderActions: stamp(set.threadHeaderActions),
+    threadPinnedTabs: stamp(set.threadPinnedTabs),
     threadTimelineFooters: stamp(set.threadTimelineFooters),
     threadActions: stamp(set.threadActions),
     browserToolbarActions: stamp(set.browserToolbarActions),

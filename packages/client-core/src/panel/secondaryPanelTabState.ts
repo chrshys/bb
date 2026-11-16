@@ -103,6 +103,7 @@ export function isSecondaryFileTab(
     case "thread-info":
     case "git-diff":
     case "plugin-page-fixed":
+    case "plugin-pinned":
       return false;
   }
 }
@@ -113,7 +114,17 @@ export function reconcileFixedPanelViewTabsInState({
   state,
 }: ReconcileFixedPanelViewTabsInStateArgs): FixedPanelTabsState {
   const contentTabs = state.secondary.tabs.filter(isSecondaryFileTab);
-  const tabs: readonly FixedPanelTab[] = [...fixedTabs, ...contentTabs];
+  const unregisteredActivePinnedTabs = state.secondary.tabs.filter(
+    (tab) =>
+      tab.kind === "plugin-pinned" &&
+      tab.id === state.secondary.activeTabId &&
+      !fixedTabs.some((fixedTab) => fixedTab.id === tab.id),
+  );
+  const tabs: readonly FixedPanelTab[] = [
+    ...fixedTabs,
+    ...unregisteredActivePinnedTabs,
+    ...contentTabs,
+  ];
   const tabsAreEquivalent =
     tabs.length === state.secondary.tabs.length &&
     tabs.every((tab, index) => {
@@ -550,6 +561,7 @@ export function buildOrderedSecondaryPanelFileTabs({
       case "thread-info":
       case "git-diff":
       case "plugin-page-fixed":
+      case "plugin-pinned":
         break;
     }
   }

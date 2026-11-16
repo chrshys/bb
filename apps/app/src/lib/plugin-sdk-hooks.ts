@@ -28,6 +28,7 @@ import type {
   ExperimentalAppPanel,
   ExperimentalFixedTabTargetState,
   ExperimentalPluginFixedTabReference,
+  ExperimentalThreadPinnedTabReference,
   JsonValue,
 } from "@get-bb/plugin-sdk";
 import { jsonValueSchema } from "@bb/domain";
@@ -89,8 +90,12 @@ import { useAppNavigationHost } from "@/lib/app-navigation-host";
 import { normalizeExperimentalFileOpenOptions } from "@/lib/live-file-navigation";
 import {
   getPluginFixedTabOwnerId,
+  getPluginPinnedTabOwnerId,
+  resolveOwnerValidatedFixedTabTarget,
   useAppFixedTabTarget,
 } from "@/lib/app-fixed-tab-navigation";
+import { useOpenThreadFixedTab } from "@/lib/thread-fixed-tab-opener";
+import { getPluginSlotSnapshot } from "@/lib/plugin-slots";
 
 type FetchLike = (
   input: string,
@@ -511,15 +516,51 @@ function useExperimentalAppPanel(): ExperimentalAppPanel {
     },
     [appNavigation, pluginId],
   );
-  return useMemo(() => ({ openFixedTab }), [openFixedTab]);
+  const openThreadFixedTab = useOpenThreadFixedTab();
+  const openThreadPinnedTab = useCallback<
+    ExperimentalAppPanel["openThreadPinnedTab"]
+  >(
+    (options) => {
+      const registration = getPluginSlotSnapshot().threadPinnedTabs.find(
+        (candidate) =>
+          candidate.pluginId === pluginId && candidate.id === options.tab.id,
+      );
+      if (registration === undefined) return false;
+      const resolved =
+        options.target === undefined
+          ? null
+          : resolveOwnerValidatedFixedTabTarget(
+              registration.experimental_target,
+              options.target,
+            );
+      if (resolved !== null && !resolved.accepted) return false;
+      return openThreadFixedTab({
+        tab: {
+          ownerId: getPluginPinnedTabOwnerId(pluginId),
+          tabId: registration.id,
+        },
+        threadId: options.threadId,
+        ...(resolved?.accepted === true ? { target: resolved.target } : {}),
+      });
+    },
+    [openThreadFixedTab, pluginId],
+  );
+  return useMemo(
+    () => ({ openFixedTab, openThreadPinnedTab }),
+    [openFixedTab, openThreadPinnedTab],
+  );
 }
 
 function useExperimentalFixedTabTarget<Target extends JsonValue>(
-  tab: ExperimentalPluginFixedTabReference<Target>,
+  tab:
+    | ExperimentalPluginFixedTabReference<Target>
+    | ExperimentalThreadPinnedTabReference<Target>,
 ): ExperimentalFixedTabTargetState<Target> | null {
   const pluginId = usePluginId();
   const state = useAppFixedTabTarget(
-    getPluginFixedTabOwnerId(pluginId, tab.panelId),
+    "panelId" in tab
+      ? getPluginFixedTabOwnerId(pluginId, tab.panelId)
+      : getPluginPinnedTabOwnerId(pluginId),
     tab.id,
   );
   if (state === null || tab.experimental_target === undefined) return null;

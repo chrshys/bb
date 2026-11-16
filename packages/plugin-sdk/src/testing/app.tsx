@@ -93,6 +93,8 @@ import {
   type ExperimentalFixedTabTargetState,
   type ExperimentalOpenFixedTabOptions,
   type ExperimentalPluginFixedTabReference,
+  type ExperimentalThreadPinnedTabDeclaration,
+  type ExperimentalThreadPinnedTabReference,
   type NewThreadComposerProps,
   type BranchPickerProps,
   type CheckoutState,
@@ -214,6 +216,12 @@ export interface ExperimentalFixedTabOpenCall {
   target?: JsonValue;
 }
 
+export interface ExperimentalThreadPinnedTabOpenCall {
+  threadId: string;
+  tabId: string;
+  target?: JsonValue;
+}
+
 export interface ComposerLog {
   /** Latest plain text in this isolated composer scope. */
   readonly text: string;
@@ -280,6 +288,7 @@ interface SlotEnv {
   navigateCalls: NavigateCall[];
   appPanel: ExperimentalAppPanel;
   experimental_fixedTabOpenCalls: ExperimentalFixedTabOpenCall[];
+  experimental_threadPinnedTabOpenCalls: ExperimentalThreadPinnedTabOpenCall[];
   fixedTabTarget: TestFixedTabTargetStore;
   composer: TestComposerStore;
   composerLog: ComposerLog;
@@ -306,7 +315,7 @@ interface SlotEnv {
 interface TestFixedTabTargetStore {
   clear(sequence: number): void;
   getSnapshot(): {
-    panelId: string;
+    panelId: string | null;
     sequence: number;
     tabId: string;
     target: JsonValue;
@@ -1246,7 +1255,9 @@ const testPluginSdkApp = {
     return useSlotEnv("experimental_useAppPanel").appPanel;
   },
   experimental_useFixedTabTarget<Target extends JsonValue>(
-    tab: ExperimentalPluginFixedTabReference<Target>,
+    tab:
+      | ExperimentalPluginFixedTabReference<Target>
+      | ExperimentalThreadPinnedTabReference<Target>,
   ): ExperimentalFixedTabTargetState<Target> | null {
     const store = useSlotEnv("experimental_useFixedTabTarget").fixedTabTarget;
     const state = useSyncExternalStore(
@@ -1256,7 +1267,7 @@ const testPluginSdkApp = {
     );
     if (
       state === null ||
-      state.panelId !== tab.panelId ||
+      state.panelId !== ("panelId" in tab ? tab.panelId : null) ||
       state.tabId !== tab.id ||
       tab.experimental_target === undefined
     ) {
@@ -1505,6 +1516,7 @@ export interface CapturedPluginApp {
   experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  threadPinnedTabs: ExperimentalThreadPinnedTabDeclaration[];
   threadMessageAppearances: ExperimentalThreadMessageAppearanceRegistration[];
   threadTimelineFooters: ExperimentalThreadTimelineFooterRegistration[];
   threadActions: PluginThreadActionRegistration<unknown>[];
@@ -1841,6 +1853,18 @@ export interface RenderSlotOptions<
     tabId: string;
     target: JsonValue;
   };
+  /** Host acceptance for `experimental_useAppPanel().openThreadPinnedTab`. */
+  experimental_openThreadPinnedTab?: (
+    call: ExperimentalThreadPinnedTabOpenCall,
+  ) => boolean;
+  /**
+   * Initial session target of a pinned thread tab, visible to
+   * `experimental_useFixedTabTarget`. Wins over `experimental_fixedTabTarget`.
+   */
+  experimental_threadPinnedTabTarget?: {
+    tabId: string;
+    target: JsonValue;
+  };
 }
 
 /** Host-originated inputs a slot test can drive deterministically. */
@@ -1868,6 +1892,8 @@ export interface RenderedSlotInspectionState {
   readonly navigateCalls: NavigateCall[];
   /** Every validated `experimental_useAppPanel().openFixedTab` call. */
   readonly experimental_fixedTabOpenCalls: ExperimentalFixedTabOpenCall[];
+  /** Every validated `experimental_useAppPanel().openThreadPinnedTab` call. */
+  readonly experimental_threadPinnedTabOpenCalls: ExperimentalThreadPinnedTabOpenCall[];
   /** @internal Every `experimental_useSidebarThreadActions()` call, in order; kept for plugins built against older SDKs. */
   readonly sidebarActionCalls: SidebarActionCall[];
   /**
@@ -2000,18 +2026,32 @@ export function renderSlot<
 
   const navigateCalls: NavigateCall[] = [];
   const experimental_fixedTabOpenCalls: ExperimentalFixedTabOpenCall[] = [];
-  let fixedTabTargetSnapshot =
-    options.experimental_fixedTabTarget === undefined
-      ? null
-      : {
-          panelId: options.experimental_fixedTabTarget.panelId,
+  const experimental_threadPinnedTabOpenCalls: ExperimentalThreadPinnedTabOpenCall[] =
+    [];
+  let fixedTabTargetSnapshot: ReturnType<
+    TestFixedTabTargetStore["getSnapshot"]
+  > =
+    options.experimental_threadPinnedTabTarget !== undefined
+      ? {
+          panelId: null,
           sequence: 1,
-          tabId: options.experimental_fixedTabTarget.tabId,
+          tabId: options.experimental_threadPinnedTabTarget.tabId,
           target: strictJsonRoundTrip(
-            options.experimental_fixedTabTarget.target,
-            "fixed tab target",
+            options.experimental_threadPinnedTabTarget.target,
+            "pinned thread tab target",
           ),
-        };
+        }
+      : options.experimental_fixedTabTarget === undefined
+        ? null
+        : {
+            panelId: options.experimental_fixedTabTarget.panelId,
+            sequence: 1,
+            tabId: options.experimental_fixedTabTarget.tabId,
+            target: strictJsonRoundTrip(
+              options.experimental_fixedTabTarget.target,
+              "fixed tab target",
+            ),
+          };
   const fixedTabTargetListeners = new Set<() => void>();
   const fixedTabTarget: TestFixedTabTargetStore = {
     getSnapshot: () => fixedTabTargetSnapshot,
@@ -2057,6 +2097,45 @@ export function renderSlot<
       if (accepted && target !== undefined) {
         fixedTabTargetSnapshot = {
           panelId: panelOptions.tab.panelId,
+          sequence: (fixedTabTargetSnapshot?.sequence ?? 0) + 1,
+          tabId: panelOptions.tab.id,
+          target,
+        };
+        for (const listener of fixedTabTargetListeners) listener();
+      }
+      return accepted;
+    },
+    openThreadPinnedTab(panelOptions) {
+      let target: JsonValue | undefined;
+      if (panelOptions.target !== undefined) {
+        try {
+          target = strictJsonRoundTrip(
+            panelOptions.target,
+            "pinned thread tab open target",
+          );
+        } catch {
+          return false;
+        }
+        if (panelOptions.tab.experimental_target === undefined) return false;
+        try {
+          if (!panelOptions.tab.experimental_target.validate(target)) {
+            return false;
+          }
+        } catch {
+          return false;
+        }
+      }
+      const call: ExperimentalThreadPinnedTabOpenCall = {
+        threadId: panelOptions.threadId,
+        tabId: panelOptions.tab.id,
+        ...(target === undefined ? {} : { target }),
+      };
+      experimental_threadPinnedTabOpenCalls.push(call);
+      const accepted =
+        options.experimental_openThreadPinnedTab?.(call) ?? false;
+      if (accepted && target !== undefined) {
+        fixedTabTargetSnapshot = {
+          panelId: null,
           sequence: (fixedTabTargetSnapshot?.sequence ?? 0) + 1,
           tabId: panelOptions.tab.id,
           target,
@@ -2472,6 +2551,7 @@ export function renderSlot<
     navigateCalls,
     appPanel,
     experimental_fixedTabOpenCalls,
+    experimental_threadPinnedTabOpenCalls,
     fixedTabTarget,
     composer,
     composerLog,
@@ -2576,6 +2656,7 @@ export function renderSlot<
     setComposerScope,
     navigateCalls,
     experimental_fixedTabOpenCalls,
+    experimental_threadPinnedTabOpenCalls,
     sidebarActionCalls,
     experimental_environmentArchiveCalls: environmentArchiveCalls,
     sdkCalls,
@@ -2591,6 +2672,7 @@ export function renderSlot<
       rpcCalls,
       navigateCalls,
       experimental_fixedTabOpenCalls,
+      experimental_threadPinnedTabOpenCalls,
       sidebarActionCalls,
       experimental_environmentArchiveCalls: environmentArchiveCalls,
       sdkCalls,

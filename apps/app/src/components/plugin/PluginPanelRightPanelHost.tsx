@@ -13,10 +13,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { atom, useAtom, useAtomValue, useStore } from "jotai";
+import { atom, useAtom, useStore } from "jotai";
 import { atomFamily } from "jotai-family";
-import type { Host, JsonValue } from "@bb/domain";
-import { jsonValueSchema } from "@bb/domain";
+import type { Host } from "@bb/domain";
 import type { PluginFixedTabDeclaration } from "@get-bb/plugin-sdk";
 import { Button } from "@bb/shared-ui/button";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
@@ -78,10 +77,12 @@ import { usePluginSlots } from "@/lib/plugin-slots";
 import { AppNavigationHostProvider } from "@/lib/app-navigation-host";
 import {
   AppFixedTabTargetProvider,
+  createOwnerValidatedFixedTabDestination,
+  deliverAppFixedTabTarget,
   getPluginFixedTabOwnerId,
   openAppFixedTabFromDestinations,
+  useScopedAppFixedTabTargetState,
   type AppFixedTabDestination,
-  type AppFixedTabTargetState,
 } from "@/lib/app-fixed-tab-navigation";
 import { useOptionalPaneContext } from "@/views/thread-detail/PaneContext";
 import {
@@ -106,13 +107,6 @@ interface PluginDetailTabMetadata {
 
 const compactDrawerOpenAtomFamily = atomFamily((_panelStateId: string) =>
   atom(false),
-);
-interface FixedTabSessionTarget {
-  sequence: number;
-  target: JsonValue;
-}
-const fixedTabTargetAtomFamily = atomFamily((_targetId: string) =>
-  atom<FixedTabSessionTarget | null>(null),
 );
 
 function marketplacePluginDetailTab(pluginId: string) {
@@ -141,31 +135,10 @@ function PluginFixedTabContent({
   registration: PluginFixedTabDeclaration;
   subPath: string;
 }) {
-  const targetStore = useStore();
-  const targetAtom = fixedTabTargetAtomFamily(
-    `${panelStateId}\0${registration.id}`,
-  );
-  const targetSnapshot = useAtomValue(targetAtom);
-  const targetState = useMemo<AppFixedTabTargetState | null>(() => {
-    if (targetSnapshot === null) return null;
-    const { sequence } = targetSnapshot;
-    return {
-      ...targetSnapshot,
-      ownerId: fixedTabOwnerId,
-      tabId: registration.id,
-      clear: () => {
-        targetStore.set(targetAtom, (current) =>
-          current?.sequence === sequence ? null : current,
-        );
-      },
-    };
-  }, [
-    fixedTabOwnerId,
-    registration.id,
-    targetAtom,
-    targetSnapshot,
-    targetStore,
-  ]);
+  const targetState = useScopedAppFixedTabTargetState(panelStateId, {
+    ownerId: fixedTabOwnerId,
+    tabId: registration.id,
+  });
   if (!isOpen) return null;
   const FixedTabComponent = registration.component;
   return (
@@ -446,46 +419,29 @@ export function PluginPanelRightPanelHost({
           (candidate) => candidate.fixedTabId === registration.id,
         );
         if (tab === undefined) return [];
+        const reference = {
+          ownerId: fixedTabOwnerId,
+          tabId: registration.id,
+        };
         return [
-          {
-            tab: {
-              ownerId: fixedTabOwnerId,
-              tabId: registration.id,
-            },
-            open: (target) => {
-              if (target !== undefined) {
-                const result = jsonValueSchema.safeParse(target);
-                if (
-                  !result.success ||
-                  registration.experimental_target === undefined
-                ) {
-                  return false;
-                }
-                try {
-                  if (!registration.experimental_target.validate(result.data)) {
-                    return false;
-                  }
-                } catch {
-                  return false;
-                }
-                targetStore.set(
-                  fixedTabTargetAtomFamily(
-                    `${panelStateId}\0${registration.id}`,
-                  ),
-                  (current) => ({
-                    sequence: (current?.sequence ?? 0) + 1,
-                    target: result.data,
-                  }),
-                );
-              }
+          createOwnerValidatedFixedTabDestination({
+            deliverTarget: (target) =>
+              deliverAppFixedTabTarget(
+                targetStore,
+                panelStateId,
+                reference,
+                target,
+              ),
+            select: () => {
               selectPersistedPanelTab();
               updatePanelState((state) =>
                 activateSecondaryPanelTabInState(state, tab.id),
               );
               revealPanel();
-              return true;
             },
-          },
+            tab: reference,
+            validator: registration.experimental_target,
+          }),
         ];
       }),
     [

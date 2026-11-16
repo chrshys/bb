@@ -618,6 +618,60 @@ export type PluginFixedTabDeclaration =
   | PluginFixedTabRegistration
   | PluginFixedTabRegistration<JsonValue>;
 
+/**
+ * Props passed to an `experimental_threadPinnedTab` component. A split layout
+ * shows one right panel per visible thread, so the component can be mounted
+ * for several threads at once: keep per-thread state keyed by `threadId`.
+ */
+export interface ExperimentalThreadPinnedTabProps {
+  threadId: string;
+  projectId: string;
+}
+
+/**
+ * Stable reference to one of the calling plugin's pinned thread tabs. Share
+ * the same object between the registration, `openThreadPinnedTab` and
+ * `experimental_useFixedTabTarget`.
+ */
+export type ExperimentalThreadPinnedTabReference<
+  Target extends JsonValue = never,
+> = {
+  /** Unique among the plugin's pinned thread tabs; letters, digits, `-`, `_`. */
+  readonly id: string;
+} & ([Target] extends [never]
+  ? {
+      /** An untargeted tab cannot be opened with a target. */
+      readonly experimental_target?: never;
+    }
+  : {
+      /** Owner validation required before the host delivers a target. */
+      readonly experimental_target: ExperimentalFixedTabTargetContract<Target>;
+    });
+
+/**
+ * A non-closable tab in every thread's right panel, shown as an icon in the
+ * strip at the top of the panel after BB's own Info and Changes tabs. BB owns
+ * selection, persistence and chrome. The tab is present for every thread: when
+ * it does not apply to one, render an empty state. The component mounts only
+ * while its tab is active in a visible pane and the panel is open.
+ */
+export type ExperimentalThreadPinnedTabRegistration<
+  Target extends JsonValue = never,
+> = ExperimentalThreadPinnedTabReference<Target> & {
+  /** Tooltip and accessible name of the icon. */
+  title: string;
+  /** Resolved names take precedence over plugin branding; unknown names fall back to branding. */
+  icon: BbIconName;
+  component: ComponentType<ExperimentalThreadPinnedTabProps>;
+  /** `flush` lets the component own padding and scrolling. */
+  layout?: "padded" | "flush";
+};
+
+/** A pinned thread tab with either no target or an owner-validated JSON target. */
+export type ExperimentalThreadPinnedTabDeclaration =
+  | ExperimentalThreadPinnedTabRegistration
+  | ExperimentalThreadPinnedTabRegistration<JsonValue>;
+
 export interface PluginNavPanelRegistration {
   /**
    * Whether the host title bar shows its pane close button. Defaults to true.
@@ -2249,6 +2303,14 @@ export interface PluginAppSlots {
     registration: PluginThreadHeaderActionRegistration,
   ): void;
   /**
+   * Pin a tab in every thread's right panel (see
+   * {@link ExperimentalThreadPinnedTabRegistration}). Experimental: see
+   * docs/api_to_audit.md.
+   */
+  experimental_threadPinnedTab(
+    registration: ExperimentalThreadPinnedTabDeclaration,
+  ): void;
+  /**
    * Add an action to every thread actions menu (see
    * {@link PluginThreadActionRegistration}). Experimental: see
    * docs/api_to_audit.md.
@@ -3467,10 +3529,29 @@ export type ExperimentalOpenFixedTabOptions<Target extends JsonValue> = {
   target?: NoInfer<Target>;
 };
 
+export type ExperimentalOpenThreadPinnedTabOptions<Target extends JsonValue> = {
+  /** The thread whose right panel should show the tab. */
+  threadId: string;
+  tab: ExperimentalThreadPinnedTabReference<Target>;
+  /** Omit to select the tab without replacing its current session target. */
+  target?: NoInfer<Target>;
+};
+
 /** Surface-aware controller for selecting owner-scoped fixed tabs. */
 export interface ExperimentalAppPanel {
   openFixedTab<Target extends JsonValue = never>(
     options: ExperimentalOpenFixedTabOptions<Target>,
+  ): boolean;
+  /**
+   * Select one of this plugin's pinned thread tabs in the given thread's right
+   * panel and open the panel. Callable from any surface, including the
+   * sidebar: when that thread is not on screen BB navigates to it first and
+   * selects the tab once its view is ready. Returns false when the id names no
+   * pinned tab of this plugin, or the target is not JSON or fails the tab's
+   * validator; true means the request was accepted.
+   */
+  openThreadPinnedTab<Target extends JsonValue = never>(
+    options: ExperimentalOpenThreadPinnedTabOptions<Target>,
   ): boolean;
 }
 
@@ -3617,7 +3698,9 @@ export interface PluginSdkApp {
   experimental_useAppPanel(): ExperimentalAppPanel;
   /** Read or clear the owning tab's validated, session-scoped target. */
   experimental_useFixedTabTarget<Target extends JsonValue>(
-    tab: ExperimentalPluginFixedTabReference<Target>,
+    tab:
+      | ExperimentalPluginFixedTabReference<Target>
+      | ExperimentalThreadPinnedTabReference<Target>,
   ): ExperimentalFixedTabTargetState<Target> | null;
   useComposer(): PluginComposerApi;
   /**
